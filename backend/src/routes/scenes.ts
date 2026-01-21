@@ -26,7 +26,13 @@ interface StoredImageItem extends StoredItemBase {
   file: string // reference to image file
 }
 
-type StoredItem = StoredTextItem | StoredImageItem
+interface StoredPromptItem extends StoredItemBase {
+  type: 'prompt'
+  fontSize: number
+  file: string // reference to .json file containing label and text
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem
 
 interface StoredScene {
   id: string
@@ -84,6 +90,20 @@ router.post('/:id', async (req, res) => {
           height: item.height,
           file: imageFile,
         })
+      } else if (item.type === 'prompt') {
+        const promptFile = `${item.id}.prompt.json`
+        const promptData = JSON.stringify({ label: item.label, text: item.text })
+        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
+        storedItems.push({
+          id: item.id,
+          type: 'prompt',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          file: promptFile,
+        })
       }
     }
 
@@ -133,7 +153,7 @@ router.get('/:id', async (req, res) => {
             fontSize: item.fontSize,
             text: text || '',
           }
-        } else {
+        } else if (item.type === 'image') {
           // For images, return the public URL
           const imageUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
           return {
@@ -144,6 +164,21 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             src: imageUrl,
+          }
+        } else {
+          // For prompts, load the JSON file
+          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
+          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Prompt', text: '' }
+          return {
+            id: item.id,
+            type: 'prompt' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            fontSize: item.fontSize,
+            label: promptData.label,
+            text: promptData.text,
           }
         }
       })

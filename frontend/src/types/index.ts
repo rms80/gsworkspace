@@ -25,7 +25,16 @@ export interface ImageItem extends BaseItem {
   height: number
 }
 
-export type CanvasItem = TextItem | ImageItem
+export interface PromptItem extends BaseItem {
+  type: 'prompt'
+  label: string
+  text: string
+  fontSize: number
+  width: number
+  height: number
+}
+
+export type CanvasItem = TextItem | ImageItem | PromptItem
 
 export interface SelectionRect {
   x: number

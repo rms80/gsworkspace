@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, SelectionRect } from '../types'
 
@@ -22,9 +22,14 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const stageRef = useRef<Konva.Stage>(null)
   const textTransformerRef = useRef<Konva.Transformer>(null)
   const imageTransformerRef = useRef<Konva.Transformer>(null)
+  const promptTransformerRef = useRef<Konva.Transformer>(null)
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
+  const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
+  const [editingPromptField, setEditingPromptField] = useState<'label' | 'text' | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const labelInputRef = useRef<HTMLInputElement>(null)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
 
@@ -65,8 +70,14 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
+    const selectedPromptNodes = items
+      .filter((item) => item.selected && item.type === 'prompt')
+      .map((item) => stageRef.current?.findOne(`#${item.id}`))
+      .filter(Boolean) as Konva.Node[]
+
     textTransformerRef.current?.nodes(selectedTextNodes)
     imageTransformerRef.current?.nodes(selectedImageNodes)
+    promptTransformerRef.current?.nodes(selectedPromptNodes)
   }, [items])
 
   // Convert screen coordinates to canvas coordinates
@@ -411,6 +422,48 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }
 
+  // Prompt editing handlers
+  const handlePromptLabelDblClick = (id: string) => {
+    setEditingPromptId(id)
+    setEditingPromptField('label')
+    setTimeout(() => {
+      labelInputRef.current?.focus()
+      labelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handlePromptTextDblClick = (id: string) => {
+    setEditingPromptId(id)
+    setEditingPromptField('text')
+    setTimeout(() => {
+      promptTextareaRef.current?.focus()
+      promptTextareaRef.current?.select()
+    }, 0)
+  }
+
+  const handlePromptLabelBlur = () => {
+    if (editingPromptId && labelInputRef.current) {
+      onUpdateItem(editingPromptId, { label: labelInputRef.current.value })
+    }
+    setEditingPromptId(null)
+    setEditingPromptField(null)
+  }
+
+  const handlePromptTextBlur = () => {
+    if (editingPromptId && promptTextareaRef.current) {
+      onUpdateItem(editingPromptId, { text: promptTextareaRef.current.value })
+    }
+    setEditingPromptId(null)
+    setEditingPromptField(null)
+  }
+
+  const handlePromptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingPromptId(null)
+      setEditingPromptField(null)
+    }
+  }
+
   const getEditingTextItem = () => {
     if (!editingTextId) return null
     const item = items.find((i) => i.id === editingTextId)
@@ -418,7 +471,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     return item
   }
 
+  const getEditingPromptItem = () => {
+    if (!editingPromptId) return null
+    const item = items.find((i) => i.id === editingPromptId)
+    if (!item || item.type !== 'prompt') return null
+    return item
+  }
+
   const editingItem = getEditingTextItem()
+  const editingPrompt = getEditingPromptItem()
 
   return (
     <div style={{ position: 'relative' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -492,6 +553,66 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 strokeWidth={item.selected ? 2 : 0}
               />
             )
+          } else if (item.type === 'prompt') {
+            const headerHeight = 28
+            const isEditingThis = editingPromptId === item.id
+            return (
+              <Group
+                key={item.id}
+                id={item.id}
+                x={item.x}
+                y={item.y}
+                width={item.width}
+                height={item.height}
+                draggable
+                onClick={(e) => handleItemClick(e, item.id)}
+                onDragEnd={(e) => {
+                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+              >
+                {/* Background */}
+                <Rect
+                  width={item.width}
+                  height={item.height}
+                  fill="#f8f4e8"
+                  stroke={item.selected ? '#0066cc' : '#c9a227'}
+                  strokeWidth={item.selected ? 2 : 1}
+                  cornerRadius={4}
+                />
+                {/* Header background */}
+                <Rect
+                  width={item.width}
+                  height={headerHeight}
+                  fill="#e8d89c"
+                  cornerRadius={[4, 4, 0, 0]}
+                />
+                {/* Header label */}
+                <Text
+                  text={item.label}
+                  x={8}
+                  y={6}
+                  width={item.width - 16}
+                  height={headerHeight - 6}
+                  fontSize={14}
+                  fontStyle="bold"
+                  fill="#5c4d1a"
+                  onDblClick={() => handlePromptLabelDblClick(item.id)}
+                  visible={!(isEditingThis && editingPromptField === 'label')}
+                />
+                {/* Content text */}
+                <Text
+                  text={item.text}
+                  x={8}
+                  y={headerHeight + 8}
+                  width={item.width - 16}
+                  height={item.height - headerHeight - 16}
+                  fontSize={item.fontSize}
+                  fill="#333"
+                  onDblClick={() => handlePromptTextDblClick(item.id)}
+                  visible={!(isEditingThis && editingPromptField === 'text')}
+                />
+              </Group>
+            )
           }
           return null
         })}
@@ -525,6 +646,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         />
         {/* Transformer for images - full controls */}
         <Transformer ref={imageTransformerRef} />
+        {/* Transformer for prompts - uniform scaling, no rotation */}
+        <Transformer
+          ref={promptTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 100 || newBox.height < 60) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
       </Layer>
     </Stage>
 
@@ -551,6 +685,69 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             overflow: 'hidden',
             background: 'white',
             transformOrigin: 'top left',
+          }}
+        />
+      )}
+
+      {/* Input overlay for editing prompt label */}
+      {editingPrompt && editingPromptField === 'label' && (
+        <input
+          ref={labelInputRef}
+          type="text"
+          defaultValue={editingPrompt.label}
+          onBlur={handlePromptLabelBlur}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handlePromptLabelBlur()
+            }
+            handlePromptKeyDown(e)
+          }}
+          style={{
+            position: 'absolute',
+            top: editingPrompt.y * stageScale + stagePos.y + 4 * stageScale,
+            left: editingPrompt.x * stageScale + stagePos.x + 6 * stageScale,
+            width: (editingPrompt.width - 16) * stageScale,
+            height: 20 * stageScale,
+            fontSize: 14 * stageScale,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            padding: '0 2px',
+            margin: 0,
+            border: '2px solid #c9a227',
+            borderRadius: 2,
+            outline: 'none',
+            background: '#e8d89c',
+            color: '#5c4d1a',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
+      {/* Textarea overlay for editing prompt text */}
+      {editingPrompt && editingPromptField === 'text' && (
+        <textarea
+          ref={promptTextareaRef}
+          defaultValue={editingPrompt.text}
+          onBlur={handlePromptTextBlur}
+          onKeyDown={handlePromptKeyDown}
+          style={{
+            position: 'absolute',
+            top: (editingPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            left: (editingPrompt.x + 6) * stageScale + stagePos.x,
+            width: (editingPrompt.width - 16) * stageScale,
+            height: (editingPrompt.height - 28 - 16) * stageScale,
+            fontSize: editingPrompt.fontSize * stageScale,
+            fontFamily: 'sans-serif',
+            padding: '2px',
+            margin: 0,
+            border: '2px solid #c9a227',
+            borderRadius: 2,
+            outline: 'none',
+            resize: 'none',
+            overflow: 'hidden',
+            background: '#f8f4e8',
+            color: '#333',
+            boxSizing: 'border-box',
           }}
         />
       )}

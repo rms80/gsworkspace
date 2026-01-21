@@ -224,6 +224,21 @@ function App() {
     [updateActiveSceneItems]
   )
 
+  const addPromptItem = useCallback(() => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'prompt',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      label: 'Prompt',
+      text: 'Enter your prompt here...',
+      fontSize: 14,
+      width: 300,
+      height: 150,
+    }
+    updateActiveSceneItems((prev) => [...prev, newItem])
+  }, [updateActiveSceneItems])
+
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
       const newItem: CanvasItem = {
@@ -298,6 +313,7 @@ function App() {
       <Toolbar
         onAddText={addTextItem}
         onAddImage={addImageItem}
+        onAddPrompt={addPromptItem}
         onDelete={deleteSelected}
         onSendToLLM={() => {
           const selected = getSelectedItems()

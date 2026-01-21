@@ -1,13 +1,14 @@
 interface ToolbarProps {
   onAddText: () => void
   onAddImage: (src: string, width: number, height: number) => void
+  onAddPrompt: () => void
   onDelete: () => void
   onSendToLLM: () => void
   hasSelection: boolean
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onDelete, onSendToLLM, hasSelection, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -67,6 +68,20 @@ function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection, s
           style={{ display: 'none' }}
         />
       </label>
+      <button
+        onClick={onAddPrompt}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: '#f8f4e8',
+          border: '1px solid #c9a227',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+        }}
+      >
+        Add Prompt
+      </button>
       {saveStatus !== 'idle' && (
         <span
           style={{
