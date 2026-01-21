@@ -42,8 +42,23 @@ export async function generateTextWithGemini(
             },
           })
         }
+      } else {
+        // It's a URL - fetch the image and convert to base64
+        try {
+          const response = await fetch(item.src)
+          const arrayBuffer = await response.arrayBuffer()
+          const base64Data = Buffer.from(arrayBuffer).toString('base64')
+          const contentType = response.headers.get('content-type') || 'image/png'
+          parts.push({
+            inlineData: {
+              mimeType: contentType,
+              data: base64Data,
+            },
+          })
+        } catch (err) {
+          console.error('Failed to fetch image for Gemini:', err)
+        }
       }
-      // URL-based images would need to be fetched first - skip for now
     }
   }
 
