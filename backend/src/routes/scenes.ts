@@ -35,7 +35,13 @@ interface StoredPromptItem extends StoredItemBase {
   file: string // reference to .json file containing label and text
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem
+interface StoredImageGenPromptItem extends StoredItemBase {
+  type: 'image-gen-prompt'
+  fontSize: number
+  file: string // reference to .json file containing label, text, and model
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem
 
 interface StoredScene {
   id: string
@@ -110,6 +116,20 @@ router.post('/:id', async (req, res) => {
           fontSize: item.fontSize,
           file: promptFile,
         })
+      } else if (item.type === 'image-gen-prompt') {
+        const promptFile = `${item.id}.imagegen.json`
+        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'gemini-imagen' })
+        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
+        storedItems.push({
+          id: item.id,
+          type: 'image-gen-prompt',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          file: promptFile,
+        })
       }
     }
 
@@ -174,7 +194,7 @@ router.get('/:id', async (req, res) => {
             scaleY: item.scaleY,
             rotation: item.rotation,
           }
-        } else {
+        } else if (item.type === 'prompt') {
           // For prompts, load the JSON file
           const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
           const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Prompt', text: '', model: 'claude-sonnet' }
@@ -189,6 +209,22 @@ router.get('/:id', async (req, res) => {
             label: promptData.label,
             text: promptData.text,
             model: promptData.model || 'claude-sonnet',
+          }
+        } else {
+          // For image-gen-prompts, load the JSON file
+          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
+          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Image Gen', text: '', model: 'gemini-imagen' }
+          return {
+            id: item.id,
+            type: 'image-gen-prompt' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            fontSize: item.fontSize,
+            label: promptData.label,
+            text: promptData.text,
+            model: promptData.model || 'gemini-imagen',
           }
         }
       })
