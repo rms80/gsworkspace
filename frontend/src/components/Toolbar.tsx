@@ -29,12 +29,26 @@ function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection }:
         padding: '10px 20px',
         borderBottom: '1px solid #ccc',
         display: 'flex',
+        alignItems: 'center',
         gap: '10px',
         backgroundColor: '#f5f5f5',
       }}
     >
-      <button onClick={onAddText}>Add Text</button>
-      <label style={{ cursor: 'pointer' }}>
+      <button
+        onClick={onAddText}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: '#fff',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+        }}
+      >
+        Add Text
+      </button>
+      <label style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
         <span
           style={{
             padding: '4px 12px',

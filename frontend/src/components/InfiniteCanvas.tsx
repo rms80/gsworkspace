@@ -303,9 +303,16 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     })
   }
 
-  // Selection rectangle
+  // Selection rectangle (Ctrl + drag)
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.target !== stageRef.current) return
+
+    // Only start marquee selection if Ctrl is held
+    if (!e.evt.ctrlKey && !e.evt.metaKey) {
+      // Clicking on empty canvas without Ctrl clears selection
+      onSelectItems([])
+      return
+    }
 
     const stage = stageRef.current
     if (!stage) return
@@ -320,7 +327,6 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     selectionStartRef.current = pos
     setSelectionRect({ x: pos.x, y: pos.y, width: 0, height: 0 })
     setIsSelecting(true)
-    onSelectItems([])
   }
 
   const handleMouseMove = (_e: Konva.KonvaEventObject<MouseEvent>) => {
@@ -425,6 +431,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         scaleX={stageScale}
         scaleY={stageScale}
         draggable
+        onDragStart={(e) => {
+          // Prevent dragging when Ctrl is held (for marquee selection)
+          if (e.evt.ctrlKey || e.evt.metaKey) {
+            e.target.stopDrag()
+          }
+        }}
         onDragEnd={(e) => {
           if (e.target === stageRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() })
@@ -437,19 +449,6 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         onContextMenu={handleContextMenu}
       >
       <Layer>
-        {/* Grid background (optional visual aid) */}
-        {Array.from({ length: 50 }, (_, i) => (
-          <Rect
-            key={`grid-${i}`}
-            x={(i % 10) * 200 - 1000}
-            y={Math.floor(i / 10) * 200 - 1000}
-            width={200}
-            height={200}
-            stroke="#eee"
-            strokeWidth={1}
-          />
-        ))}
-
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
