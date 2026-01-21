@@ -16,6 +16,7 @@ function App() {
       text: 'Double-click to edit',
       fontSize: 16,
       width: 200,
+      height: 100,
     }
     setItems((prev) => [...prev, newItem])
   }, [])
@@ -33,9 +34,38 @@ function App() {
     setItems((prev) => [...prev, newItem])
   }, [])
 
+  const addTextAt = useCallback((x: number, y: number, text: string) => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'text',
+      x,
+      y,
+      text,
+      fontSize: 16,
+      width: 200,
+      height: 100,
+    }
+    setItems((prev) => [...prev, newItem])
+  }, [])
+
+  const addImageAt = useCallback((x: number, y: number, src: string, width: number, height: number) => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'image',
+      x,
+      y,
+      src,
+      width,
+      height,
+    }
+    setItems((prev) => [...prev, newItem])
+  }, [])
+
   const updateItem = useCallback((id: string, changes: Partial<CanvasItem>) => {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...changes } : item))
+      prev.map((item) =>
+        item.id === id ? ({ ...item, ...changes } as CanvasItem) : item
+      )
     )
   }, [])
 
@@ -70,6 +100,9 @@ function App() {
         items={items}
         onUpdateItem={updateItem}
         onSelectItems={selectItems}
+        onAddTextAt={addTextAt}
+        onAddImageAt={addImageAt}
+        onDeleteSelected={deleteSelected}
       />
     </div>
   )

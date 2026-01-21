@@ -47,7 +47,7 @@ export async function generateText(
             type: 'url',
             url: item.src,
           },
-        })
+        } as unknown as Anthropic.ImageBlockParam)
       }
     }
   }

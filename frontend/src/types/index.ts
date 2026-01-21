@@ -15,6 +15,7 @@ export interface TextItem extends BaseItem {
   text: string
   fontSize: number
   width: number
+  height: number
 }
 
 export interface ImageItem extends BaseItem {
