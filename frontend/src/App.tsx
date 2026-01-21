@@ -128,12 +128,34 @@ function App() {
     setActiveSceneId(id)
   }, [])
 
-  const renameScene = useCallback((id: string, name: string) => {
+  const renameScene = useCallback(async (id: string, name: string) => {
+    const now = new Date().toISOString()
+    let updatedScene: Scene | null = null
+
     setOpenScenes((prev) =>
-      prev.map((scene) =>
-        scene.id === id ? { ...scene, name, modifiedAt: new Date().toISOString() } : scene
-      )
+      prev.map((scene) => {
+        if (scene.id === id) {
+          updatedScene = { ...scene, name, modifiedAt: now }
+          return updatedScene
+        }
+        return scene
+      })
     )
+
+    // Save the renamed scene
+    if (updatedScene) {
+      try {
+        setSaveStatus('saving')
+        await saveScene(updatedScene)
+        lastSavedRef.current.set(id, JSON.stringify(updatedScene))
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 1500)
+      } catch (error) {
+        console.error('Failed to save renamed scene:', error)
+        setSaveStatus('error')
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      }
+    }
   }, [])
 
   const closeScene = useCallback((id: string) => {
