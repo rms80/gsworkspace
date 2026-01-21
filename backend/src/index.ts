@@ -3,6 +3,7 @@ import cors from 'cors'
 import dotenv from 'dotenv'
 import itemsRouter from './routes/items.js'
 import llmRouter from './routes/llm.js'
+import scenesRouter from './routes/scenes.js'
 
 dotenv.config()
 
@@ -14,6 +15,7 @@ app.use(express.json({ limit: '50mb' }))
 
 app.use('/api/items', itemsRouter)
 app.use('/api/llm', llmRouter)
+app.use('/api/scenes', scenesRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' })

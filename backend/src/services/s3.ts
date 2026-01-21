@@ -31,6 +31,11 @@ function getS3Url(key: string): string {
   return `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com/${key}`
 }
 
+// Get public URL for an object
+export function getPublicUrl(key: string): string {
+  return getS3Url(key)
+}
+
 export async function saveToS3(
   key: string,
   data: string | Buffer,

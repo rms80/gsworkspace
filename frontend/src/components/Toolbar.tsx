@@ -3,10 +3,12 @@ interface ToolbarProps {
   onAddImage: (src: string, width: number, height: number) => void
   onDelete: () => void
   onSendToLLM: () => void
+  onSave: () => void
   hasSelection: boolean
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, onSave, hasSelection, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -66,6 +68,21 @@ function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection }:
           style={{ display: 'none' }}
         />
       </label>
+      <button
+        onClick={onSave}
+        disabled={saveStatus === 'saving'}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: saveStatus === 'saved' ? '#d4edda' : saveStatus === 'error' ? '#f8d7da' : '#fff',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          cursor: saveStatus === 'saving' ? 'wait' : 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+        }}
+      >
+        {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save'}
+      </button>
       <div style={{ flex: 1 }} />
       {hasSelection && (
         <>

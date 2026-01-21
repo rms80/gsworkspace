@@ -1,9 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
+import { saveScene, loadScene, listScenes } from './api/scenes'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -17,11 +18,61 @@ function createScene(name: string): Scene {
 }
 
 function App() {
-  const [openScenes, setOpenScenes] = useState<Scene[]>(() => [createScene('Scene 1')])
-  const [activeSceneId, setActiveSceneId] = useState<string | null>(() => openScenes[0]?.id ?? null)
+  const [openScenes, setOpenScenes] = useState<Scene[]>([])
+  const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [isLoading, setIsLoading] = useState(true)
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
+
+  // Load all scenes from S3 on initial mount
+  useEffect(() => {
+    async function loadAllScenes() {
+      try {
+        const sceneList = await listScenes()
+        if (sceneList.length === 0) {
+          // No saved scenes, create a default one
+          const defaultScene = createScene('Scene 1')
+          setOpenScenes([defaultScene])
+          setActiveSceneId(defaultScene.id)
+        } else {
+          // Load all scenes
+          const scenes = await Promise.all(
+            sceneList.map((meta) => loadScene(meta.id))
+          )
+          setOpenScenes(scenes)
+          setActiveSceneId(scenes[0]?.id ?? null)
+        }
+      } catch (error) {
+        console.error('Failed to load scenes:', error)
+        // On error, create a default scene
+        const defaultScene = createScene('Scene 1')
+        setOpenScenes([defaultScene])
+        setActiveSceneId(defaultScene.id)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadAllScenes()
+  }, [])
+
+  // Save the active scene to S3
+  const handleSave = useCallback(async () => {
+    if (!activeScene) return
+
+    setSaveStatus('saving')
+    try {
+      await saveScene(activeScene)
+      setSaveStatus('saved')
+      // Reset to idle after a delay
+      setTimeout(() => setSaveStatus('idle'), 2000)
+    } catch (error) {
+      console.error('Failed to save scene:', error)
+      setSaveStatus('error')
+      setTimeout(() => setSaveStatus('idle'), 3000)
+    }
+  }, [activeScene])
 
   // Helper to update the active scene's items
   const updateActiveSceneItems = useCallback(
@@ -161,6 +212,14 @@ function App() {
     return items.filter((item) => item.selected)
   }, [items])
 
+  if (isLoading) {
+    return (
+      <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        Loading scenes...
+      </div>
+    )
+  }
+
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Toolbar
@@ -172,7 +231,9 @@ function App() {
           console.log('Send to LLM:', selected)
           // TODO: Implement LLM integration
         }}
+        onSave={handleSave}
         hasSelection={items.some((item) => item.selected)}
+        saveStatus={saveStatus}
       />
       <TabBar
         scenes={openScenes}

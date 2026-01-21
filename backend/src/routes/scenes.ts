@@ -1,0 +1,195 @@
+import { Router } from 'express'
+import { saveToS3, loadFromS3, listFromS3, getPublicUrl } from '../services/s3.js'
+
+const router = Router()
+
+// User folder - hardcoded for now, will be per-user later
+const USER_FOLDER = 'version0'
+
+// Types for stored scene format
+interface StoredItemBase {
+  id: string
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+interface StoredTextItem extends StoredItemBase {
+  type: 'text'
+  fontSize: number
+  file: string // reference to .txt file
+}
+
+interface StoredImageItem extends StoredItemBase {
+  type: 'image'
+  file: string // reference to image file
+}
+
+type StoredItem = StoredTextItem | StoredImageItem
+
+interface StoredScene {
+  id: string
+  name: string
+  createdAt: string
+  modifiedAt: string
+  items: StoredItem[]
+}
+
+// Save a scene
+router.post('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, createdAt, modifiedAt, items } = req.body
+
+    const sceneFolder = `${USER_FOLDER}/${id}`
+    const storedItems: StoredItem[] = []
+
+    // Process each item
+    for (const item of items) {
+      if (item.type === 'text') {
+        const textFile = `${item.id}.txt`
+        await saveToS3(`${sceneFolder}/${textFile}`, item.text, 'text/plain')
+        storedItems.push({
+          id: item.id,
+          type: 'text',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          file: textFile,
+        })
+      } else if (item.type === 'image') {
+        const imageFile = `${item.id}.png`
+        // If src is a data URL, extract and save the image
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await saveToS3(
+              `${sceneFolder}/${imageFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+          }
+        }
+        storedItems.push({
+          id: item.id,
+          type: 'image',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          file: imageFile,
+        })
+      }
+    }
+
+    // Save scene.json
+    const storedScene: StoredScene = {
+      id,
+      name,
+      createdAt,
+      modifiedAt,
+      items: storedItems,
+    }
+    await saveToS3(`${sceneFolder}/scene.json`, JSON.stringify(storedScene, null, 2))
+
+    res.json({ success: true, id })
+  } catch (error) {
+    console.error('Error saving scene:', error)
+    res.status(500).json({ error: 'Failed to save scene' })
+  }
+})
+
+// Load a scene
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    // Load scene.json
+    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    if (!sceneJson) {
+      return res.status(404).json({ error: 'Scene not found' })
+    }
+
+    const storedScene: StoredScene = JSON.parse(sceneJson)
+
+    // Reconstruct items with full data
+    const items = await Promise.all(
+      storedScene.items.map(async (item) => {
+        if (item.type === 'text') {
+          const text = await loadFromS3(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'text' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            fontSize: item.fontSize,
+            text: text || '',
+          }
+        } else {
+          // For images, return the public URL
+          const imageUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'image' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: imageUrl,
+          }
+        }
+      })
+    )
+
+    res.json({
+      id: storedScene.id,
+      name: storedScene.name,
+      createdAt: storedScene.createdAt,
+      modifiedAt: storedScene.modifiedAt,
+      items,
+    })
+  } catch (error) {
+    console.error('Error loading scene:', error)
+    res.status(500).json({ error: 'Failed to load scene' })
+  }
+})
+
+// List all scenes (returns metadata only)
+router.get('/', async (_req, res) => {
+  try {
+    // List all scene.json files
+    const allKeys = await listFromS3(`${USER_FOLDER}/`)
+    const sceneJsonKeys = allKeys.filter((key) => key.endsWith('/scene.json'))
+
+    // Load metadata for each scene
+    const scenes = await Promise.all(
+      sceneJsonKeys.map(async (key) => {
+        const sceneJson = await loadFromS3(key)
+        if (!sceneJson) return null
+        const scene: StoredScene = JSON.parse(sceneJson)
+        return {
+          id: scene.id,
+          name: scene.name,
+          createdAt: scene.createdAt,
+          modifiedAt: scene.modifiedAt,
+          itemCount: scene.items.length,
+        }
+      })
+    )
+
+    res.json(scenes.filter(Boolean))
+  } catch (error) {
+    console.error('Error listing scenes:', error)
+    res.status(500).json({ error: 'Failed to list scenes' })
+  }
+})
+
+export default router
