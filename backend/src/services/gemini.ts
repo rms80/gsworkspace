@@ -5,8 +5,8 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 export type GeminiModel = 'gemini-flash' | 'gemini-pro'
 
 const MODEL_IDS: Record<GeminiModel, string> = {
-  'gemini-flash': 'gemini-2.0-flash',
-  'gemini-pro': 'gemini-2.5-pro-preview-05-06',
+  'gemini-flash': 'gemini-3-flash-preview',
+  'gemini-pro': 'gemini-3-pro-preview',
 }
 
 interface ContentItem {

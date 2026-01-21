@@ -961,7 +961,13 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
               >
-                {model.replace(/^(claude|gemini)-/, '').charAt(0).toUpperCase() + model.replace(/^(claude|gemini)-/, '').slice(1)}
+                {{
+                  'claude-haiku': 'Claude Haiku',
+                  'claude-sonnet': 'Claude Sonnet',
+                  'claude-opus': 'Claude Opus',
+                  'gemini-flash': 'Gemini 3 Flash',
+                  'gemini-pro': 'Gemini 3 Pro',
+                }[model]}
               </button>
             )
           })}

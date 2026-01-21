@@ -7,7 +7,7 @@ const anthropic = new Anthropic({
 export type ClaudeModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
 
 const MODEL_IDS: Record<ClaudeModel, string> = {
-  'claude-haiku': 'claude-haiku-4-20250514',
+  'claude-haiku': 'claude-3-5-haiku-20241022',
   'claude-sonnet': 'claude-sonnet-4-20250514',
   'claude-opus': 'claude-opus-4-20250514',
 }
