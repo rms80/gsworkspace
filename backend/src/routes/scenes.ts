@@ -92,7 +92,7 @@ router.post('/:id', async (req, res) => {
         })
       } else if (item.type === 'prompt') {
         const promptFile = `${item.id}.prompt.json`
-        const promptData = JSON.stringify({ label: item.label, text: item.text })
+        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'claude-sonnet' })
         await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
         storedItems.push({
           id: item.id,
@@ -168,7 +168,7 @@ router.get('/:id', async (req, res) => {
         } else {
           // For prompts, load the JSON file
           const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
-          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Prompt', text: '' }
+          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Prompt', text: '', model: 'claude-sonnet' }
           return {
             id: item.id,
             type: 'prompt' as const,
@@ -179,6 +179,7 @@ router.get('/:id', async (req, res) => {
             fontSize: item.fontSize,
             label: promptData.label,
             text: promptData.text,
+            model: promptData.model || 'claude-sonnet',
           }
         }
       })

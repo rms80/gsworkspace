@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect } from '../types'
+import { CanvasItem, SelectionRect, ClaudeModel } from '../types'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -36,6 +36,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [pulsePhase, setPulsePhase] = useState(0)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
+  const [modelMenuPromptId, setModelMenuPromptId] = useState<string | null>(null)
+  const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
 
   // Handle window resize
   useEffect(() => {
@@ -321,6 +323,26 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }, [contextMenu])
 
+  // Close model menu on click elsewhere
+  useEffect(() => {
+    if (!modelMenuPromptId) return
+
+    const handleClick = () => {
+      setModelMenuPromptId(null)
+      setModelMenuPosition(null)
+    }
+
+    // Delay adding listener to avoid catching the click that opened the menu
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [modelMenuPromptId])
+
   // Wheel zoom
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault()
@@ -591,7 +613,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             const isEditingThis = editingPromptId === item.id
             const isRunning = runningPromptIds.has(item.id)
             const runButtonWidth = 40
-            const runButtonHeight = 20
+            const modelButtonWidth = 20
+            const buttonHeight = 20
+            const buttonGap = 4
 
             // Calculate pulse intensity (0 to 1) for running prompts
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
@@ -642,13 +666,43 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   text={item.label}
                   x={8}
                   y={6}
-                  width={item.width - runButtonWidth - 24}
+                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
                   height={headerHeight - 6}
                   fontSize={14}
                   fontStyle="bold"
                   fill="#5c4d1a"
                   onDblClick={() => handlePromptLabelDblClick(item.id)}
                   visible={!(isEditingThis && editingPromptField === 'label')}
+                />
+                {/* Model selector button */}
+                <Rect
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fill="#666"
+                  cornerRadius={3}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    setModelMenuPromptId(item.id)
+                    setModelMenuPosition({
+                      x: e.evt.clientX,
+                      y: e.evt.clientY,
+                    })
+                  }}
+                />
+                <Text
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  text="..."
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fontSize={12}
+                  fontStyle="bold"
+                  fill="#fff"
+                  align="center"
+                  verticalAlign="middle"
+                  listening={false}
                 />
                 {/* Run button */}
                 <Group
@@ -663,14 +717,14 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 >
                   <Rect
                     width={runButtonWidth}
-                    height={runButtonHeight}
+                    height={buttonHeight}
                     fill={runButtonColor}
                     cornerRadius={3}
                   />
                   <Text
                     text={isRunning ? '...' : 'Run'}
                     width={runButtonWidth}
-                    height={runButtonHeight}
+                    height={buttonHeight}
                     fontSize={12}
                     fontStyle="bold"
                     fill="#fff"
@@ -863,6 +917,54 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           >
             Paste
           </button>
+        </div>
+      )}
+
+      {/* Model selector menu */}
+      {modelMenuPromptId && modelMenuPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            top: modelMenuPosition.y,
+            left: modelMenuPosition.x,
+            background: 'white',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            minWidth: 100,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(['claude-haiku', 'claude-sonnet', 'claude-opus'] as ClaudeModel[]).map((model) => {
+            const promptItem = items.find((i) => i.id === modelMenuPromptId && i.type === 'prompt')
+            const isSelected = promptItem?.type === 'prompt' && promptItem.model === model
+            return (
+              <button
+                key={model}
+                onClick={() => {
+                  onUpdateItem(modelMenuPromptId, { model })
+                  setModelMenuPromptId(null)
+                  setModelMenuPosition(null)
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: isSelected ? '#e8e8e8' : 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: isSelected ? 'bold' : 'normal',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
+              >
+                {model.replace('claude-', '').charAt(0).toUpperCase() + model.replace('claude-', '').slice(1)}
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

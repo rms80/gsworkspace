@@ -4,6 +4,14 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
+export type ClaudeModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
+
+const MODEL_IDS: Record<ClaudeModel, string> = {
+  'claude-haiku': 'claude-haiku-4-20250514',
+  'claude-sonnet': 'claude-sonnet-4-20250514',
+  'claude-opus': 'claude-opus-4-20250514',
+}
+
 interface ContentItem {
   type: 'text' | 'image'
   text?: string
@@ -12,7 +20,8 @@ interface ContentItem {
 
 export async function generateText(
   items: ContentItem[],
-  prompt: string
+  prompt: string,
+  model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
   // Build message content from canvas items
   const contentBlocks: Anthropic.MessageCreateParams['messages'][0]['content'] = []
@@ -59,7 +68,7 @@ export async function generateText(
   })
 
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: MODEL_IDS[model],
     max_tokens: 4096,
     messages: [
       {

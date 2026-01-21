@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { generateText } from '../services/claude.js'
+import { generateText, ClaudeModel } from '../services/claude.js'
 
 const router = Router()
 
@@ -11,13 +11,13 @@ interface ContentItem {
 
 router.post('/generate', async (req, res) => {
   try {
-    const { items, prompt } = req.body as { items: ContentItem[]; prompt: string }
+    const { items, prompt, model } = req.body as { items: ContentItem[]; prompt: string; model?: ClaudeModel }
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
-    const result = await generateText(items, prompt)
+    const result = await generateText(items, prompt, model || 'claude-sonnet')
     res.json({ result })
   } catch (error) {
     console.error('Error generating text:', error)

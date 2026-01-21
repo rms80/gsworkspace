@@ -25,6 +25,8 @@ export interface ImageItem extends BaseItem {
   height: number
 }
 
+export type ClaudeModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
+
 export interface PromptItem extends BaseItem {
   type: 'prompt'
   label: string
@@ -32,6 +34,7 @@ export interface PromptItem extends BaseItem {
   fontSize: number
   width: number
   height: number
+  model: ClaudeModel
 }
 
 export type CanvasItem = TextItem | ImageItem | PromptItem

@@ -237,6 +237,7 @@ function App() {
       fontSize: 14,
       width: 300,
       height: 150,
+      model: 'claude-sonnet',
     }
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems])
@@ -325,7 +326,7 @@ function App() {
     }).filter((item) => item.text || item.src)
 
     try {
-      const result = await generateFromPrompt(contentItems, promptItem.text)
+      const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
 
       // Create a new text item with the result, positioned below the prompt
       const newItem: CanvasItem = {
