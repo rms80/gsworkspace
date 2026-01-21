@@ -568,24 +568,47 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
+            const padding = 8
+            // Calculate text height dynamically based on content
+            const measureText = () => {
+              const textNode = new Konva.Text({
+                text: item.text,
+                fontSize: item.fontSize,
+                width: item.width,
+              })
+              return textNode.height()
+            }
+            const textHeight = measureText()
             return (
-              <Text
+              <Group
                 key={item.id}
                 id={item.id}
                 x={item.x}
                 y={item.y}
-                text={item.text}
-                fontSize={item.fontSize}
-                width={item.width}
                 draggable
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDblClick={() => handleTextDblClick(item.id)}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
                 }}
-                fill={item.selected ? '#0066cc' : '#000'}
                 visible={editingTextId !== item.id}
-              />
+              >
+                <Rect
+                  width={item.width + padding * 2}
+                  height={textHeight + padding * 2}
+                  stroke={item.selected ? '#0066cc' : '#ccc'}
+                  strokeWidth={1}
+                  cornerRadius={4}
+                />
+                <Text
+                  x={padding}
+                  y={padding}
+                  text={item.text}
+                  fontSize={item.fontSize}
+                  width={item.width}
+                  fill={item.selected ? '#0066cc' : '#000'}
+                />
+              </Group>
             )
           } else if (item.type === 'image') {
             const img = loadedImages.get(item.src)
@@ -796,31 +819,48 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     </Stage>
 
       {/* Textarea overlay for editing text */}
-      {editingItem && (
-        <textarea
-          ref={textareaRef}
-          defaultValue={editingItem.text}
-          onBlur={handleTextareaBlur}
-          onKeyDown={handleTextareaKeyDown}
-          style={{
-            position: 'absolute',
-            top: editingItem.y * stageScale + stagePos.y,
-            left: editingItem.x * stageScale + stagePos.x,
-            width: editingItem.width * stageScale,
-            height: editingItem.height * stageScale,
-            fontSize: editingItem.fontSize * stageScale,
-            fontFamily: 'sans-serif',
-            padding: 0,
-            margin: 0,
-            border: '2px solid #0066cc',
-            outline: 'none',
-            resize: 'none',
-            overflow: 'hidden',
-            background: 'white',
-            transformOrigin: 'top left',
-          }}
-        />
-      )}
+      {editingItem && (() => {
+        const measureText = () => {
+          const textNode = new Konva.Text({
+            text: editingItem.text,
+            fontSize: editingItem.fontSize,
+            width: editingItem.width,
+          })
+          return textNode.height()
+        }
+        const textHeight = measureText()
+        return (
+          <textarea
+            ref={textareaRef}
+            defaultValue={editingItem.text}
+            onBlur={handleTextareaBlur}
+            onKeyDown={handleTextareaKeyDown}
+            onInput={(e) => {
+              const target = e.target as HTMLTextAreaElement
+              target.style.height = 'auto'
+              target.style.height = target.scrollHeight + 'px'
+            }}
+            style={{
+              position: 'absolute',
+              top: (editingItem.y + 8) * stageScale + stagePos.y,
+              left: (editingItem.x + 8) * stageScale + stagePos.x,
+              width: editingItem.width * stageScale,
+              minHeight: textHeight * stageScale,
+              fontSize: editingItem.fontSize * stageScale,
+              fontFamily: 'sans-serif',
+              padding: 0,
+              margin: 0,
+              border: '1px solid #ccc',
+              borderRadius: 4,
+              outline: 'none',
+              resize: 'none',
+              overflow: 'hidden',
+              background: 'white',
+              transformOrigin: 'top left',
+            }}
+          />
+        )
+      })()}
 
       {/* Input overlay for editing prompt label */}
       {editingPrompt && editingPromptField === 'label' && (
