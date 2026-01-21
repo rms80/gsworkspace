@@ -23,6 +23,7 @@ function App() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoading, setIsLoading] = useState(true)
+  const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const saveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
 
@@ -305,6 +306,9 @@ function App() {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
     if (!promptItem || promptItem.type !== 'prompt') return
 
+    // Mark prompt as running
+    setRunningPromptIds((prev) => new Set(prev).add(promptId))
+
     // Gather selected items (excluding the prompt itself)
     const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
 
@@ -338,6 +342,13 @@ function App() {
     } catch (error) {
       console.error('Failed to run prompt:', error)
       alert('Failed to run prompt. Check the console for details.')
+    } finally {
+      // Mark prompt as no longer running
+      setRunningPromptIds((prev) => {
+        const next = new Set(prev)
+        next.delete(promptId)
+        return next
+      })
     }
   }, [items, updateActiveSceneItems])
 
@@ -382,6 +393,7 @@ function App() {
           onAddImageAt={addImageAt}
           onDeleteSelected={deleteSelected}
           onRunPrompt={handleRunPrompt}
+          runningPromptIds={runningPromptIds}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>

@@ -11,9 +11,10 @@ interface InfiniteCanvasProps {
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
+  runningPromptIds: Set<string>
 }
 
-function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds }: InfiniteCanvasProps) {
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
@@ -31,6 +32,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
+  const [pulsePhase, setPulsePhase] = useState(0)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
 
@@ -43,6 +45,20 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  // Pulse animation for running prompts
+  useEffect(() => {
+    if (runningPromptIds.size === 0) {
+      setPulsePhase(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setPulsePhase((prev) => (prev + 0.05) % (Math.PI * 2))
+    }, 50)
+
+    return () => clearInterval(interval)
+  }, [runningPromptIds.size])
 
   // Load images
   useEffect(() => {
@@ -557,8 +573,24 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           } else if (item.type === 'prompt') {
             const headerHeight = 28
             const isEditingThis = editingPromptId === item.id
+            const isRunning = runningPromptIds.has(item.id)
             const runButtonWidth = 40
             const runButtonHeight = 20
+
+            // Calculate pulse intensity (0 to 1) for running prompts
+            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
+
+            // Border color: orange pulse when running, otherwise normal
+            const borderColor = isRunning
+              ? `rgb(${Math.round(201 + (255 - 201) * pulseIntensity)}, ${Math.round(162 - 80 * pulseIntensity)}, ${Math.round(39 - 39 * pulseIntensity)})`
+              : (item.selected ? '#0066cc' : '#c9a227')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+
+            // Run button color: orange when running, green otherwise
+            const runButtonColor = isRunning
+              ? `rgb(${Math.round(230 + 25 * pulseIntensity)}, ${Math.round(140 - 40 * pulseIntensity)}, ${Math.round(50 + 20 * pulseIntensity)})`
+              : '#4a7c59'
+
             return (
               <Group
                 key={item.id}
@@ -567,7 +599,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 y={item.y}
                 width={item.width}
                 height={item.height}
-                draggable
+                draggable={!isRunning}
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
@@ -578,8 +610,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   width={item.width}
                   height={item.height}
                   fill="#f8f4e8"
-                  stroke={item.selected ? '#0066cc' : '#c9a227'}
-                  strokeWidth={item.selected ? 2 : 1}
+                  stroke={borderColor}
+                  strokeWidth={borderWidth}
                   cornerRadius={4}
                 />
                 {/* Header background */}
@@ -608,17 +640,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   y={4}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    onRunPrompt(item.id)
+                    if (!isRunning) {
+                      onRunPrompt(item.id)
+                    }
                   }}
                 >
                   <Rect
                     width={runButtonWidth}
                     height={runButtonHeight}
-                    fill="#4a7c59"
+                    fill={runButtonColor}
                     cornerRadius={3}
                   />
                   <Text
-                    text="Run"
+                    text={isRunning ? '...' : 'Run'}
                     width={runButtonWidth}
                     height={runButtonHeight}
                     fontSize={12}
