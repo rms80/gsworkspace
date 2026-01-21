@@ -33,3 +33,11 @@ export interface SelectionRect {
   width: number
   height: number
 }
+
+export interface Scene {
+  id: string
+  name: string
+  items: CanvasItem[]
+  createdAt: string
+  modifiedAt: string
+}
