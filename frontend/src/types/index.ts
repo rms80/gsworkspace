@@ -23,6 +23,9 @@ export interface ImageItem extends BaseItem {
   src: string
   width: number
   height: number
+  scaleX?: number
+  scaleY?: number
+  rotation?: number
 }
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'

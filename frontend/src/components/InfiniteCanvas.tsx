@@ -47,6 +47,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
   const [modelMenuPromptId, setModelMenuPromptId] = useState<string | null>(null)
   const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
 
   // Handle window resize
   useEffect(() => {
@@ -378,6 +379,24 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }, [imageGenModelMenuPromptId])
 
+  // Close image context menu on click elsewhere
+  useEffect(() => {
+    if (!imageContextMenu) return
+
+    const handleClick = () => {
+      setImageContextMenu(null)
+    }
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [imageContextMenu])
+
   // Wheel zoom
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault()
@@ -707,10 +726,31 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 image={img}
                 width={item.width}
                 height={item.height}
+                scaleX={item.scaleX ?? 1}
+                scaleY={item.scaleY ?? 1}
+                rotation={item.rotation ?? 0}
                 draggable
                 onClick={(e) => handleItemClick(e, item.id)}
+                onContextMenu={(e) => {
+                  e.evt.preventDefault()
+                  setImageContextMenu({
+                    imageId: item.id,
+                    x: e.evt.clientX,
+                    y: e.evt.clientY,
+                  })
+                }}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    scaleX: node.scaleX(),
+                    scaleY: node.scaleY(),
+                    rotation: node.rotation(),
+                  })
                 }}
                 stroke={item.selected ? '#0066cc' : undefined}
                 strokeWidth={item.selected ? 2 : 0}
@@ -1361,6 +1401,49 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
               </button>
             )
           })}
+        </div>
+      )}
+
+      {/* Image context menu */}
+      {imageContextMenu && (
+        <div
+          style={{
+            position: 'fixed',
+            top: imageContextMenu.y,
+            left: imageContextMenu.x,
+            background: 'white',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            minWidth: 150,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              onUpdateItem(imageContextMenu.imageId, {
+                scaleX: 1,
+                scaleY: 1,
+                rotation: 0,
+              })
+              setImageContextMenu(null)
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 16px',
+              border: 'none',
+              background: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          >
+            Reset Transform
+          </button>
         </div>
       )}
     </div>
