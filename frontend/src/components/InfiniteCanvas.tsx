@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect, LLMModel } from '../types'
+import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -12,9 +12,11 @@ interface InfiniteCanvasProps {
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
+  onRunImageGenPrompt: (promptId: string) => void
+  runningImageGenPromptIds: Set<string>
 }
 
-function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds }: InfiniteCanvasProps) {
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
@@ -26,10 +28,17 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const textTransformerRef = useRef<Konva.Transformer>(null)
   const imageTransformerRef = useRef<Konva.Transformer>(null)
   const promptTransformerRef = useRef<Konva.Transformer>(null)
+  const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
   const [editingPromptField, setEditingPromptField] = useState<'label' | 'text' | null>(null)
+  const [editingImageGenPromptId, setEditingImageGenPromptId] = useState<string | null>(null)
+  const [editingImageGenPromptField, setEditingImageGenPromptField] = useState<'label' | 'text' | null>(null)
+  const imageGenPromptTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const imageGenLabelInputRef = useRef<HTMLInputElement>(null)
+  const [imageGenModelMenuPromptId, setImageGenModelMenuPromptId] = useState<string | null>(null)
+  const [imageGenModelMenuPosition, setImageGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
@@ -110,9 +119,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
+    const selectedImageGenPromptNodes = items
+      .filter((item) => item.selected && item.type === 'image-gen-prompt')
+      .map((item) => stageRef.current?.findOne(`#${item.id}`))
+      .filter(Boolean) as Konva.Node[]
+
     textTransformerRef.current?.nodes(selectedTextNodes)
     imageTransformerRef.current?.nodes(selectedImageNodes)
     promptTransformerRef.current?.nodes(selectedPromptNodes)
+    imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
   }, [items])
 
   // Convert screen coordinates to canvas coordinates
@@ -343,6 +358,26 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }, [modelMenuPromptId])
 
+  // Close image gen model menu on click elsewhere
+  useEffect(() => {
+    if (!imageGenModelMenuPromptId) return
+
+    const handleClick = () => {
+      setImageGenModelMenuPromptId(null)
+      setImageGenModelMenuPosition(null)
+    }
+
+    // Delay adding listener to avoid catching the click that opened the menu
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [imageGenModelMenuPromptId])
+
   // Wheel zoom
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault()
@@ -519,6 +554,48 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }
 
+  // Image Gen Prompt editing handlers
+  const handleImageGenPromptLabelDblClick = (id: string) => {
+    setEditingImageGenPromptId(id)
+    setEditingImageGenPromptField('label')
+    setTimeout(() => {
+      imageGenLabelInputRef.current?.focus()
+      imageGenLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleImageGenPromptTextDblClick = (id: string) => {
+    setEditingImageGenPromptId(id)
+    setEditingImageGenPromptField('text')
+    setTimeout(() => {
+      imageGenPromptTextareaRef.current?.focus()
+      imageGenPromptTextareaRef.current?.select()
+    }, 0)
+  }
+
+  const handleImageGenPromptLabelBlur = () => {
+    if (editingImageGenPromptId && imageGenLabelInputRef.current) {
+      onUpdateItem(editingImageGenPromptId, { label: imageGenLabelInputRef.current.value })
+    }
+    setEditingImageGenPromptId(null)
+    setEditingImageGenPromptField(null)
+  }
+
+  const handleImageGenPromptTextBlur = () => {
+    if (editingImageGenPromptId && imageGenPromptTextareaRef.current) {
+      onUpdateItem(editingImageGenPromptId, { text: imageGenPromptTextareaRef.current.value })
+    }
+    setEditingImageGenPromptId(null)
+    setEditingImageGenPromptField(null)
+  }
+
+  const handleImageGenPromptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingImageGenPromptId(null)
+      setEditingImageGenPromptField(null)
+    }
+  }
+
   const getEditingTextItem = () => {
     if (!editingTextId) return null
     const item = items.find((i) => i.id === editingTextId)
@@ -533,8 +610,16 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     return item
   }
 
+  const getEditingImageGenPromptItem = () => {
+    if (!editingImageGenPromptId) return null
+    const item = items.find((i) => i.id === editingImageGenPromptId)
+    if (!item || item.type !== 'image-gen-prompt') return null
+    return item
+  }
+
   const editingItem = getEditingTextItem()
   const editingPrompt = getEditingPromptItem()
+  const editingImageGenPrompt = getEditingImageGenPromptItem()
 
   return (
     <div style={{ position: 'relative' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -769,6 +854,144 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 />
               </Group>
             )
+          } else if (item.type === 'image-gen-prompt') {
+            const headerHeight = 28
+            const isEditingThis = editingImageGenPromptId === item.id
+            const isRunning = runningImageGenPromptIds.has(item.id)
+            const runButtonWidth = 40
+            const modelButtonWidth = 20
+            const buttonHeight = 20
+            const buttonGap = 4
+
+            // Calculate pulse intensity (0 to 1) for running prompts
+            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
+
+            // Border color: pulse between dark purple (138, 43, 226) and light purple (200, 150, 255)
+            const borderColor = isRunning
+              ? `rgb(${Math.round(138 + 62 * pulseIntensity)}, ${Math.round(43 + 107 * pulseIntensity)}, ${Math.round(226 + 29 * pulseIntensity)})`
+              : (item.selected ? '#0066cc' : '#8b5cf6')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+
+            // Run button color: pulse between dark purple and light purple
+            const runButtonColor = isRunning
+              ? `rgb(${Math.round(138 + 62 * pulseIntensity)}, ${Math.round(43 + 107 * pulseIntensity)}, ${Math.round(200 + 55 * pulseIntensity)})`
+              : '#7c3aed'
+
+            return (
+              <Group
+                key={item.id}
+                id={item.id}
+                x={item.x}
+                y={item.y}
+                width={item.width}
+                height={item.height}
+                draggable={!isRunning}
+                onClick={(e) => handleItemClick(e, item.id)}
+                onDragEnd={(e) => {
+                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+              >
+                {/* Background */}
+                <Rect
+                  width={item.width}
+                  height={item.height}
+                  fill="#f5f3ff"
+                  stroke={borderColor}
+                  strokeWidth={borderWidth}
+                  cornerRadius={4}
+                />
+                {/* Header background */}
+                <Rect
+                  width={item.width}
+                  height={headerHeight}
+                  fill="#ddd6fe"
+                  cornerRadius={[4, 4, 0, 0]}
+                />
+                {/* Header label */}
+                <Text
+                  text={item.label}
+                  x={8}
+                  y={6}
+                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
+                  height={headerHeight - 6}
+                  fontSize={14}
+                  fontStyle="bold"
+                  fill="#5b21b6"
+                  onDblClick={() => handleImageGenPromptLabelDblClick(item.id)}
+                  visible={!(isEditingThis && editingImageGenPromptField === 'label')}
+                />
+                {/* Model selector button */}
+                <Rect
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fill="#666"
+                  cornerRadius={3}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    setImageGenModelMenuPromptId(item.id)
+                    setImageGenModelMenuPosition({
+                      x: e.evt.clientX,
+                      y: e.evt.clientY,
+                    })
+                  }}
+                />
+                <Text
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  text="..."
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fontSize={12}
+                  fontStyle="bold"
+                  fill="#fff"
+                  align="center"
+                  verticalAlign="middle"
+                  listening={false}
+                />
+                {/* Run button */}
+                <Group
+                  x={item.width - runButtonWidth - 8}
+                  y={4}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    if (!isRunning) {
+                      onRunImageGenPrompt(item.id)
+                    }
+                  }}
+                >
+                  <Rect
+                    width={runButtonWidth}
+                    height={buttonHeight}
+                    fill={runButtonColor}
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text={isRunning ? '...' : 'Run'}
+                    width={runButtonWidth}
+                    height={buttonHeight}
+                    fontSize={12}
+                    fontStyle="bold"
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
+                {/* Content text */}
+                <Text
+                  text={item.text}
+                  x={8}
+                  y={headerHeight + 8}
+                  width={item.width - 16}
+                  height={item.height - headerHeight - 16}
+                  fontSize={item.fontSize}
+                  fill="#333"
+                  onDblClick={() => handleImageGenPromptTextDblClick(item.id)}
+                  visible={!(isEditingThis && editingImageGenPromptField === 'text')}
+                />
+              </Group>
+            )
           }
           return null
         })}
@@ -805,6 +1028,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         {/* Transformer for prompts - uniform scaling, no rotation */}
         <Transformer
           ref={promptTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 100 || newBox.height < 60) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+        {/* Transformer for image gen prompts - uniform scaling, no rotation */}
+        <Transformer
+          ref={imageGenPromptTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={true}
@@ -925,6 +1161,69 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         />
       )}
 
+      {/* Input overlay for editing image gen prompt label */}
+      {editingImageGenPrompt && editingImageGenPromptField === 'label' && (
+        <input
+          ref={imageGenLabelInputRef}
+          type="text"
+          defaultValue={editingImageGenPrompt.label}
+          onBlur={handleImageGenPromptLabelBlur}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleImageGenPromptLabelBlur()
+            }
+            handleImageGenPromptKeyDown(e)
+          }}
+          style={{
+            position: 'absolute',
+            top: editingImageGenPrompt.y * stageScale + stagePos.y + 4 * stageScale,
+            left: editingImageGenPrompt.x * stageScale + stagePos.x + 6 * stageScale,
+            width: (editingImageGenPrompt.width - 16) * stageScale,
+            height: 20 * stageScale,
+            fontSize: 14 * stageScale,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            padding: '0 2px',
+            margin: 0,
+            border: '2px solid #8b5cf6',
+            borderRadius: 2,
+            outline: 'none',
+            background: '#ddd6fe',
+            color: '#5b21b6',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
+      {/* Textarea overlay for editing image gen prompt text */}
+      {editingImageGenPrompt && editingImageGenPromptField === 'text' && (
+        <textarea
+          ref={imageGenPromptTextareaRef}
+          defaultValue={editingImageGenPrompt.text}
+          onBlur={handleImageGenPromptTextBlur}
+          onKeyDown={handleImageGenPromptKeyDown}
+          style={{
+            position: 'absolute',
+            top: (editingImageGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            left: (editingImageGenPrompt.x + 6) * stageScale + stagePos.x,
+            width: (editingImageGenPrompt.width - 16) * stageScale,
+            height: (editingImageGenPrompt.height - 28 - 16) * stageScale,
+            fontSize: editingImageGenPrompt.fontSize * stageScale,
+            fontFamily: 'sans-serif',
+            padding: '2px',
+            margin: 0,
+            border: '2px solid #8b5cf6',
+            borderRadius: 2,
+            outline: 'none',
+            resize: 'none',
+            overflow: 'hidden',
+            background: '#f5f3ff',
+            color: '#333',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
       {/* Context menu */}
       {contextMenu && (
         <div
@@ -1007,6 +1306,57 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   'claude-opus': 'Claude Opus',
                   'gemini-flash': 'Gemini 3 Flash',
                   'gemini-pro': 'Gemini 3 Pro',
+                }[model]}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Image gen model selector menu */}
+      {imageGenModelMenuPromptId && imageGenModelMenuPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            top: imageGenModelMenuPosition.y,
+            left: imageGenModelMenuPosition.x,
+            background: 'white',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            minWidth: 100,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(['gemini-imagen', 'gemini-flash-imagen'] as ImageGenModel[]).map((model) => {
+            const promptItem = items.find((i) => i.id === imageGenModelMenuPromptId && i.type === 'image-gen-prompt')
+            const isSelected = promptItem?.type === 'image-gen-prompt' && promptItem.model === model
+            return (
+              <button
+                key={model}
+                onClick={() => {
+                  onUpdateItem(imageGenModelMenuPromptId, { model })
+                  setImageGenModelMenuPromptId(null)
+                  setImageGenModelMenuPosition(null)
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: isSelected ? '#e8e8e8' : 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: isSelected ? 'bold' : 'normal',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
+              >
+                {{
+                  'gemini-imagen': 'Gemini Imagen',
+                  'gemini-flash-imagen': 'Gemini Flash Imagen',
                 }[model]}
               </button>
             )

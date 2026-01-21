@@ -27,6 +27,8 @@ export interface ImageItem extends BaseItem {
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'
 
+export type ImageGenModel = 'gemini-imagen' | 'gemini-flash-imagen'
+
 export interface PromptItem extends BaseItem {
   type: 'prompt'
   label: string
@@ -37,7 +39,17 @@ export interface PromptItem extends BaseItem {
   model: LLMModel
 }
 
-export type CanvasItem = TextItem | ImageItem | PromptItem
+export interface ImageGenPromptItem extends BaseItem {
+  type: 'image-gen-prompt'
+  label: string
+  text: string
+  fontSize: number
+  width: number
+  height: number
+  model: ImageGenModel
+}
+
+export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem
 
 export interface SelectionRect {
   x: number

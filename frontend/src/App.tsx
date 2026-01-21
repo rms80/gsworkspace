@@ -5,7 +5,7 @@ import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene } from './api/scenes'
-import { generateFromPrompt, ContentItem } from './api/llm'
+import { generateFromPrompt, generateImage, ContentItem } from './api/llm'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -24,6 +24,7 @@ function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
+  const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const saveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
 
@@ -242,6 +243,22 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems])
 
+  const addImageGenPromptItem = useCallback(() => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'image-gen-prompt',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      label: 'Image Gen',
+      text: 'Describe the image you want to generate...',
+      fontSize: 14,
+      width: 300,
+      height: 150,
+      model: 'gemini-imagen',
+    }
+    updateActiveSceneItems((prev) => [...prev, newItem])
+  }, [updateActiveSceneItems])
+
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
       const newItem: CanvasItem = {
@@ -353,6 +370,63 @@ function App() {
     }
   }, [items, updateActiveSceneItems])
 
+  const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
+    const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
+    if (!promptItem || promptItem.type !== 'image-gen-prompt') return
+
+    // Mark prompt as running
+    setRunningImageGenPromptIds((prev) => new Set(prev).add(promptId))
+
+    // Gather selected items (excluding the prompt itself)
+    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+
+    // Convert to ContentItem format for the API
+    const contentItems: ContentItem[] = selectedItems.map((item) => {
+      if (item.type === 'text') {
+        return { type: 'text' as const, text: item.text }
+      } else if (item.type === 'image') {
+        return { type: 'image' as const, src: item.src }
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt') {
+        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      }
+      return { type: 'text' as const, text: '' }
+    }).filter((item) => item.text || item.src)
+
+    try {
+      const images = await generateImage(contentItems, promptItem.text, promptItem.model)
+
+      // Create new image items for each generated image, positioned below the prompt
+      const newItems: CanvasItem[] = images.map((dataUrl, index) => {
+        // Create an Image to get dimensions
+        return {
+          id: uuidv4(),
+          type: 'image' as const,
+          x: promptItem.x + index * 220,
+          y: promptItem.y + promptItem.height + 20,
+          src: dataUrl,
+          width: 200,
+          height: 200,
+        }
+      })
+
+      if (newItems.length > 0) {
+        updateActiveSceneItems((prev) => [...prev, ...newItems])
+      } else {
+        alert('No images were generated. The model may not have produced any image output.')
+      }
+    } catch (error) {
+      console.error('Failed to run image generation prompt:', error)
+      alert('Failed to generate image. Check the console for details.')
+    } finally {
+      // Mark prompt as no longer running
+      setRunningImageGenPromptIds((prev) => {
+        const next = new Set(prev)
+        next.delete(promptId)
+        return next
+      })
+    }
+  }, [items, updateActiveSceneItems])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -367,6 +441,7 @@ function App() {
         onAddText={addTextItem}
         onAddImage={addImageItem}
         onAddPrompt={addPromptItem}
+        onAddImageGenPrompt={addImageGenPromptItem}
         onDelete={deleteSelected}
         onSendToLLM={() => {
           const selected = getSelectedItems()
@@ -395,6 +470,8 @@ function App() {
           onDeleteSelected={deleteSelected}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
+          onRunImageGenPrompt={handleRunImageGenPrompt}
+          runningImageGenPromptIds={runningImageGenPromptIds}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
