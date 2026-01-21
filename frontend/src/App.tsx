@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
@@ -22,6 +22,8 @@ function App() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [isLoading, setIsLoading] = useState(true)
+  const saveTimeoutRef = useRef<number | null>(null)
+  const lastSavedRef = useRef<Map<string, string>>(new Map())
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -36,11 +38,16 @@ function App() {
           const defaultScene = createScene('Scene 1')
           setOpenScenes([defaultScene])
           setActiveSceneId(defaultScene.id)
+          lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
         } else {
           // Load all scenes
           const scenes = await Promise.all(
             sceneList.map((meta) => loadScene(meta.id))
           )
+          // Mark all loaded scenes as saved
+          scenes.forEach((scene) => {
+            lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+          })
           setOpenScenes(scenes)
           setActiveSceneId(scenes[0]?.id ?? null)
         }
@@ -50,6 +57,7 @@ function App() {
         const defaultScene = createScene('Scene 1')
         setOpenScenes([defaultScene])
         setActiveSceneId(defaultScene.id)
+        lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
       } finally {
         setIsLoading(false)
       }
@@ -57,22 +65,42 @@ function App() {
     loadAllScenes()
   }, [])
 
-  // Save the active scene to S3
-  const handleSave = useCallback(async () => {
-    if (!activeScene) return
+  // Auto-save when active scene changes (debounced)
+  useEffect(() => {
+    if (!activeScene || isLoading) return
 
-    setSaveStatus('saving')
-    try {
-      await saveScene(activeScene)
-      setSaveStatus('saved')
-      // Reset to idle after a delay
-      setTimeout(() => setSaveStatus('idle'), 2000)
-    } catch (error) {
-      console.error('Failed to save scene:', error)
-      setSaveStatus('error')
-      setTimeout(() => setSaveStatus('idle'), 3000)
+    const sceneJson = JSON.stringify(activeScene)
+    const lastSaved = lastSavedRef.current.get(activeScene.id)
+
+    // Skip if nothing changed
+    if (sceneJson === lastSaved) return
+
+    // Clear any pending save
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
     }
-  }, [activeScene])
+
+    // Debounce save by 1 second
+    saveTimeoutRef.current = window.setTimeout(async () => {
+      setSaveStatus('saving')
+      try {
+        await saveScene(activeScene)
+        lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
+        setSaveStatus('saved')
+        setTimeout(() => setSaveStatus('idle'), 1500)
+      } catch (error) {
+        console.error('Failed to auto-save scene:', error)
+        setSaveStatus('error')
+        setTimeout(() => setSaveStatus('idle'), 3000)
+      }
+    }, 1000)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [activeScene, isLoading])
 
   // Helper to update the active scene's items
   const updateActiveSceneItems = useCallback(
@@ -91,6 +119,7 @@ function App() {
   // Scene management
   const addScene = useCallback(() => {
     const newScene = createScene(`Scene ${openScenes.length + 1}`)
+    lastSavedRef.current.set(newScene.id, JSON.stringify(newScene))
     setOpenScenes((prev) => [...prev, newScene])
     setActiveSceneId(newScene.id)
   }, [openScenes.length])
@@ -123,6 +152,8 @@ function App() {
   const handleDeleteScene = useCallback(async (id: string) => {
     try {
       await deleteScene(id)
+      // Clean up the saved state tracking
+      lastSavedRef.current.delete(id)
       // Remove from open scenes
       setOpenScenes((prev) => {
         const newScenes = prev.filter((s) => s.id !== id)
@@ -251,7 +282,6 @@ function App() {
           console.log('Send to LLM:', selected)
           // TODO: Implement LLM integration
         }}
-        onSave={handleSave}
         hasSelection={items.some((item) => item.selected)}
         saveStatus={saveStatus}
       />

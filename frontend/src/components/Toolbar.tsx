@@ -3,12 +3,11 @@ interface ToolbarProps {
   onAddImage: (src: string, width: number, height: number) => void
   onDelete: () => void
   onSendToLLM: () => void
-  onSave: () => void
   hasSelection: boolean
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, onSave, hasSelection, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, hasSelection, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -68,21 +67,20 @@ function Toolbar({ onAddText, onAddImage, onDelete, onSendToLLM, onSave, hasSele
           style={{ display: 'none' }}
         />
       </label>
-      <button
-        onClick={onSave}
-        disabled={saveStatus === 'saving'}
-        style={{
-          padding: '4px 12px',
-          backgroundColor: saveStatus === 'saved' ? '#d4edda' : saveStatus === 'error' ? '#f8d7da' : '#fff',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          cursor: saveStatus === 'saving' ? 'wait' : 'pointer',
-          fontFamily: 'inherit',
-          fontSize: 'inherit',
-        }}
-      >
-        {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : saveStatus === 'error' ? 'Error' : 'Save'}
-      </button>
+      {saveStatus !== 'idle' && (
+        <span
+          style={{
+            padding: '4px 12px',
+            backgroundColor: saveStatus === 'saved' ? '#d4edda' : saveStatus === 'error' ? '#f8d7da' : '#fff',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            fontSize: '13px',
+            color: saveStatus === 'error' ? '#721c24' : '#666',
+          }}
+        >
+          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save error'}
+        </span>
+      )}
       <div style={{ flex: 1 }} />
       {hasSelection && (
         <>
