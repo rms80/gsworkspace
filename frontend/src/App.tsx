@@ -396,18 +396,47 @@ function App() {
       const images = await generateImage(contentItems, promptItem.text, promptItem.model)
 
       // Create new image items for each generated image, positioned below the prompt
-      const newItems: CanvasItem[] = images.map((dataUrl, index) => {
-        // Create an Image to get dimensions
-        return {
-          id: uuidv4(),
-          type: 'image' as const,
-          x: promptItem.x + index * 220,
-          y: promptItem.y + promptItem.height + 20,
-          src: dataUrl,
-          width: 200,
-          height: 200,
-        }
-      })
+      // Load each image to get its actual dimensions
+      const newItems = await Promise.all(
+        images.map((dataUrl, index) => {
+          return new Promise<CanvasItem>((resolve) => {
+            const img = new window.Image()
+            img.onload = () => {
+              // Scale down if too large, maintaining aspect ratio
+              const maxSize = 400
+              let width = img.width
+              let height = img.height
+              if (width > maxSize || height > maxSize) {
+                const scale = maxSize / Math.max(width, height)
+                width = Math.round(width * scale)
+                height = Math.round(height * scale)
+              }
+              resolve({
+                id: uuidv4(),
+                type: 'image' as const,
+                x: promptItem.x + index * (width + 20),
+                y: promptItem.y + promptItem.height + 20,
+                src: dataUrl,
+                width,
+                height,
+              })
+            }
+            img.onerror = () => {
+              // Fallback to default size if image fails to load
+              resolve({
+                id: uuidv4(),
+                type: 'image' as const,
+                x: promptItem.x + index * 220,
+                y: promptItem.y + promptItem.height + 20,
+                src: dataUrl,
+                width: 200,
+                height: 200,
+              })
+            }
+            img.src = dataUrl
+          })
+        })
+      )
 
       if (newItems.length > 0) {
         updateActiveSceneItems((prev) => [...prev, ...newItems])
