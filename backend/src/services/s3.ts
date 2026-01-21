@@ -3,6 +3,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3'
 import dotenv from 'dotenv'
 
@@ -119,5 +120,24 @@ export async function listFromS3(prefix: string): Promise<string[]> {
       keys.push(match[1])
     }
     return keys
+  }
+}
+
+export async function deleteFromS3(key: string): Promise<void> {
+  if (s3Client) {
+    await s3Client.send(
+      new DeleteObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: key,
+      })
+    )
+  } else {
+    // Use direct HTTP DELETE for public bucket
+    const response = await fetch(getS3Url(key), {
+      method: 'DELETE',
+    })
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`S3 DELETE failed: ${response.status} ${response.statusText}`)
+    }
   }
 }

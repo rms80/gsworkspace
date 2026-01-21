@@ -4,7 +4,7 @@ import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
-import { saveScene, loadScene, listScenes } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene } from './api/scenes'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -118,6 +118,26 @@ function App() {
       }
       return newScenes
     })
+  }, [activeSceneId])
+
+  const handleDeleteScene = useCallback(async (id: string) => {
+    try {
+      await deleteScene(id)
+      // Remove from open scenes
+      setOpenScenes((prev) => {
+        const newScenes = prev.filter((s) => s.id !== id)
+        // If deleting the active scene, switch to another one
+        if (activeSceneId === id) {
+          const deletingIndex = prev.findIndex((s) => s.id === id)
+          const newActiveId = newScenes[Math.min(deletingIndex, newScenes.length - 1)]?.id ?? null
+          setActiveSceneId(newActiveId)
+        }
+        return newScenes
+      })
+    } catch (error) {
+      console.error('Failed to delete scene:', error)
+      alert('Failed to delete scene')
+    }
   }, [activeSceneId])
 
   // Item management (operates on active scene)
@@ -242,6 +262,7 @@ function App() {
         onAddScene={addScene}
         onRenameScene={renameScene}
         onCloseScene={closeScene}
+        onDeleteScene={handleDeleteScene}
       />
       {activeScene ? (
         <InfiniteCanvas

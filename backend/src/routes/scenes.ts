@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { saveToS3, loadFromS3, listFromS3, getPublicUrl } from '../services/s3.js'
+import { saveToS3, loadFromS3, listFromS3, getPublicUrl, deleteFromS3 } from '../services/s3.js'
 
 const router = Router()
 
@@ -189,6 +189,25 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     console.error('Error listing scenes:', error)
     res.status(500).json({ error: 'Failed to list scenes' })
+  }
+})
+
+// Delete a scene
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    // List all files in the scene folder
+    const allKeys = await listFromS3(`${sceneFolder}/`)
+
+    // Delete all files in the scene folder
+    await Promise.all(allKeys.map((key) => deleteFromS3(key)))
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting scene:', error)
+    res.status(500).json({ error: 'Failed to delete scene' })
   }
 })
 

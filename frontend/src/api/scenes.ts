@@ -36,3 +36,12 @@ export async function listScenes(): Promise<SceneMetadata[]> {
   }
   return response.json()
 }
+
+export async function deleteScene(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE}/${id}`, {
+    method: 'DELETE',
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to delete scene: ${response.statusText}`)
+  }
+}
