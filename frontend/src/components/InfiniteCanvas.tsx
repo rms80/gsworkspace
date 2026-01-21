@@ -60,7 +60,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     const animate = (currentTime: number) => {
       const delta = (currentTime - lastTime) / 1000
       lastTime = currentTime
-      setPulsePhase((prev) => (prev + delta * 6) % (Math.PI * 2)) // ~1 second full cycle
+      setPulsePhase((prev) => (prev + delta * 3) % (Math.PI * 2)) // ~2 second full cycle
       animationId = requestAnimationFrame(animate)
     }
 
