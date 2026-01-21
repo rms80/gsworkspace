@@ -5,6 +5,7 @@ import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene } from './api/scenes'
+import { generateFromPrompt, ContentItem } from './api/llm'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -300,6 +301,46 @@ function App() {
     return items.filter((item) => item.selected)
   }, [items])
 
+  const handleRunPrompt = useCallback(async (promptId: string) => {
+    const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
+    if (!promptItem || promptItem.type !== 'prompt') return
+
+    // Gather selected items (excluding the prompt itself)
+    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+
+    // Convert to ContentItem format for the API
+    const contentItems: ContentItem[] = selectedItems.map((item) => {
+      if (item.type === 'text') {
+        return { type: 'text' as const, text: item.text }
+      } else if (item.type === 'image') {
+        return { type: 'image' as const, src: item.src }
+      } else if (item.type === 'prompt') {
+        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      }
+      return { type: 'text' as const, text: '' }
+    }).filter((item) => item.text || item.src)
+
+    try {
+      const result = await generateFromPrompt(contentItems, promptItem.text)
+
+      // Create a new text item with the result, positioned below the prompt
+      const newItem: CanvasItem = {
+        id: uuidv4(),
+        type: 'text',
+        x: promptItem.x,
+        y: promptItem.y + promptItem.height + 20,
+        text: result,
+        fontSize: 14,
+        width: Math.max(promptItem.width, 300),
+        height: 200,
+      }
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    } catch (error) {
+      console.error('Failed to run prompt:', error)
+      alert('Failed to run prompt. Check the console for details.')
+    }
+  }, [items, updateActiveSceneItems])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -340,6 +381,7 @@ function App() {
           onAddTextAt={addTextAt}
           onAddImageAt={addImageAt}
           onDeleteSelected={deleteSelected}
+          onRunPrompt={handleRunPrompt}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>

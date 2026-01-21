@@ -10,9 +10,10 @@ interface InfiniteCanvasProps {
   onAddTextAt: (x: number, y: number, text: string) => void
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
   onDeleteSelected: () => void
+  onRunPrompt: (promptId: string) => void
 }
 
-function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt }: InfiniteCanvasProps) {
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
@@ -556,6 +557,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           } else if (item.type === 'prompt') {
             const headerHeight = 28
             const isEditingThis = editingPromptId === item.id
+            const runButtonWidth = 40
+            const runButtonHeight = 20
             return (
               <Group
                 key={item.id}
@@ -591,7 +594,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   text={item.label}
                   x={8}
                   y={6}
-                  width={item.width - 16}
+                  width={item.width - runButtonWidth - 24}
                   height={headerHeight - 6}
                   fontSize={14}
                   fontStyle="bold"
@@ -599,6 +602,32 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   onDblClick={() => handlePromptLabelDblClick(item.id)}
                   visible={!(isEditingThis && editingPromptField === 'label')}
                 />
+                {/* Run button */}
+                <Group
+                  x={item.width - runButtonWidth - 8}
+                  y={4}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    onRunPrompt(item.id)
+                  }}
+                >
+                  <Rect
+                    width={runButtonWidth}
+                    height={runButtonHeight}
+                    fill="#4a7c59"
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text="Run"
+                    width={runButtonWidth}
+                    height={runButtonHeight}
+                    fontSize={12}
+                    fontStyle="bold"
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
                 {/* Content text */}
                 <Text
                   text={item.text}
