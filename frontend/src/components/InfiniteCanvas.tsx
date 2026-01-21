@@ -22,6 +22,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionStartRef = useRef({ x: 0, y: 0 })
   const stageRef = useRef<Konva.Stage>(null)
+  const layerRef = useRef<Konva.Layer>(null)
   const textTransformerRef = useRef<Konva.Transformer>(null)
   const imageTransformerRef = useRef<Konva.Transformer>(null)
   const promptTransformerRef = useRef<Konva.Transformer>(null)
@@ -53,12 +54,27 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       return
     }
 
-    const interval = setInterval(() => {
-      setPulsePhase((prev) => (prev + 0.05) % (Math.PI * 2))
-    }, 50)
+    let animationId: number
+    let lastTime = performance.now()
 
-    return () => clearInterval(interval)
+    const animate = (currentTime: number) => {
+      const delta = (currentTime - lastTime) / 1000
+      lastTime = currentTime
+      setPulsePhase((prev) => (prev + delta * 3) % (Math.PI * 2)) // ~2 second full cycle
+      animationId = requestAnimationFrame(animate)
+    }
+
+    animationId = requestAnimationFrame(animate)
+
+    return () => cancelAnimationFrame(animationId)
   }, [runningPromptIds.size])
+
+  // Force Konva layer redraw when pulse phase changes
+  useEffect(() => {
+    if (runningPromptIds.size > 0 && layerRef.current) {
+      layerRef.current.batchDraw()
+    }
+  }, [pulsePhase, runningPromptIds.size])
 
   // Load images
   useEffect(() => {
@@ -526,7 +542,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         onMouseUp={handleMouseUp}
         onContextMenu={handleContextMenu}
       >
-      <Layer>
+      <Layer ref={layerRef}>
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
