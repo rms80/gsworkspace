@@ -60,7 +60,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     const animate = (currentTime: number) => {
       const delta = (currentTime - lastTime) / 1000
       lastTime = currentTime
-      setPulsePhase((prev) => (prev + delta * 3) % (Math.PI * 2)) // ~2 second full cycle
+      setPulsePhase((prev) => (prev + delta * 6) % (Math.PI * 2)) // ~1 second full cycle
       animationId = requestAnimationFrame(animate)
     }
 
@@ -596,15 +596,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             // Calculate pulse intensity (0 to 1) for running prompts
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
-            // Border color: orange pulse when running, otherwise normal
+            // Border color: pulse between dark orange (210, 105, 30) and light orange (255, 200, 100)
             const borderColor = isRunning
-              ? `rgb(${Math.round(201 + (255 - 201) * pulseIntensity)}, ${Math.round(162 - 80 * pulseIntensity)}, ${Math.round(39 - 39 * pulseIntensity)})`
+              ? `rgb(${Math.round(210 + 45 * pulseIntensity)}, ${Math.round(105 + 95 * pulseIntensity)}, ${Math.round(30 + 70 * pulseIntensity)})`
               : (item.selected ? '#0066cc' : '#c9a227')
             const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
 
-            // Run button color: orange when running, green otherwise
+            // Run button color: pulse between dark orange (200, 90, 20) and light orange (255, 180, 80)
             const runButtonColor = isRunning
-              ? `rgb(${Math.round(230 + 25 * pulseIntensity)}, ${Math.round(140 - 40 * pulseIntensity)}, ${Math.round(50 + 20 * pulseIntensity)})`
+              ? `rgb(${Math.round(200 + 55 * pulseIntensity)}, ${Math.round(90 + 90 * pulseIntensity)}, ${Math.round(20 + 60 * pulseIntensity)})`
               : '#4a7c59'
 
             return (
