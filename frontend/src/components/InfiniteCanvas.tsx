@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect, ClaudeModel } from '../types'
+import { CanvasItem, SelectionRect, LLMModel } from '../types'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -936,7 +936,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {(['claude-haiku', 'claude-sonnet', 'claude-opus'] as ClaudeModel[]).map((model) => {
+          {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
             const promptItem = items.find((i) => i.id === modelMenuPromptId && i.type === 'prompt')
             const isSelected = promptItem?.type === 'prompt' && promptItem.model === model
             return (
@@ -961,7 +961,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
               >
-                {model.replace('claude-', '').charAt(0).toUpperCase() + model.replace('claude-', '').slice(1)}
+                {model.replace(/^(claude|gemini)-/, '').charAt(0).toUpperCase() + model.replace(/^(claude|gemini)-/, '').slice(1)}
               </button>
             )
           })}

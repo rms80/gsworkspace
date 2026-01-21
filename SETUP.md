@@ -31,6 +31,7 @@ cd ../backend && npm install
 Copy `.env.example` to `backend/.env` and fill in:
 - AWS credentials and S3 bucket name
 - Anthropic API key
+- Google Gemini API key (optional, for Gemini models)
 
 ## Running the App
 

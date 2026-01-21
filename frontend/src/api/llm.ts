@@ -1,4 +1,4 @@
-import { ClaudeModel } from '../types'
+import { LLMModel } from '../types'
 
 const API_BASE = '/api/llm'
 
@@ -15,7 +15,7 @@ export interface GenerateResponse {
 export async function generateFromPrompt(
   items: ContentItem[],
   prompt: string,
-  model: ClaudeModel = 'claude-sonnet'
+  model: LLMModel = 'claude-sonnet'
 ): Promise<string> {
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
