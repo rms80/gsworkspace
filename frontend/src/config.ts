@@ -12,7 +12,7 @@ export const config = {
      * When enabled, only the border rect is visible during transforms,
      * which improves performance and avoids visual desync.
      */
-    hideHtmlDuringTransform: true,
+    hideHtmlDuringTransform: false,
   },
 
   /**

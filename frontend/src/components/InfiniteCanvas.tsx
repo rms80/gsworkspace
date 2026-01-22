@@ -1062,18 +1062,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
               </Group>
             )
           } else if (item.type === 'html') {
+            const headerHeight = 24
             return (
-              <Rect
+              <Group
                 key={item.id}
                 id={item.id}
                 x={item.x}
                 y={item.y}
                 width={item.width}
-                height={item.height}
-                fill="#fff"
-                stroke={item.selected ? '#0066cc' : '#ccc'}
-                strokeWidth={item.selected ? 2 : 1}
-                cornerRadius={4}
+                height={item.height + headerHeight}
                 draggable
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDragStart={() => {
@@ -1103,13 +1100,33 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                     x: node.x(),
                     y: node.y(),
                     width: Math.max(100, node.width() * scaleX),
-                    height: Math.max(60, node.height() * scaleY),
+                    height: Math.max(60, (node.height() - headerHeight) * scaleY),
                   })
                   if (config.features.hideHtmlDuringTransform) {
                     setIsViewportTransforming(false)
                   }
                 }}
-              />
+              >
+                {/* Header bar for dragging */}
+                <Rect
+                  width={item.width}
+                  height={headerHeight}
+                  fill="#d0d0d0"
+                  stroke={item.selected ? '#0066cc' : '#ccc'}
+                  strokeWidth={item.selected ? 2 : 1}
+                  cornerRadius={[4, 4, 0, 0]}
+                />
+                {/* Content area background */}
+                <Rect
+                  y={headerHeight}
+                  width={item.width}
+                  height={item.height}
+                  fill="#fff"
+                  stroke={item.selected ? '#0066cc' : '#ccc'}
+                  strokeWidth={item.selected ? 2 : 1}
+                  cornerRadius={[0, 0, 4, 4]}
+                />
+              </Group>
             )
           }
           return null
@@ -1191,20 +1208,22 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         .filter((item) => item.type === 'html')
         .map((item) => {
           if (item.type !== 'html') return null
+          const headerHeight = 24
           return (
             <iframe
               key={`html-${item.id}`}
               srcDoc={item.html}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-scripts"
               style={{
                 position: 'absolute',
-                top: item.y * stageScale + stagePos.y,
+                top: (item.y + headerHeight) * stageScale + stagePos.y,
                 left: item.x * stageScale + stagePos.x,
                 width: item.width * stageScale,
                 height: item.height * stageScale,
                 border: 'none',
-                borderRadius: 4,
-                pointerEvents: 'none', // Let clicks pass through to the Konva rect
+                borderRadius: '0 0 4px 4px',
+                // Enable interaction when not selected (scroll, click), disable when selected (drag/resize)
+                pointerEvents: item.selected ? 'none' : 'auto',
                 background: '#fff',
               }}
             />
