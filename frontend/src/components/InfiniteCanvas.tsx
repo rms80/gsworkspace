@@ -49,6 +49,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [modelMenuPromptId, setModelMenuPromptId] = useState<string | null>(null)
   const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
+  const [isViewportTransforming, setIsViewportTransforming] = useState(false)
+  const zoomTimeoutRef = useRef<number | null>(null)
 
   // Handle window resize
   useEffect(() => {
@@ -423,6 +425,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     const newScale = direction > 0 ? oldScale * 1.1 : oldScale / 1.1
     const clampedScale = Math.max(0.1, Math.min(5, newScale))
 
+    // Hide HTML overlays while zooming
+    setIsViewportTransforming(true)
+    if (zoomTimeoutRef.current) {
+      clearTimeout(zoomTimeoutRef.current)
+    }
+    zoomTimeoutRef.current = window.setTimeout(() => {
+      setIsViewportTransforming(false)
+    }, 150)
+
     setStageScale(clampedScale)
     setStagePos({
       x: pointer.x - mousePointTo.x * clampedScale,
@@ -662,11 +673,17 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           // Prevent dragging when Ctrl is held (for marquee selection)
           if (e.evt.ctrlKey || e.evt.metaKey) {
             e.target.stopDrag()
+            return
+          }
+          // Hide HTML overlays while panning
+          if (e.target === stageRef.current) {
+            setIsViewportTransforming(true)
           }
         }}
         onDragEnd={(e) => {
           if (e.target === stageRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() })
+            setIsViewportTransforming(false)
           }
         }}
         onWheel={handleWheel}
@@ -1148,8 +1165,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       </Layer>
     </Stage>
 
-      {/* HTML iframe overlays */}
-      {items
+      {/* HTML iframe overlays - hidden during pan/zoom */}
+      {!isViewportTransforming && items
         .filter((item) => item.type === 'html')
         .map((item) => {
           if (item.type !== 'html') return null
