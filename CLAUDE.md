@@ -15,7 +15,7 @@ Workspaceapp is an infinite canvas web application where users can:
 - **Frontend**: React + TypeScript + Vite + Konva (react-konva)
 - **Backend**: Node.js + Express + TypeScript
 - **Storage**: AWS S3 (public bucket)
-- **LLM**: Anthropic Claude API
+- **LLM**: Anthropic Claude API, Google Gemini API
 
 ## Commands
 
@@ -71,3 +71,7 @@ backend/
 Copy `.env.example` to `.env` in the backend directory and fill in:
 - `AWS_*` credentials and `S3_BUCKET_NAME` for storage
 - `ANTHROPIC_API_KEY` for Claude API access
+
+
+## Notes to CLAUDE
+- Ignore everything in the /user_notes folder, this is just for humans and not relevant to development
