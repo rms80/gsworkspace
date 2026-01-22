@@ -292,4 +292,42 @@ router.delete('/:id', async (req, res) => {
   }
 })
 
+// Load history for a scene
+router.get('/:id/history', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    const historyJson = await loadFromS3(`${sceneFolder}/history.json`)
+    if (!historyJson) {
+      // No history yet, return empty
+      return res.json({ records: [], currentIndex: -1 })
+    }
+
+    res.json(JSON.parse(historyJson))
+  } catch (error) {
+    console.error('Error loading history:', error)
+    res.status(500).json({ error: 'Failed to load history' })
+  }
+})
+
+// Save history for a scene
+router.post('/:id/history', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { records, currentIndex } = req.body
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    await saveToS3(
+      `${sceneFolder}/history.json`,
+      JSON.stringify({ records, currentIndex }, null, 2)
+    )
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error saving history:', error)
+    res.status(500).json({ error: 'Failed to save history' })
+  }
+})
+
 export default router

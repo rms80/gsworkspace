@@ -5,11 +5,15 @@ interface ToolbarProps {
   onAddImageGenPrompt: () => void
   onDelete: () => void
   onSendToLLM: () => void
+  onUndo: () => void
+  onRedo: () => void
   hasSelection: boolean
+  canUndo: boolean
+  canRedo: boolean
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onDelete, onSendToLLM, hasSelection, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -96,6 +100,41 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onDe
         }}
       >
         Add Image Prompt
+      </button>
+      <div style={{ width: '1px', height: '24px', backgroundColor: '#ccc', margin: '0 5px' }} />
+      <button
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="Undo (Ctrl+Z)"
+        style={{
+          padding: '4px 12px',
+          backgroundColor: canUndo ? '#fff' : '#f5f5f5',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          cursor: canUndo ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          opacity: canUndo ? 1 : 0.5,
+        }}
+      >
+        Undo
+      </button>
+      <button
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="Redo (Ctrl+Y)"
+        style={{
+          padding: '4px 12px',
+          backgroundColor: canRedo ? '#fff' : '#f5f5f5',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          cursor: canRedo ? 'pointer' : 'not-allowed',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          opacity: canRedo ? 1 : 0.5,
+        }}
+      >
+        Redo
       </button>
       {saveStatus !== 'idle' && (
         <span
