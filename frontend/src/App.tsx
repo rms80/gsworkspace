@@ -611,6 +611,18 @@ function App() {
       const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
 
       // Check if the result looks like HTML content
+      // Position output to the right of the prompt, aligned with top
+      // Find existing outputs to stack vertically
+      const outputX = promptItem.x + promptItem.width + 20
+      const existingOutputsToRight = items.filter(item =>
+        item.x >= outputX - 10 &&
+        item.x <= outputX + 10 &&
+        item.y >= promptItem.y - 10
+      )
+      const outputY = existingOutputsToRight.length > 0
+        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
+        : promptItem.y
+
       let newItem: CanvasItem
       if (isHtmlContent(result)) {
         // Create an HTML view item for webpage content
@@ -619,10 +631,10 @@ function App() {
         newItem = {
           id: uuidv4(),
           type: 'html',
-          x: promptItem.x,
-          y: promptItem.y + promptItem.height + 20,
+          x: outputX,
+          y: outputY,
           html: htmlContent,
-          width: Math.max(promptItem.width, 400),
+          width: 800,
           height: 300,
         }
       } else {
@@ -630,8 +642,8 @@ function App() {
         newItem = {
           id: uuidv4(),
           type: 'text',
-          x: promptItem.x,
-          y: promptItem.y + promptItem.height + 20,
+          x: outputX,
+          y: outputY,
           text: result,
           fontSize: 14,
           width: Math.max(promptItem.width, 300),
@@ -677,48 +689,64 @@ function App() {
     try {
       const images = await generateImage(contentItems, promptItem.text, promptItem.model)
 
-      // Create new image items for each generated image, positioned below the prompt
-      // Load each image to get its actual dimensions
-      const newItems = await Promise.all(
-        images.map((dataUrl, index) => {
-          return new Promise<CanvasItem>((resolve) => {
-            const img = new window.Image()
-            img.onload = () => {
-              // Scale down if too large, maintaining aspect ratio
-              const maxSize = 400
-              let width = img.width
-              let height = img.height
-              if (width > maxSize || height > maxSize) {
-                const scale = maxSize / Math.max(width, height)
-                width = Math.round(width * scale)
-                height = Math.round(height * scale)
-              }
-              resolve({
-                id: uuidv4(),
-                type: 'image' as const,
-                x: promptItem.x + index * (width + 20),
-                y: promptItem.y + promptItem.height + 20,
-                src: dataUrl,
-                width,
-                height,
-              })
-            }
-            img.onerror = () => {
-              // Fallback to default size if image fails to load
-              resolve({
-                id: uuidv4(),
-                type: 'image' as const,
-                x: promptItem.x + index * 220,
-                y: promptItem.y + promptItem.height + 20,
-                src: dataUrl,
-                width: 200,
-                height: 200,
-              })
-            }
-            img.src = dataUrl
-          })
-        })
+      // Position outputs to the right of the prompt, stacked vertically
+      const outputX = promptItem.x + promptItem.width + 20
+
+      // Find existing outputs to the right to stack below them
+      const existingOutputsToRight = items.filter(item =>
+        item.x >= outputX - 10 &&
+        item.x <= outputX + 10 &&
+        item.y >= promptItem.y - 10
       )
+      const startY = existingOutputsToRight.length > 0
+        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
+        : promptItem.y
+
+      // Create new image items for each generated image
+      // Load each image to get its actual dimensions, then stack vertically
+      let currentY = startY
+      const newItems: CanvasItem[] = []
+
+      for (const dataUrl of images) {
+        const item = await new Promise<CanvasItem>((resolve) => {
+          const img = new window.Image()
+          img.onload = () => {
+            // Scale down if too large, maintaining aspect ratio
+            const maxSize = 400
+            let width = img.width
+            let height = img.height
+            if (width > maxSize || height > maxSize) {
+              const scale = maxSize / Math.max(width, height)
+              width = Math.round(width * scale)
+              height = Math.round(height * scale)
+            }
+            resolve({
+              id: uuidv4(),
+              type: 'image' as const,
+              x: outputX,
+              y: currentY,
+              src: dataUrl,
+              width,
+              height,
+            })
+          }
+          img.onerror = () => {
+            // Fallback to default size if image fails to load
+            resolve({
+              id: uuidv4(),
+              type: 'image' as const,
+              x: outputX,
+              y: currentY,
+              src: dataUrl,
+              width: 200,
+              height: 200,
+            })
+          }
+          img.src = dataUrl
+        })
+        newItems.push(item)
+        currentY = item.y + item.height + 20
+      }
 
       if (newItems.length > 0) {
         updateActiveSceneItems((prev) => [...prev, ...newItems])
