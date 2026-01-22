@@ -479,13 +479,22 @@ function App() {
 
       if (!isSelectionOnly) {
         if (hasText && item.type === 'text') {
-          pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+          // Only record if text actually changed
+          if (item.text !== changes.text) {
+            pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+          }
         } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
           const newLabel = ('label' in changes ? changes.label : item.label) as string
           const newText = ('text' in changes ? changes.text : item.text) as string
-          pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+          // Only record if label or text actually changed
+          if (item.label !== newLabel || item.text !== newText) {
+            pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+          }
         } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
-          pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+          // Only record if model actually changed
+          if (item.model !== changes.model) {
+            pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+          }
         } else if (hasTransform) {
           const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
           if (item.type === 'image') {
@@ -499,7 +508,10 @@ function App() {
           if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
           if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
           if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
-          pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+          // Only record if transform actually changed
+          if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
+            pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+          }
         }
       }
 
