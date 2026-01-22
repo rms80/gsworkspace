@@ -85,6 +85,20 @@ Now it knew what the bug was and suggested two fixes and explained which one was
 But I guess this was a dumb mistake to make in the first place, and I'm not sure it would have figure it out if I didn't step in with the debugger.
 
 
+Next step is to create an embedded web view, because once the LLM creates a little webpage
+from the source text and image assets we need some way to see it. I asked how it would
+implement this, it gave me 3 options and recommended the most secure option. 
+I had some technical questions, and then I asked it to make a plan in the TODO.md.
+I tweaked the plan and said to go ahead.
+
+It worked. Some UX issues but it renders sample HTML. 
+
+Asked it to implement detecting HTML output from LLM and rendering that via this new type of HTML view object.
+This works.
+
+Had it fix UX issures around the embedded web views (the iframe causes various complications).
+No problems!
+
 
 
 
