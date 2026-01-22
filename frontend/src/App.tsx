@@ -424,6 +424,45 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
+  const addTestHtmlItem = useCallback(() => {
+    const testHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 16px;
+      margin: 0;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+    h1 { margin: 0 0 12px 0; font-size: 18px; }
+    p { margin: 0; font-size: 14px; line-height: 1.5; }
+    .highlight { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>HTML View Test</h1>
+  <p>This is a <span class="highlight">formatted HTML</span> content block.</p>
+  <p>It supports <strong>bold</strong>, <em>italic</em>, and other HTML elements.</p>
+</body>
+</html>
+    `.trim()
+
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'html',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      html: testHtml,
+      width: 300,
+      height: 200,
+    }
+    pushChange(new AddObjectChange(newItem))
+    updateActiveSceneItems((prev) => [...prev, newItem])
+  }, [updateActiveSceneItems, pushChange])
+
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
       const newItem: CanvasItem = {
@@ -696,6 +735,7 @@ function App() {
         onAddImage={addImageItem}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
+        onAddTestHtml={addTestHtmlItem}
         onDelete={deleteSelected}
         onSendToLLM={() => {
           const selected = getSelectedItems()

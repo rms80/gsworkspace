@@ -29,6 +29,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const imageTransformerRef = useRef<Konva.Transformer>(null)
   const promptTransformerRef = useRef<Konva.Transformer>(null)
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
+  const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
@@ -125,10 +126,16 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
+    const selectedHtmlNodes = items
+      .filter((item) => item.selected && item.type === 'html')
+      .map((item) => stageRef.current?.findOne(`#${item.id}`))
+      .filter(Boolean) as Konva.Node[]
+
     textTransformerRef.current?.nodes(selectedTextNodes)
     imageTransformerRef.current?.nodes(selectedImageNodes)
     promptTransformerRef.current?.nodes(selectedPromptNodes)
     imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
+    htmlTransformerRef.current?.nodes(selectedHtmlNodes)
   }, [items])
 
   // Convert screen coordinates to canvas coordinates
@@ -1032,6 +1039,40 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 />
               </Group>
             )
+          } else if (item.type === 'html') {
+            return (
+              <Rect
+                key={item.id}
+                id={item.id}
+                x={item.x}
+                y={item.y}
+                width={item.width}
+                height={item.height}
+                fill="#fff"
+                stroke={item.selected ? '#0066cc' : '#ccc'}
+                strokeWidth={item.selected ? 2 : 1}
+                cornerRadius={4}
+                draggable
+                onClick={(e) => handleItemClick(e, item.id)}
+                onDragEnd={(e) => {
+                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  // Reset scale and apply to width/height
+                  node.scaleX(1)
+                  node.scaleY(1)
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(100, node.width() * scaleX),
+                    height: Math.max(60, node.height() * scaleY),
+                  })
+                }}
+              />
+            )
           }
           return null
         })}
@@ -1091,8 +1132,46 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             return newBox
           }}
         />
+        {/* Transformer for HTML views - free scaling, no rotation */}
+        <Transformer
+          ref={htmlTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 100 || newBox.height < 60) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
       </Layer>
     </Stage>
+
+      {/* HTML iframe overlays */}
+      {items
+        .filter((item) => item.type === 'html')
+        .map((item) => {
+          if (item.type !== 'html') return null
+          return (
+            <iframe
+              key={`html-${item.id}`}
+              srcDoc={item.html}
+              sandbox="allow-same-origin"
+              style={{
+                position: 'absolute',
+                top: item.y * stageScale + stagePos.y,
+                left: item.x * stageScale + stagePos.x,
+                width: item.width * stageScale,
+                height: item.height * stageScale,
+                border: 'none',
+                borderRadius: 4,
+                pointerEvents: 'none', // Let clicks pass through to the Konva rect
+                background: '#fff',
+              }}
+            />
+          )
+        })}
 
       {/* Textarea overlay for editing text */}
       {editingItem && (() => {

@@ -41,7 +41,12 @@ interface StoredImageGenPromptItem extends StoredItemBase {
   file: string // reference to .json file containing label, text, and model
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem
+interface StoredHtmlItem extends StoredItemBase {
+  type: 'html'
+  file: string // reference to .html file
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem
 
 interface StoredScene {
   id: string
@@ -130,6 +135,18 @@ router.post('/:id', async (req, res) => {
           fontSize: item.fontSize,
           file: promptFile,
         })
+      } else if (item.type === 'html') {
+        const htmlFile = `${item.id}.html`
+        await saveToS3(`${sceneFolder}/${htmlFile}`, item.html, 'text/html')
+        storedItems.push({
+          id: item.id,
+          type: 'html',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          file: htmlFile,
+        })
       }
     }
 
@@ -210,7 +227,7 @@ router.get('/:id', async (req, res) => {
             text: promptData.text,
             model: promptData.model || 'claude-sonnet',
           }
-        } else {
+        } else if (item.type === 'image-gen-prompt') {
           // For image-gen-prompts, load the JSON file
           const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
           const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Image Gen', text: '', model: 'gemini-imagen' }
@@ -225,6 +242,18 @@ router.get('/:id', async (req, res) => {
             label: promptData.label,
             text: promptData.text,
             model: promptData.model || 'gemini-imagen',
+          }
+        } else {
+          // For HTML items, load the HTML file
+          const html = await loadFromS3(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'html' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            html: html || '',
           }
         }
       })
