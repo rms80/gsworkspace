@@ -1,4 +1,5 @@
 import { Scene } from '../types'
+import { SerializedHistory } from '../history'
 
 const API_BASE = '/api/scenes'
 
@@ -43,5 +44,27 @@ export async function deleteScene(id: string): Promise<void> {
   })
   if (!response.ok) {
     throw new Error(`Failed to delete scene: ${response.statusText}`)
+  }
+}
+
+export async function loadHistory(sceneId: string): Promise<SerializedHistory> {
+  const response = await fetch(`${API_BASE}/${sceneId}/history`)
+  if (!response.ok) {
+    throw new Error(`Failed to load history: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+export async function saveHistory(
+  sceneId: string,
+  history: SerializedHistory
+): Promise<void> {
+  const response = await fetch(`${API_BASE}/${sceneId}/history`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(history),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to save history: ${response.statusText}`)
   }
 }

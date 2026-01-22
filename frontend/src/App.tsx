@@ -4,8 +4,18 @@ import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
-import { saveScene, loadScene, listScenes, deleteScene } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
 import { generateFromPrompt, generateImage, ContentItem } from './api/llm'
+import {
+  HistoryStack,
+  AddObjectChange,
+  DeleteObjectChange,
+  TransformObjectChange,
+  UpdateTextChange,
+  UpdatePromptChange,
+  UpdateModelChange,
+  ChangeRecord,
+} from './history'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -25,11 +35,38 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
+  const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
+  const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const saveTimeoutRef = useRef<number | null>(null)
+  const historySaveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
+  const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
+
+  // History for active scene
+  const activeHistory = activeSceneId ? historyMap.get(activeSceneId) : null
+  const canUndo = activeHistory?.canUndo() ?? false
+  const canRedo = activeHistory?.canRedo() ?? false
+
+  // Helper to push a change record to history
+  const pushChange = useCallback((change: ChangeRecord) => {
+    if (!activeSceneId) return
+
+    setHistoryMap((prev) => {
+      const newMap = new Map(prev)
+      let history = newMap.get(activeSceneId)
+      if (!history) {
+        history = new HistoryStack()
+        newMap.set(activeSceneId, history)
+      }
+      history.push(change)
+      return newMap
+    })
+    // Trigger re-render for canUndo/canRedo
+    setHistoryVersion((v) => v + 1)
+  }, [activeSceneId])
 
   // Load all scenes from S3 on initial mount
   useEffect(() => {
@@ -42,17 +79,33 @@ function App() {
           setOpenScenes([defaultScene])
           setActiveSceneId(defaultScene.id)
           lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
+          // Initialize empty history for new scene
+          setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
         } else {
-          // Load all scenes
-          const scenes = await Promise.all(
-            sceneList.map((meta) => loadScene(meta.id))
+          // Load all scenes and their histories
+          const scenesWithHistory = await Promise.all(
+            sceneList.map(async (meta) => {
+              const scene = await loadScene(meta.id)
+              let history: HistoryStack
+              try {
+                const serializedHistory = await loadHistory(meta.id)
+                history = HistoryStack.deserialize(serializedHistory)
+                lastSavedHistoryRef.current.set(meta.id, JSON.stringify(serializedHistory))
+              } catch {
+                history = new HistoryStack()
+              }
+              return { scene, history }
+            })
           )
           // Mark all loaded scenes as saved
-          scenes.forEach((scene) => {
+          const newHistoryMap = new Map<string, HistoryStack>()
+          scenesWithHistory.forEach(({ scene, history }) => {
             lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+            newHistoryMap.set(scene.id, history)
           })
-          setOpenScenes(scenes)
-          setActiveSceneId(scenes[0]?.id ?? null)
+          setOpenScenes(scenesWithHistory.map(({ scene }) => scene))
+          setHistoryMap(newHistoryMap)
+          setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
         }
       } catch (error) {
         console.error('Failed to load scenes:', error)
@@ -61,6 +114,7 @@ function App() {
         setOpenScenes([defaultScene])
         setActiveSceneId(defaultScene.id)
         lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
+        setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
       } finally {
         setIsLoading(false)
       }
@@ -105,6 +159,108 @@ function App() {
     }
   }, [activeScene, isLoading])
 
+  // Auto-save history when it changes (debounced)
+  useEffect(() => {
+    if (!activeSceneId || isLoading) return
+
+    const history = historyMap.get(activeSceneId)
+    if (!history) return
+
+    const serialized = history.serialize()
+    const historyJson = JSON.stringify(serialized)
+    const lastSaved = lastSavedHistoryRef.current.get(activeSceneId)
+
+    // Skip if nothing changed
+    if (historyJson === lastSaved) return
+
+    // Clear any pending save
+    if (historySaveTimeoutRef.current) {
+      clearTimeout(historySaveTimeoutRef.current)
+    }
+
+    // Debounce save by 2 seconds
+    historySaveTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        await saveHistory(activeSceneId, serialized)
+        lastSavedHistoryRef.current.set(activeSceneId, JSON.stringify(serialized))
+      } catch (error) {
+        console.error('Failed to auto-save history:', error)
+      }
+    }, 2000)
+
+    return () => {
+      if (historySaveTimeoutRef.current) {
+        clearTimeout(historySaveTimeoutRef.current)
+      }
+    }
+  }, [historyMap, historyVersion, activeSceneId, isLoading])
+
+  // Undo handler
+  const handleUndo = useCallback(() => {
+    if (!activeSceneId || !activeHistory?.canUndo()) return
+
+    const currentItems = activeScene?.items ?? []
+    const newItems = activeHistory.undo(currentItems)
+    if (!newItems) return
+
+    // Update scene items directly (without creating a new history entry)
+    setOpenScenes((prev) =>
+      prev.map((scene) =>
+        scene.id === activeSceneId
+          ? { ...scene, items: newItems, modifiedAt: new Date().toISOString() }
+          : scene
+      )
+    )
+    setHistoryVersion((v) => v + 1)
+  }, [activeSceneId, activeHistory, activeScene])
+
+  // Redo handler
+  const handleRedo = useCallback(() => {
+    if (!activeSceneId || !activeHistory?.canRedo()) return
+
+    const currentItems = activeScene?.items ?? []
+    const newItems = activeHistory.redo(currentItems)
+    if (!newItems) return
+
+    // Update scene items directly (without creating a new history entry)
+    setOpenScenes((prev) =>
+      prev.map((scene) =>
+        scene.id === activeSceneId
+          ? { ...scene, items: newItems, modifiedAt: new Date().toISOString() }
+          : scene
+      )
+    )
+    setHistoryVersion((v) => v + 1)
+  }, [activeSceneId, activeHistory, activeScene])
+
+  // Keyboard shortcuts for undo/redo
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      } else if (
+        ((e.ctrlKey || e.metaKey) && e.key === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z')
+      ) {
+        e.preventDefault()
+        handleRedo()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleUndo, handleRedo])
+
   // Helper to update the active scene's items
   const updateActiveSceneItems = useCallback(
     (updater: (items: CanvasItem[]) => CanvasItem[]) => {
@@ -125,6 +281,12 @@ function App() {
     lastSavedRef.current.set(newScene.id, JSON.stringify(newScene))
     setOpenScenes((prev) => [...prev, newScene])
     setActiveSceneId(newScene.id)
+    // Initialize empty history for new scene
+    setHistoryMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(newScene.id, new HistoryStack())
+      return newMap
+    })
   }, [openScenes.length])
 
   const selectScene = useCallback((id: string) => {
@@ -208,8 +370,9 @@ function App() {
       width: 200,
       height: 100,
     }
+    pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
-  }, [updateActiveSceneItems])
+  }, [updateActiveSceneItems, pushChange])
 
   const addImageItem = useCallback(
     (src: string, width: number, height: number) => {
@@ -222,9 +385,10 @@ function App() {
         width,
         height,
       }
+      pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
-    [updateActiveSceneItems]
+    [updateActiveSceneItems, pushChange]
   )
 
   const addPromptItem = useCallback(() => {
@@ -240,8 +404,9 @@ function App() {
       height: 150,
       model: 'claude-sonnet',
     }
+    pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
-  }, [updateActiveSceneItems])
+  }, [updateActiveSceneItems, pushChange])
 
   const addImageGenPromptItem = useCallback(() => {
     const newItem: CanvasItem = {
@@ -256,8 +421,9 @@ function App() {
       height: 150,
       model: 'gemini-imagen',
     }
+    pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
-  }, [updateActiveSceneItems])
+  }, [updateActiveSceneItems, pushChange])
 
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
@@ -271,9 +437,10 @@ function App() {
         width: 200,
         height: 100,
       }
+      pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
-    [updateActiveSceneItems]
+    [updateActiveSceneItems, pushChange]
   )
 
   const addImageAt = useCallback(
@@ -287,25 +454,72 @@ function App() {
         width,
         height,
       }
+      pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
-    [updateActiveSceneItems]
+    [updateActiveSceneItems, pushChange]
   )
 
   const updateItem = useCallback(
     (id: string, changes: Partial<CanvasItem>) => {
+      const item = items.find((i) => i.id === id)
+      if (!item) return
+
+      // Determine change type and create appropriate record
+      const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
+        'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes
+      const hasText = 'text' in changes && item.type === 'text'
+      const hasPromptText = ('text' in changes || 'label' in changes) &&
+        (item.type === 'prompt' || item.type === 'image-gen-prompt')
+      const hasModel = 'model' in changes &&
+        (item.type === 'prompt' || item.type === 'image-gen-prompt')
+
+      // Skip history for selection changes
+      const isSelectionOnly = Object.keys(changes).every((k) => k === 'selected')
+
+      if (!isSelectionOnly) {
+        if (hasText && item.type === 'text') {
+          pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
+          const newLabel = ('label' in changes ? changes.label : item.label) as string
+          const newText = ('text' in changes ? changes.text : item.text) as string
+          pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
+          pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+        } else if (hasTransform) {
+          const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
+          if (item.type === 'image') {
+            Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation })
+          }
+          const newTransform = { ...oldTransform }
+          if ('x' in changes) newTransform.x = changes.x as number
+          if ('y' in changes) newTransform.y = changes.y as number
+          if ('width' in changes) newTransform.width = changes.width as number
+          if ('height' in changes) newTransform.height = changes.height as number
+          if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
+          if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
+          if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
+          pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+        }
+      }
+
       updateActiveSceneItems((prev) =>
-        prev.map((item) =>
-          item.id === id ? ({ ...item, ...changes } as CanvasItem) : item
+        prev.map((i) =>
+          i.id === id ? ({ ...i, ...changes } as CanvasItem) : i
         )
       )
     },
-    [updateActiveSceneItems]
+    [updateActiveSceneItems, items, pushChange]
   )
 
   const deleteSelected = useCallback(() => {
+    // Record deletion for each selected item
+    const selectedItems = items.filter((item) => item.selected)
+    selectedItems.forEach((item) => {
+      pushChange(new DeleteObjectChange(item))
+    })
     updateActiveSceneItems((prev) => prev.filter((item) => !item.selected))
-  }, [updateActiveSceneItems])
+  }, [updateActiveSceneItems, items, pushChange])
 
   const selectItems = useCallback(
     (ids: string[]) => {
@@ -477,7 +691,11 @@ function App() {
           console.log('Send to LLM:', selected)
           // TODO: Implement LLM integration
         }}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
         hasSelection={items.some((item) => item.selected)}
+        canUndo={canUndo}
+        canRedo={canRedo}
         saveStatus={saveStatus}
       />
       <TabBar
