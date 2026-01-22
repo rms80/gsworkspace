@@ -3,6 +3,7 @@ interface ToolbarProps {
   onAddImage: (src: string, width: number, height: number) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
+  onAddTestHtml: () => void
   onDelete: () => void
   onSendToLLM: () => void
   onUndo: () => void
@@ -13,7 +14,7 @@ interface ToolbarProps {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddTestHtml, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -100,6 +101,20 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onDe
         }}
       >
         Add Image Prompt
+      </button>
+      <button
+        onClick={onAddTestHtml}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: '#e8f5e9',
+          border: '1px solid #4caf50',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+        }}
+      >
+        Test HTML
       </button>
       <div style={{ width: '1px', height: '24px', backgroundColor: '#ccc', margin: '0 5px' }} />
       <button

@@ -52,7 +52,14 @@ export interface ImageGenPromptItem extends BaseItem {
   model: ImageGenModel
 }
 
-export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem
+export interface HtmlItem extends BaseItem {
+  type: 'html'
+  html: string
+  width: number
+  height: number
+}
+
+export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem | HtmlItem
 
 export interface SelectionRect {
   x: number
