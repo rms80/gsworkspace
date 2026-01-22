@@ -52,6 +52,10 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
   const [isViewportTransforming, setIsViewportTransforming] = useState(false)
   const zoomTimeoutRef = useRef<number | null>(null)
+  // Track real-time transforms of HTML items during drag/transform
+  const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  // Track when any drag/transform is in progress to disable iframe pointer events
+  const [isAnyDragActive, setIsAnyDragActive] = useState(false)
 
   // Handle window resize
   useEffect(() => {
@@ -678,12 +682,22 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             e.target.stopDrag()
             return
           }
+          // Disable iframe pointer events during any drag
+          setIsAnyDragActive(true)
           // Hide HTML overlays while panning
           if (e.target === stageRef.current && config.features.hideHtmlDuringTransform) {
             setIsViewportTransforming(true)
           }
         }}
+        onDragMove={(e) => {
+          // Update stage position in real-time during panning for HTML iframe sync
+          if (e.target === stageRef.current) {
+            setStagePos({ x: e.target.x(), y: e.target.y() })
+          }
+        }}
         onDragEnd={(e) => {
+          // Re-enable iframe pointer events
+          setIsAnyDragActive(false)
           if (e.target === stageRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() })
             if (config.features.hideHtmlDuringTransform) {
@@ -1078,8 +1092,28 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                     setIsViewportTransforming(true)
                   }
                 }}
+                onDragMove={(e) => {
+                  // Track position in real-time for iframe sync
+                  const node = e.target
+                  setHtmlItemTransforms((prev) => {
+                    const next = new Map(prev)
+                    next.set(item.id, {
+                      x: node.x(),
+                      y: node.y(),
+                      width: item.width,
+                      height: item.height,
+                    })
+                    return next
+                  })
+                }}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                  // Clear real-time transform tracking
+                  setHtmlItemTransforms((prev) => {
+                    const next = new Map(prev)
+                    next.delete(item.id)
+                    return next
+                  })
                   if (config.features.hideHtmlDuringTransform) {
                     setIsViewportTransforming(false)
                   }
@@ -1088,6 +1122,22 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   if (config.features.hideHtmlDuringTransform) {
                     setIsViewportTransforming(true)
                   }
+                }}
+                onTransform={(e) => {
+                  // Track transform in real-time for iframe sync
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  setHtmlItemTransforms((prev) => {
+                    const next = new Map(prev)
+                    next.set(item.id, {
+                      x: node.x(),
+                      y: node.y(),
+                      width: item.width * scaleX,
+                      height: (item.height + headerHeight) * scaleY - headerHeight,
+                    })
+                    return next
+                  })
                 }}
                 onTransformEnd={(e) => {
                   const node = e.target
@@ -1101,6 +1151,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                     y: node.y(),
                     width: Math.max(100, node.width() * scaleX),
                     height: Math.max(60, (node.height() - headerHeight) * scaleY),
+                  })
+                  // Clear real-time transform tracking
+                  setHtmlItemTransforms((prev) => {
+                    const next = new Map(prev)
+                    next.delete(item.id)
+                    return next
                   })
                   if (config.features.hideHtmlDuringTransform) {
                     setIsViewportTransforming(false)
@@ -1203,12 +1259,18 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       </Layer>
     </Stage>
 
-      {/* HTML iframe overlays - hidden during pan/zoom */}
+      {/* HTML iframe overlays - tracks Konva rects during drag/transform */}
       {!isViewportTransforming && items
         .filter((item) => item.type === 'html')
         .map((item) => {
           if (item.type !== 'html') return null
           const headerHeight = 24
+          // Use real-time transform state if available, otherwise use item state
+          const transform = htmlItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
           return (
             <iframe
               key={`html-${item.id}`}
@@ -1216,14 +1278,14 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
               sandbox="allow-same-origin allow-scripts"
               style={{
                 position: 'absolute',
-                top: (item.y + headerHeight) * stageScale + stagePos.y,
-                left: item.x * stageScale + stagePos.x,
-                width: item.width * stageScale,
-                height: item.height * stageScale,
+                top: (y + headerHeight) * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
                 border: 'none',
                 borderRadius: '0 0 4px 4px',
-                // Enable interaction when not selected (scroll, click), disable when selected (drag/resize)
-                pointerEvents: item.selected ? 'none' : 'auto',
+                // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
+                pointerEvents: (item.selected || isAnyDragActive) ? 'none' : 'auto',
                 background: '#fff',
               }}
             />
