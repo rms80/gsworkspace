@@ -6,6 +6,7 @@ import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
 import { generateFromPrompt, generateImage, ContentItem } from './api/llm'
+import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import {
   HistoryStack,
   AddObjectChange,
@@ -609,16 +610,33 @@ function App() {
     try {
       const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
 
-      // Create a new text item with the result, positioned below the prompt
-      const newItem: CanvasItem = {
-        id: uuidv4(),
-        type: 'text',
-        x: promptItem.x,
-        y: promptItem.y + promptItem.height + 20,
-        text: result,
-        fontSize: 14,
-        width: Math.max(promptItem.width, 300),
-        height: 200,
+      // Check if the result looks like HTML content
+      let newItem: CanvasItem
+      if (isHtmlContent(result)) {
+        // Create an HTML view item for webpage content
+        // Strip code fences that LLMs often wrap around HTML
+        const htmlContent = stripCodeFences(result).trim()
+        newItem = {
+          id: uuidv4(),
+          type: 'html',
+          x: promptItem.x,
+          y: promptItem.y + promptItem.height + 20,
+          html: htmlContent,
+          width: Math.max(promptItem.width, 400),
+          height: 300,
+        }
+      } else {
+        // Create a text item for regular text content
+        newItem = {
+          id: uuidv4(),
+          type: 'text',
+          x: promptItem.x,
+          y: promptItem.y + promptItem.height + 20,
+          text: result,
+          fontSize: 14,
+          width: Math.max(promptItem.width, 300),
+          height: 200,
+        }
       }
       updateActiveSceneItems((prev) => [...prev, newItem])
     } catch (error) {
