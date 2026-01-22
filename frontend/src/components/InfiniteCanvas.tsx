@@ -49,6 +49,13 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
 
+  // Guard refs to prevent duplicate blur events
+  const textBlurHandledRef = useRef(false)
+  const promptLabelBlurHandledRef = useRef(false)
+  const promptTextBlurHandledRef = useRef(false)
+  const imageGenLabelBlurHandledRef = useRef(false)
+  const imageGenTextBlurHandledRef = useRef(false)
+
   // Handle window resize
   useEffect(() => {
     const handleResize = () => {
@@ -511,6 +518,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handleTextDblClick = (id: string) => {
+    textBlurHandledRef.current = false // Reset guard for new edit session
     setEditingTextId(id)
     setTimeout(() => {
       textareaRef.current?.focus()
@@ -519,6 +527,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handleTextareaBlur = () => {
+    if (textBlurHandledRef.current) return
+    textBlurHandledRef.current = true
+
     if (editingTextId && textareaRef.current) {
       onUpdateItem(editingTextId, { text: textareaRef.current.value })
     }
@@ -533,6 +544,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
   // Prompt editing handlers
   const handlePromptLabelDblClick = (id: string) => {
+    promptLabelBlurHandledRef.current = false // Reset guard for new edit session
     setEditingPromptId(id)
     setEditingPromptField('label')
     setTimeout(() => {
@@ -542,6 +554,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handlePromptTextDblClick = (id: string) => {
+    promptTextBlurHandledRef.current = false // Reset guard for new edit session
     setEditingPromptId(id)
     setEditingPromptField('text')
     setTimeout(() => {
@@ -551,6 +564,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handlePromptLabelBlur = () => {
+    if (promptLabelBlurHandledRef.current) return
+    promptLabelBlurHandledRef.current = true
+
     if (editingPromptId && labelInputRef.current) {
       onUpdateItem(editingPromptId, { label: labelInputRef.current.value })
     }
@@ -559,6 +575,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handlePromptTextBlur = () => {
+    if (promptTextBlurHandledRef.current) return
+    promptTextBlurHandledRef.current = true
+
     if (editingPromptId && promptTextareaRef.current) {
       onUpdateItem(editingPromptId, { text: promptTextareaRef.current.value })
     }
@@ -575,6 +594,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
   // Image Gen Prompt editing handlers
   const handleImageGenPromptLabelDblClick = (id: string) => {
+    imageGenLabelBlurHandledRef.current = false // Reset guard for new edit session
     setEditingImageGenPromptId(id)
     setEditingImageGenPromptField('label')
     setTimeout(() => {
@@ -584,6 +604,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handleImageGenPromptTextDblClick = (id: string) => {
+    imageGenTextBlurHandledRef.current = false // Reset guard for new edit session
     setEditingImageGenPromptId(id)
     setEditingImageGenPromptField('text')
     setTimeout(() => {
@@ -593,6 +614,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handleImageGenPromptLabelBlur = () => {
+    if (imageGenLabelBlurHandledRef.current) return
+    imageGenLabelBlurHandledRef.current = true
+
     if (editingImageGenPromptId && imageGenLabelInputRef.current) {
       onUpdateItem(editingImageGenPromptId, { label: imageGenLabelInputRef.current.value })
     }
@@ -601,6 +625,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   }
 
   const handleImageGenPromptTextBlur = () => {
+    if (imageGenTextBlurHandledRef.current) return
+    imageGenTextBlurHandledRef.current = true
+
     if (editingImageGenPromptId && imageGenPromptTextareaRef.current) {
       onUpdateItem(editingImageGenPromptId, { text: imageGenPromptTextareaRef.current.value })
     }
