@@ -74,4 +74,4 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 
 
 ## Notes to CLAUDE
-- Ignore everything in the /user_notes folder, this is just for humans and not relevant to development
+- Everything in the /user_notes folder is just for humans and not relevant to development. These files should still be committed to github but can be ignored by CLAUDE.

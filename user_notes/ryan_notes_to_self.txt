@@ -1,0 +1,90 @@
+Note to Claude: this is just notes for myself, please ignore this file.
+
+
+*Jan 21*
+
+started project! 
+The basic idea I started with was to try to vibe-build an app I have always imagined
+but never had the time to build. It's an app to help me create documentation for the
+software I build. This generally involves many pages of text and images. I create
+the images mostly via screencaps, and it's annoying to manage all the files/etc.
+I wanted some kind of infinite canvas where I could just drop images and type in
+text blocks (initially bullet points, flesh out later etc) and do some basic sptaial
+layout and then have it generate reasonable HTML pages from this content.
+
+I've always thought I would build this as a desktop C# app.
+I can imagine how that would work. It certainly made more sense to do as a web app
+but I don't really do that kind of thing and so it seemed like I would have to learn
+a lot to do it. Certainly way more effort than I would ever put in for a "personal" app
+that possibly nobody else will ever be interested in. This was also always the barrier
+to doing it in C#...a lot of work for some convenience. So it seemed like an ideal thing 
+to try to do w/ claude code.
+
+Signed up for Claude Pro
+
+Asked it to create an initial web app with an infinite canvas where I can add images and text blocks and position them, where the canvas is serialized to remote S3 bucket.
+It asked me some questions about what kind of frameworks to use, pros and cons of different approaches etc.
+Picked React + Konva w/ node back-end.
+It generated a functional app.
+
+[[For rest of today I worked by typing prompts one-by-one to make changes.
+None of the prompts were very long, at most a few sentences. 
+Each was doing a specific feature or change.
+Most commits to github included multiple changes made this way. ]]
+
+Implemented a bunch of baseline UI improvements, paste support, filesystem drag-drop
+(https://github.com/rms80/workspaceapp/commit/9343680bfe45b729c9151869593d3c3d42e47a07)
+
+Expanded to support multiple active scenes w/ tabs.
+Added S3 persistence and immediate serialization
+Added 'prompt' object that sends other selected objects to Claude LLM
+Added Gemini support
+Add 'ImageGen' object that does image generation w/ nanobanana
+
+[[These features were mixed in w/ bug fixing, eg image object rotation & scaling
+was supported initially, but it wasn't serialized, had to tell it to do this.
+When I (eg) added ImageGen objects, it did not add serialization support initially,
+I had to notice that and tell it to do it]]
+
+[[One thing it was not very good at was UI styling. Eg buttons different styles,
+misaligned, etc. I often had to go through multiple rounds to get it to what I wanted]]
+
+Got up to CL 59328fff8be38ffbee67105b9bfe42b7cb95182a.
+At this point it was pretty functional, it was handling everything I had thrown at it
+and the app had actual utility to me
+
+[[Ran out of credits. Said I had to wait a few hours to continue. Upgraded to Claude Max.]]
+
+Asked it to explain how to use the TODO.md approach to doing things. It generated a
+TODO.md with a lot of nice features. I put those aside and decided to get it to
+implement undo/redo next.
+
+tried to get it to implement a history system from a multi-step description in TODO.md
+It basically just made a list of serialized versions of the scene. It worked but was not going to scale,
+and probably would have issues being backwards-compatible. Reverted this, done for the day.
+
+(~5 hours elapsed wallclock time since I started)
+
+
+*Jan 22*
+
+wrote a more explicit description of how I want the history system to be structured and work in the TODO.md.
+Was more specific about how I wanted it to store delta-change records, use interfaces for changes and the history
+system, implement in separate files, etc.
+
+It churned for 12 minutes, made a PR. System appears to work, however it has a bug, saves multiple records for text changes.
+First attempt at fixing the bug made plausible-seeming changes to the code, but it didn't work.
+Second attempt made no difference.
+
+[[This was the first significant failure where it didn't immediately know how to fix the problem I identified...]]
+
+At this point I went in with the debugger, and found where the change record was being pushed twice.
+Was not obvious to me why that was happening. I asked it to explain and it did a good job (apparently
+this is some kind of React feature to detect accidental mutation inside of state update callbacks).
+Now it knew what the bug was and suggested two fixes and explained which one was React-idomatic.
+But I guess this was a dumb mistake to make in the first place, and I'm not sure it would have figure it out if I didn't step in with the debugger.
+
+
+
+
+
