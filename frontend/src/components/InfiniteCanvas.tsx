@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
+import { config } from '../config'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -426,13 +427,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     const clampedScale = Math.max(0.1, Math.min(5, newScale))
 
     // Hide HTML overlays while zooming
-    setIsViewportTransforming(true)
-    if (zoomTimeoutRef.current) {
-      clearTimeout(zoomTimeoutRef.current)
+    if (config.features.hideHtmlDuringTransform) {
+      setIsViewportTransforming(true)
+      if (zoomTimeoutRef.current) {
+        clearTimeout(zoomTimeoutRef.current)
+      }
+      zoomTimeoutRef.current = window.setTimeout(() => {
+        setIsViewportTransforming(false)
+      }, config.timing.zoomEndDelay)
     }
-    zoomTimeoutRef.current = window.setTimeout(() => {
-      setIsViewportTransforming(false)
-    }, 150)
 
     setStageScale(clampedScale)
     setStagePos({
@@ -676,14 +679,16 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             return
           }
           // Hide HTML overlays while panning
-          if (e.target === stageRef.current) {
+          if (e.target === stageRef.current && config.features.hideHtmlDuringTransform) {
             setIsViewportTransforming(true)
           }
         }}
         onDragEnd={(e) => {
           if (e.target === stageRef.current) {
             setStagePos({ x: e.target.x(), y: e.target.y() })
-            setIsViewportTransforming(false)
+            if (config.features.hideHtmlDuringTransform) {
+              setIsViewportTransforming(false)
+            }
           }
         }}
         onWheel={handleWheel}
@@ -1071,8 +1076,21 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 cornerRadius={4}
                 draggable
                 onClick={(e) => handleItemClick(e, item.id)}
+                onDragStart={() => {
+                  if (config.features.hideHtmlDuringTransform) {
+                    setIsViewportTransforming(true)
+                  }
+                }}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                  if (config.features.hideHtmlDuringTransform) {
+                    setIsViewportTransforming(false)
+                  }
+                }}
+                onTransformStart={() => {
+                  if (config.features.hideHtmlDuringTransform) {
+                    setIsViewportTransforming(true)
+                  }
                 }}
                 onTransformEnd={(e) => {
                   const node = e.target
@@ -1087,6 +1105,9 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                     width: Math.max(100, node.width() * scaleX),
                     height: Math.max(60, node.height() * scaleY),
                   })
+                  if (config.features.hideHtmlDuringTransform) {
+                    setIsViewportTransforming(false)
+                  }
                 }}
               />
             )
