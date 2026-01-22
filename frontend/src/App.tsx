@@ -56,12 +56,11 @@ function App() {
 
     setHistoryMap((prev) => {
       const newMap = new Map(prev)
-      let history = newMap.get(activeSceneId)
-      if (!history) {
-        history = new HistoryStack()
-        newMap.set(activeSceneId, history)
-      }
-      history.push(change)
+      const oldHistory = prev.get(activeSceneId)
+      // Clone before mutating to ensure immutability (required for React Strict Mode)
+      const newHistory = oldHistory ? oldHistory.clone() : new HistoryStack()
+      newHistory.push(change)
+      newMap.set(activeSceneId, newHistory)
       return newMap
     })
     // Trigger re-render for canUndo/canRedo

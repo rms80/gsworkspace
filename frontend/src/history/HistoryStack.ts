@@ -96,6 +96,17 @@ export class HistoryStack {
   }
 
   /**
+   * Create a clone of this history stack
+   * Used for immutable state updates in React
+   */
+  clone(): HistoryStack {
+    const cloned = new HistoryStack(this.maxSize)
+    cloned.records = [...this.records]
+    cloned.currentIndex = this.currentIndex
+    return cloned
+  }
+
+  /**
    * Serialize the history stack to a plain object
    */
   serialize(): SerializedHistory {
