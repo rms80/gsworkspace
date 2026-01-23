@@ -15,9 +15,11 @@ interface InfiniteCanvasProps {
   runningPromptIds: Set<string>
   onRunImageGenPrompt: (promptId: string) => void
   runningImageGenPromptIds: Set<string>
+  onRunHtmlGenPrompt: (promptId: string) => void
+  runningHtmlGenPromptIds: Set<string>
 }
 
-function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds }: InfiniteCanvasProps) {
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
@@ -30,6 +32,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const imageTransformerRef = useRef<Konva.Transformer>(null)
   const promptTransformerRef = useRef<Konva.Transformer>(null)
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
+  const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
@@ -41,6 +44,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const imageGenLabelInputRef = useRef<HTMLInputElement>(null)
   const [imageGenModelMenuPromptId, setImageGenModelMenuPromptId] = useState<string | null>(null)
   const [imageGenModelMenuPosition, setImageGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const [editingHtmlGenPromptId, setEditingHtmlGenPromptId] = useState<string | null>(null)
+  const [editingHtmlGenPromptField, setEditingHtmlGenPromptField] = useState<'label' | 'text' | null>(null)
+  const htmlGenPromptTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const htmlGenLabelInputRef = useRef<HTMLInputElement>(null)
+  const [htmlGenModelMenuPromptId, setHtmlGenModelMenuPromptId] = useState<string | null>(null)
+  const [htmlGenModelMenuPosition, setHtmlGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
   const labelInputRef = useRef<HTMLInputElement>(null)
@@ -69,7 +78,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
   // Pulse animation for running prompts
   useEffect(() => {
-    if (runningPromptIds.size === 0) {
+    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0) {
       setPulsePhase(0)
       return
     }
@@ -87,7 +96,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     animationId = requestAnimationFrame(animate)
 
     return () => cancelAnimationFrame(animationId)
-  }, [runningPromptIds.size])
+  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size])
 
   // Force Konva layer redraw when pulse phase changes
   useEffect(() => {
@@ -133,6 +142,11 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
+    const selectedHtmlGenPromptNodes = items
+      .filter((item) => item.selected && item.type === 'html-gen-prompt')
+      .map((item) => stageRef.current?.findOne(`#${item.id}`))
+      .filter(Boolean) as Konva.Node[]
+
     const selectedHtmlNodes = items
       .filter((item) => item.selected && item.type === 'html')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
@@ -142,6 +156,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     imageTransformerRef.current?.nodes(selectedImageNodes)
     promptTransformerRef.current?.nodes(selectedPromptNodes)
     imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
+    htmlGenPromptTransformerRef.current?.nodes(selectedHtmlGenPromptNodes)
     htmlTransformerRef.current?.nodes(selectedHtmlNodes)
   }, [items])
 
@@ -393,6 +408,26 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }, [imageGenModelMenuPromptId])
 
+  // Close HTML gen model menu on click elsewhere
+  useEffect(() => {
+    if (!htmlGenModelMenuPromptId) return
+
+    const handleClick = () => {
+      setHtmlGenModelMenuPromptId(null)
+      setHtmlGenModelMenuPosition(null)
+    }
+
+    // Delay adding listener to avoid catching the click that opened the menu
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [htmlGenModelMenuPromptId])
+
   // Close image context menu on click elsewhere
   useEffect(() => {
     if (!imageContextMenu) return
@@ -640,6 +675,48 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     }
   }
 
+  // HTML Gen Prompt editing handlers
+  const handleHtmlGenPromptLabelDblClick = (id: string) => {
+    setEditingHtmlGenPromptId(id)
+    setEditingHtmlGenPromptField('label')
+    setTimeout(() => {
+      htmlGenLabelInputRef.current?.focus()
+      htmlGenLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleHtmlGenPromptTextDblClick = (id: string) => {
+    setEditingHtmlGenPromptId(id)
+    setEditingHtmlGenPromptField('text')
+    setTimeout(() => {
+      htmlGenPromptTextareaRef.current?.focus()
+      htmlGenPromptTextareaRef.current?.select()
+    }, 0)
+  }
+
+  const handleHtmlGenPromptLabelBlur = () => {
+    if (editingHtmlGenPromptId && htmlGenLabelInputRef.current) {
+      onUpdateItem(editingHtmlGenPromptId, { label: htmlGenLabelInputRef.current.value })
+    }
+    setEditingHtmlGenPromptId(null)
+    setEditingHtmlGenPromptField(null)
+  }
+
+  const handleHtmlGenPromptTextBlur = () => {
+    if (editingHtmlGenPromptId && htmlGenPromptTextareaRef.current) {
+      onUpdateItem(editingHtmlGenPromptId, { text: htmlGenPromptTextareaRef.current.value })
+    }
+    setEditingHtmlGenPromptId(null)
+    setEditingHtmlGenPromptField(null)
+  }
+
+  const handleHtmlGenPromptKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingHtmlGenPromptId(null)
+      setEditingHtmlGenPromptField(null)
+    }
+  }
+
   const getEditingTextItem = () => {
     if (!editingTextId) return null
     const item = items.find((i) => i.id === editingTextId)
@@ -661,9 +738,17 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     return item
   }
 
+  const getEditingHtmlGenPromptItem = () => {
+    if (!editingHtmlGenPromptId) return null
+    const item = items.find((i) => i.id === editingHtmlGenPromptId)
+    if (!item || item.type !== 'html-gen-prompt') return null
+    return item
+  }
+
   const editingItem = getEditingTextItem()
   const editingPrompt = getEditingPromptItem()
   const editingImageGenPrompt = getEditingImageGenPromptItem()
+  const editingHtmlGenPrompt = getEditingHtmlGenPromptItem()
 
   return (
     <div style={{ position: 'relative' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -1075,6 +1160,144 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 />
               </Group>
             )
+          } else if (item.type === 'html-gen-prompt') {
+            const headerHeight = 28
+            const isEditingThis = editingHtmlGenPromptId === item.id
+            const isRunning = runningHtmlGenPromptIds.has(item.id)
+            const runButtonWidth = 40
+            const modelButtonWidth = 20
+            const buttonHeight = 20
+            const buttonGap = 4
+
+            // Calculate pulse intensity (0 to 1) for running prompts
+            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
+
+            // Border color: pulse between dark teal (13, 148, 136) and light teal (94, 234, 212)
+            const borderColor = isRunning
+              ? `rgb(${Math.round(13 + 81 * pulseIntensity)}, ${Math.round(148 + 86 * pulseIntensity)}, ${Math.round(136 + 76 * pulseIntensity)})`
+              : (item.selected ? '#0066cc' : '#0d9488')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+
+            // Run button color: pulse between dark teal and light teal
+            const runButtonColor = isRunning
+              ? `rgb(${Math.round(13 + 81 * pulseIntensity)}, ${Math.round(148 + 86 * pulseIntensity)}, ${Math.round(136 + 76 * pulseIntensity)})`
+              : '#0f766e'
+
+            return (
+              <Group
+                key={item.id}
+                id={item.id}
+                x={item.x}
+                y={item.y}
+                width={item.width}
+                height={item.height}
+                draggable={!isRunning}
+                onClick={(e) => handleItemClick(e, item.id)}
+                onDragEnd={(e) => {
+                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+              >
+                {/* Background */}
+                <Rect
+                  width={item.width}
+                  height={item.height}
+                  fill="#ccfbf1"
+                  stroke={borderColor}
+                  strokeWidth={borderWidth}
+                  cornerRadius={4}
+                />
+                {/* Header background */}
+                <Rect
+                  width={item.width}
+                  height={headerHeight}
+                  fill="#99f6e4"
+                  cornerRadius={[4, 4, 0, 0]}
+                />
+                {/* Header label */}
+                <Text
+                  text={item.label}
+                  x={8}
+                  y={6}
+                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
+                  height={headerHeight - 6}
+                  fontSize={14}
+                  fontStyle="bold"
+                  fill="#134e4a"
+                  onDblClick={() => handleHtmlGenPromptLabelDblClick(item.id)}
+                  visible={!(isEditingThis && editingHtmlGenPromptField === 'label')}
+                />
+                {/* Model selector button */}
+                <Rect
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fill="#666"
+                  cornerRadius={3}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    setHtmlGenModelMenuPromptId(item.id)
+                    setHtmlGenModelMenuPosition({
+                      x: e.evt.clientX,
+                      y: e.evt.clientY,
+                    })
+                  }}
+                />
+                <Text
+                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  y={4}
+                  text="..."
+                  width={modelButtonWidth}
+                  height={buttonHeight}
+                  fontSize={12}
+                  fontStyle="bold"
+                  fill="#fff"
+                  align="center"
+                  verticalAlign="middle"
+                  listening={false}
+                />
+                {/* Run button */}
+                <Group
+                  x={item.width - runButtonWidth - 8}
+                  y={4}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    if (!isRunning) {
+                      onRunHtmlGenPrompt(item.id)
+                    }
+                  }}
+                >
+                  <Rect
+                    width={runButtonWidth}
+                    height={buttonHeight}
+                    fill={runButtonColor}
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text={isRunning ? '...' : 'Run'}
+                    width={runButtonWidth}
+                    height={buttonHeight}
+                    fontSize={12}
+                    fontStyle="bold"
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
+                {/* Content text */}
+                <Text
+                  text={item.text}
+                  x={8}
+                  y={headerHeight + 8}
+                  width={item.width - 16}
+                  height={item.height - headerHeight - 16}
+                  fontSize={item.fontSize}
+                  fill="#333"
+                  onDblClick={() => handleHtmlGenPromptTextDblClick(item.id)}
+                  visible={!(isEditingThis && editingHtmlGenPromptField === 'text')}
+                />
+              </Group>
+            )
           } else if (item.type === 'html') {
             const headerHeight = 24
             return (
@@ -1233,6 +1456,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         {/* Transformer for image gen prompts - uniform scaling, no rotation */}
         <Transformer
           ref={imageGenPromptTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < 100 || newBox.height < 60) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+        {/* Transformer for HTML gen prompts - uniform scaling, no rotation */}
+        <Transformer
+          ref={htmlGenPromptTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={true}
@@ -1462,6 +1698,69 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         />
       )}
 
+      {/* Input overlay for editing HTML gen prompt label */}
+      {editingHtmlGenPrompt && editingHtmlGenPromptField === 'label' && (
+        <input
+          ref={htmlGenLabelInputRef}
+          type="text"
+          defaultValue={editingHtmlGenPrompt.label}
+          onBlur={handleHtmlGenPromptLabelBlur}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              handleHtmlGenPromptLabelBlur()
+            }
+            handleHtmlGenPromptKeyDown(e)
+          }}
+          style={{
+            position: 'absolute',
+            top: editingHtmlGenPrompt.y * stageScale + stagePos.y + 4 * stageScale,
+            left: editingHtmlGenPrompt.x * stageScale + stagePos.x + 6 * stageScale,
+            width: (editingHtmlGenPrompt.width - 16) * stageScale,
+            height: 20 * stageScale,
+            fontSize: 14 * stageScale,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            padding: '0 2px',
+            margin: 0,
+            border: '2px solid #0d9488',
+            borderRadius: 2,
+            outline: 'none',
+            background: '#99f6e4',
+            color: '#134e4a',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
+      {/* Textarea overlay for editing HTML gen prompt text */}
+      {editingHtmlGenPrompt && editingHtmlGenPromptField === 'text' && (
+        <textarea
+          ref={htmlGenPromptTextareaRef}
+          defaultValue={editingHtmlGenPrompt.text}
+          onBlur={handleHtmlGenPromptTextBlur}
+          onKeyDown={handleHtmlGenPromptKeyDown}
+          style={{
+            position: 'absolute',
+            top: (editingHtmlGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            left: (editingHtmlGenPrompt.x + 6) * stageScale + stagePos.x,
+            width: (editingHtmlGenPrompt.width - 16) * stageScale,
+            height: (editingHtmlGenPrompt.height - 28 - 16) * stageScale,
+            fontSize: editingHtmlGenPrompt.fontSize * stageScale,
+            fontFamily: 'sans-serif',
+            padding: '2px',
+            margin: 0,
+            border: '2px solid #0d9488',
+            borderRadius: 2,
+            outline: 'none',
+            resize: 'none',
+            overflow: 'hidden',
+            background: '#ccfbf1',
+            color: '#333',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
       {/* Context menu */}
       {contextMenu && (
         <div
@@ -1595,6 +1894,60 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 {{
                   'gemini-imagen': 'Gemini Imagen',
                   'gemini-flash-imagen': 'Gemini Flash Imagen',
+                }[model]}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* HTML gen model selector menu */}
+      {htmlGenModelMenuPromptId && htmlGenModelMenuPosition && (
+        <div
+          style={{
+            position: 'fixed',
+            top: htmlGenModelMenuPosition.y,
+            left: htmlGenModelMenuPosition.x,
+            background: 'white',
+            border: '1px solid #ccc',
+            borderRadius: 4,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            zIndex: 1000,
+            minWidth: 100,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
+            const promptItem = items.find((i) => i.id === htmlGenModelMenuPromptId && i.type === 'html-gen-prompt')
+            const isSelected = promptItem?.type === 'html-gen-prompt' && promptItem.model === model
+            return (
+              <button
+                key={model}
+                onClick={() => {
+                  onUpdateItem(htmlGenModelMenuPromptId, { model })
+                  setHtmlGenModelMenuPromptId(null)
+                  setHtmlGenModelMenuPosition(null)
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '8px 16px',
+                  border: 'none',
+                  background: isSelected ? '#e8e8e8' : 'none',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: 14,
+                  fontWeight: isSelected ? 'bold' : 'normal',
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
+              >
+                {{
+                  'claude-haiku': 'Claude Haiku',
+                  'claude-sonnet': 'Claude Sonnet',
+                  'claude-opus': 'Claude Opus',
+                  'gemini-flash': 'Gemini 3 Flash',
+                  'gemini-pro': 'Gemini 3 Pro',
                 }[model]}
               </button>
             )

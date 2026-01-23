@@ -3,6 +3,7 @@ interface ToolbarProps {
   onAddImage: (src: string, width: number, height: number) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
+  onAddHtmlGenPrompt: () => void
   onAddTestHtml: () => void
   onDelete: () => void
   onSendToLLM: () => void
@@ -14,7 +15,7 @@ interface ToolbarProps {
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddTestHtml, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddTestHtml, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -101,6 +102,20 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
         }}
       >
         Add Image Prompt
+      </button>
+      <button
+        onClick={onAddHtmlGenPrompt}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: '#ccfbf1',
+          border: '1px solid #0d9488',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+        }}
+      >
+        HTML Gen
       </button>
       <button
         onClick={onAddTestHtml}

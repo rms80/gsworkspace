@@ -1,4 +1,5 @@
 import { LLMModel, ImageGenModel } from '../types'
+import type { SpatialBlock } from '../utils/spatialJson'
 
 const API_BASE = '/api/llm'
 
@@ -52,4 +53,27 @@ export async function generateImage(
 
   const data: GenerateImageResponse = await response.json()
   return data.images
+}
+
+export interface GenerateHtmlResponse {
+  html: string
+}
+
+export async function generateHtml(
+  spatialItems: SpatialBlock[],
+  userPrompt: string,
+  model: LLMModel = 'claude-sonnet'
+): Promise<string> {
+  const response = await fetch(`${API_BASE}/generate-html`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ spatialItems, userPrompt, model }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to generate HTML: ${response.statusText}`)
+  }
+
+  const data: GenerateHtmlResponse = await response.json()
+  return data.html
 }

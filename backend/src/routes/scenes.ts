@@ -46,7 +46,13 @@ interface StoredHtmlItem extends StoredItemBase {
   file: string // reference to .html file
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem
+interface StoredHtmlGenPromptItem extends StoredItemBase {
+  type: 'html-gen-prompt'
+  fontSize: number
+  file: string // reference to .json file containing label, text, and model
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
 
 interface StoredScene {
   id: string
@@ -128,6 +134,20 @@ router.post('/:id', async (req, res) => {
         storedItems.push({
           id: item.id,
           type: 'image-gen-prompt',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          file: promptFile,
+        })
+      } else if (item.type === 'html-gen-prompt') {
+        const promptFile = `${item.id}.htmlgen.json`
+        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'claude-sonnet' })
+        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
+        storedItems.push({
+          id: item.id,
+          type: 'html-gen-prompt',
           x: item.x,
           y: item.y,
           width: item.width,
@@ -242,6 +262,22 @@ router.get('/:id', async (req, res) => {
             label: promptData.label,
             text: promptData.text,
             model: promptData.model || 'gemini-imagen',
+          }
+        } else if (item.type === 'html-gen-prompt') {
+          // For html-gen-prompts, load the JSON file
+          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
+          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'HTML Gen', text: '', model: 'claude-sonnet' }
+          return {
+            id: item.id,
+            type: 'html-gen-prompt' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            fontSize: item.fontSize,
+            label: promptData.label,
+            text: promptData.text,
+            model: promptData.model || 'claude-sonnet',
           }
         } else {
           // For HTML items, load the HTML file

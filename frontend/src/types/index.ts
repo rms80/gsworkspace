@@ -59,7 +59,17 @@ export interface HtmlItem extends BaseItem {
   height: number
 }
 
-export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem | HtmlItem
+export interface HTMLGenPromptItem extends BaseItem {
+  type: 'html-gen-prompt'
+  label: string
+  text: string
+  fontSize: number
+  width: number
+  height: number
+  model: LLMModel
+}
+
+export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem
 
 export interface SelectionRect {
   x: number

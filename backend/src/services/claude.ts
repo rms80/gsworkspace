@@ -82,3 +82,25 @@ export async function generateText(
   const textContent = message.content.find((block) => block.type === 'text')
   return textContent?.type === 'text' ? textContent.text : ''
 }
+
+export async function generateHtmlWithClaude(
+  systemPrompt: string,
+  userPrompt: string,
+  model: ClaudeModel = 'claude-sonnet'
+): Promise<string> {
+  const message = await anthropic.messages.create({
+    model: MODEL_IDS[model],
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: [
+      {
+        role: 'user',
+        content: userPrompt,
+      },
+    ],
+  })
+
+  // Extract text from response
+  const textContent = message.content.find((block) => block.type === 'text')
+  return textContent?.type === 'text' ? textContent.text : ''
+}

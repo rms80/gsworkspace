@@ -5,7 +5,8 @@ import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
-import { generateFromPrompt, generateImage, ContentItem } from './api/llm'
+import { generateFromPrompt, generateImage, generateHtml, ContentItem } from './api/llm'
+import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import {
   HistoryStack,
@@ -36,6 +37,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
+  const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const saveTimeoutRef = useRef<number | null>(null)
@@ -425,6 +427,23 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
+  const addHtmlGenPromptItem = useCallback(() => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'html-gen-prompt',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      label: 'HTML Gen',
+      text: 'Describe the webpage you want to create...',
+      fontSize: 14,
+      width: 300,
+      height: 150,
+      model: 'claude-sonnet',
+    }
+    pushChange(new AddObjectChange(newItem))
+    updateActiveSceneItems((prev) => [...prev, newItem])
+  }, [updateActiveSceneItems, pushChange])
+
   const addTestHtmlItem = useCallback(() => {
     const testHtml = `
 <!DOCTYPE html>
@@ -509,9 +528,9 @@ function App() {
         'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes
       const hasText = 'text' in changes && item.type === 'text'
       const hasPromptText = ('text' in changes || 'label' in changes) &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt')
+        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
       const hasModel = 'model' in changes &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt')
+        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
 
       // Skip history for selection changes
       const isSelectionOnly = Object.keys(changes).every((k) => k === 'selected')
@@ -522,14 +541,14 @@ function App() {
           if (item.text !== changes.text) {
             pushChange(new UpdateTextChange(id, item.text, changes.text as string))
           }
-        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
+        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
           const newLabel = ('label' in changes ? changes.label : item.label) as string
           const newText = ('text' in changes ? changes.text : item.text) as string
           // Only record if label or text actually changed
           if (item.label !== newLabel || item.text !== newText) {
             pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
           }
-        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt')) {
+        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
           // Only record if model actually changed
           if (item.model !== changes.model) {
             pushChange(new UpdateModelChange(id, item.model, changes.model as string))
@@ -766,6 +785,61 @@ function App() {
     }
   }, [items, updateActiveSceneItems])
 
+  const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
+    const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')
+    if (!promptItem || promptItem.type !== 'html-gen-prompt') return
+
+    // Mark prompt as running
+    setRunningHtmlGenPromptIds((prev) => new Set(prev).add(promptId))
+
+    // Gather selected items (excluding the prompt itself)
+    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+
+    // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
+    const { blocks: spatialItems, imageMap } = convertItemsToSpatialJson(selectedItems)
+
+    try {
+      let html = await generateHtml(spatialItems, promptItem.text, promptItem.model)
+
+      // Replace image placeholder IDs with actual source URLs
+      html = replaceImagePlaceholders(html, imageMap)
+
+      // Position output to the right of the prompt, aligned with top
+      // Find existing outputs to stack vertically
+      const outputX = promptItem.x + promptItem.width + 20
+      const existingOutputsToRight = items.filter(item =>
+        item.x >= outputX - 10 &&
+        item.x <= outputX + 10 &&
+        item.y >= promptItem.y - 10
+      )
+      const outputY = existingOutputsToRight.length > 0
+        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
+        : promptItem.y
+
+      // Create new HtmlItem with result
+      const newItem: CanvasItem = {
+        id: uuidv4(),
+        type: 'html',
+        x: outputX,
+        y: outputY,
+        html: html,
+        width: 800,
+        height: 600,
+      }
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    } catch (error) {
+      console.error('Failed to run HTML gen prompt:', error)
+      alert('Failed to generate HTML. Check the console for details.')
+    } finally {
+      // Mark prompt as no longer running
+      setRunningHtmlGenPromptIds((prev) => {
+        const next = new Set(prev)
+        next.delete(promptId)
+        return next
+      })
+    }
+  }, [items, updateActiveSceneItems])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -781,6 +855,7 @@ function App() {
         onAddImage={addImageItem}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
+        onAddHtmlGenPrompt={addHtmlGenPromptItem}
         onAddTestHtml={addTestHtmlItem}
         onDelete={deleteSelected}
         onSendToLLM={() => {
@@ -816,6 +891,8 @@ function App() {
           runningPromptIds={runningPromptIds}
           onRunImageGenPrompt={handleRunImageGenPrompt}
           runningImageGenPromptIds={runningImageGenPromptIds}
+          onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
+          runningHtmlGenPromptIds={runningHtmlGenPromptIds}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>

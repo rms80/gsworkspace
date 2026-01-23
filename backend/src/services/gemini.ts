@@ -21,6 +21,21 @@ interface ContentItem {
   src?: string
 }
 
+export async function generateHtmlWithGemini(
+  systemPrompt: string,
+  userPrompt: string,
+  model: GeminiModel = 'gemini-flash'
+): Promise<string> {
+  const genModel = genAI.getGenerativeModel({
+    model: MODEL_IDS[model],
+    systemInstruction: systemPrompt,
+  })
+
+  const result = await genModel.generateContent(userPrompt)
+  const response = await result.response
+  return response.text()
+}
+
 export async function generateTextWithGemini(
   items: ContentItem[],
   prompt: string,

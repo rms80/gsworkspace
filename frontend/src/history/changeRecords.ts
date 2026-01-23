@@ -245,7 +245,7 @@ export class UpdatePromptChange extends BaseChangeRecord {
   apply(items: CanvasItem[]): CanvasItem[] {
     return items.map((item) => {
       if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt') return item
+      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
       return { ...item, label: this.newLabel, text: this.newText }
     })
   }
@@ -253,7 +253,7 @@ export class UpdatePromptChange extends BaseChangeRecord {
   reverse(items: CanvasItem[]): CanvasItem[] {
     return items.map((item) => {
       if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt') return item
+      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
       return { ...item, label: this.oldLabel, text: this.oldText }
     })
   }
@@ -306,7 +306,7 @@ export class UpdateModelChange extends BaseChangeRecord {
   apply(items: CanvasItem[]): CanvasItem[] {
     return items.map((item) => {
       if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt') return item
+      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
       return { ...item, model: this.newModel } as CanvasItem
     })
   }
@@ -314,7 +314,7 @@ export class UpdateModelChange extends BaseChangeRecord {
   reverse(items: CanvasItem[]): CanvasItem[] {
     return items.map((item) => {
       if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt') return item
+      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
       return { ...item, model: this.oldModel } as CanvasItem
     })
   }
