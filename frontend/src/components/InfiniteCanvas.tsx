@@ -838,6 +838,20 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
                 }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  // Reset scale and apply to width only (text reflows)
+                  node.scaleX(1)
+                  node.scaleY(1)
+                  const newWidth = Math.max(50, item.width * scaleX)
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: newWidth,
+                  })
+                }}
                 visible={editingTextId !== item.id}
               >
                 <Rect
@@ -934,6 +948,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  node.scaleX(1)
+                  node.scaleY(1)
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(100, item.width * scaleX),
+                    height: Math.max(60, item.height * scaleY),
+                  })
                 }}
               >
                 {/* Background */}
@@ -1073,6 +1100,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
                 }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  node.scaleX(1)
+                  node.scaleY(1)
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(100, item.width * scaleX),
+                    height: Math.max(60, item.height * scaleY),
+                  })
+                }}
               >
                 {/* Background */}
                 <Rect
@@ -1210,6 +1250,19 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+                }}
+                onTransformEnd={(e) => {
+                  const node = e.target
+                  const scaleX = node.scaleX()
+                  const scaleY = node.scaleY()
+                  node.scaleX(1)
+                  node.scaleY(1)
+                  onUpdateItem(item.id, {
+                    x: node.x(),
+                    y: node.y(),
+                    width: Math.max(100, item.width * scaleX),
+                    height: Math.max(60, item.height * scaleY),
+                  })
                 }}
               >
                 {/* Background */}
@@ -1507,15 +1560,15 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           />
         )}
 
-        {/* Transformer for text - uniform scaling only, no rotation */}
+        {/* Transformer for text - width resizing only, text reflows */}
         <Transformer
           ref={textTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          keepRatio={true}
+          keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
-            // Prevent negative or too small dimensions
-            if (newBox.width < 20 || newBox.height < 20) {
+            // Prevent too small width
+            if (newBox.width < 50) {
               return oldBox
             }
             return newBox
@@ -1523,12 +1576,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         />
         {/* Transformer for images - full controls */}
         <Transformer ref={imageTransformerRef} />
-        {/* Transformer for prompts - uniform scaling, no rotation */}
+        {/* Transformer for prompts - free resize, no rotation */}
         <Transformer
           ref={promptTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          keepRatio={true}
+          keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
             if (newBox.width < 100 || newBox.height < 60) {
               return oldBox
@@ -1536,12 +1589,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             return newBox
           }}
         />
-        {/* Transformer for image gen prompts - uniform scaling, no rotation */}
+        {/* Transformer for image gen prompts - free resize, no rotation */}
         <Transformer
           ref={imageGenPromptTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          keepRatio={true}
+          keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
             if (newBox.width < 100 || newBox.height < 60) {
               return oldBox
@@ -1549,12 +1602,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             return newBox
           }}
         />
-        {/* Transformer for HTML gen prompts - uniform scaling, no rotation */}
+        {/* Transformer for HTML gen prompts - free resize, no rotation */}
         <Transformer
           ref={htmlGenPromptTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
-          keepRatio={true}
+          keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
             if (newBox.width < 100 || newBox.height < 60) {
               return oldBox
