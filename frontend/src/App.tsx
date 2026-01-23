@@ -618,6 +618,7 @@ function App() {
           html: htmlContent,
           width: 800,
           height: 300,
+          zoom: 0.75,
         }
       } else {
         // Create a text item for regular text content
