@@ -87,10 +87,11 @@ function TabBar({
           alignItems: 'flex-end',
           backgroundColor: '#e0e0e0',
           borderBottom: '1px solid #ccc',
-          padding: '8px 8px 0 8px',
+          padding: '4px 8px 0 8px',
           gap: '4px',
           overflowX: 'auto',
-          minHeight: '40px',
+          minHeight: '28px',
+          fontSize: '14px',
           position: 'relative',
           zIndex: 50,
         }}
@@ -104,8 +105,8 @@ function TabBar({
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              padding: '6px 12px',
+              gap: '6px',
+              padding: '4px 10px',
               backgroundColor: scene.id === activeSceneId ? '#fff' : '#f0f0f0',
               border: '1px solid #ccc',
               borderBottom: scene.id === activeSceneId ? '1px solid #fff' : '1px solid #ccc',
@@ -123,8 +124,8 @@ function TabBar({
                 border: 'none',
                 background: 'none',
                 cursor: 'pointer',
-                padding: '0 4px',
-                fontSize: '14px',
+                padding: '0 2px',
+                fontSize: '12px',
                 color: '#888',
                 lineHeight: 1,
               }}
@@ -137,14 +138,16 @@ function TabBar({
         <button
           onClick={onAddScene}
           style={{
-            padding: '6px 12px',
+            padding: '2px 6px',
             marginBottom: '4px',
             backgroundColor: '#f0f0f0',
             border: '1px solid #ccc',
-            borderRadius: '4px',
+            borderRadius: '3px',
             cursor: 'pointer',
             fontFamily: 'inherit',
-            fontSize: 'inherit',
+            fontSize: '12px',
+            lineHeight: 1,
+            alignSelf: 'center',
           }}
           title="Add new scene"
         >
