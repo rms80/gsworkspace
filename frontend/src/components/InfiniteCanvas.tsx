@@ -266,7 +266,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     return () => document.removeEventListener('paste', listener)
   }, [editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId, mousePos, stagePos, stageScale, onAddTextAt, onAddImageAt, items, onUpdateItem])
 
-  // Handle Ctrl+C to copy text from selected items
+  // Handle Ctrl+C to copy text from selected items (synchronous copy event)
   useEffect(() => {
     const handleCopy = (e: ClipboardEvent) => {
       // Don't interfere if focus is in an input/textarea
@@ -278,22 +278,111 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       if (selectedItems.length !== 1) return
 
       const item = selectedItems[0]
-      let textToCopy: string | null = null
 
       if (item.type === 'text') {
-        textToCopy = item.text
-      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
-        textToCopy = item.text
-      }
-
-      if (textToCopy) {
         e.preventDefault()
-        e.clipboardData?.setData('text/plain', textToCopy)
+        e.clipboardData?.setData('text/plain', item.text)
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+        e.preventDefault()
+        e.clipboardData?.setData('text/plain', item.text)
       }
+      // Images are handled by keydown handler below
     }
 
     document.addEventListener('copy', handleCopy)
     return () => document.removeEventListener('copy', handleCopy)
+  }, [items, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
+
+  // Handle Ctrl+C for images (needs async clipboard API)
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key === 'c')) return
+      // Don't interfere if focus is in an input/textarea
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      // Don't interfere if editing
+      if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
+
+      const selectedItems = items.filter((item) => item.selected)
+      if (selectedItems.length !== 1) return
+
+      const item = selectedItems[0]
+      if (item.type !== 'image') return
+
+      e.preventDefault()
+      try {
+        // Check if it's a data URL (no CORS issues) or S3 URL (needs proxy)
+        const isDataUrl = item.src.startsWith('data:')
+
+        if (isDataUrl) {
+          // For data URLs, we can load directly
+          const img = new window.Image()
+
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('Failed to load image'))
+            img.src = item.src
+          })
+
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth
+          canvas.height = img.naturalHeight
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('Failed to get canvas context')
+          ctx.drawImage(img, 0, 0)
+
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((b) => {
+              if (b) resolve(b)
+              else reject(new Error('Failed to create blob'))
+            }, 'image/png')
+          })
+
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': blob
+            })
+          ])
+        } else {
+          // For S3 URLs, fetch through backend proxy to avoid CORS
+          const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(item.src)}`)
+          if (!response.ok) throw new Error('Failed to fetch image through proxy')
+          const blob = await response.blob()
+
+          // Convert to PNG if needed
+          const pngBlob = await new Promise<Blob>((resolve, reject) => {
+            const img = new window.Image()
+            img.onload = () => {
+              const canvas = document.createElement('canvas')
+              canvas.width = img.naturalWidth
+              canvas.height = img.naturalHeight
+              const ctx = canvas.getContext('2d')
+              if (!ctx) {
+                reject(new Error('Failed to get canvas context'))
+                return
+              }
+              ctx.drawImage(img, 0, 0)
+              canvas.toBlob((b) => {
+                if (b) resolve(b)
+                else reject(new Error('Failed to create blob'))
+              }, 'image/png')
+            }
+            img.onerror = () => reject(new Error('Failed to load image'))
+            img.src = URL.createObjectURL(blob)
+          })
+
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'image/png': pngBlob
+            })
+          ])
+        }
+      } catch (err) {
+        console.error('Failed to copy image to clipboard:', err)
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
   }, [items, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
 
   // Track mouse position globally
