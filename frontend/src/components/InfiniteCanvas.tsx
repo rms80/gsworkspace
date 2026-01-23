@@ -6,6 +6,7 @@ import { config } from '../config'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
+  selectedIds: string[]
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => void
@@ -19,7 +20,7 @@ interface InfiniteCanvasProps {
   runningHtmlGenPromptIds: Set<string>
 }
 
-function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds }: InfiniteCanvasProps) {
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
   const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
   const [stageScale, setStageScale] = useState(1)
@@ -138,32 +139,32 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     if (!stageRef.current) return
 
     const selectedTextNodes = items
-      .filter((item) => item.selected && item.type === 'text')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'text')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
     const selectedImageNodes = items
-      .filter((item) => item.selected && item.type === 'image')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'image')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
     const selectedPromptNodes = items
-      .filter((item) => item.selected && item.type === 'prompt')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'prompt')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
     const selectedImageGenPromptNodes = items
-      .filter((item) => item.selected && item.type === 'image-gen-prompt')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'image-gen-prompt')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
     const selectedHtmlGenPromptNodes = items
-      .filter((item) => item.selected && item.type === 'html-gen-prompt')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'html-gen-prompt')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
     const selectedHtmlNodes = items
-      .filter((item) => item.selected && item.type === 'html')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'html')
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
@@ -173,7 +174,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
     htmlGenPromptTransformerRef.current?.nodes(selectedHtmlGenPromptNodes)
     htmlTransformerRef.current?.nodes(selectedHtmlNodes)
-  }, [items])
+  }, [items, selectedIds])
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -209,7 +210,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     if (!clipboardItems) return
 
     // Check if we have a single selected text-based item to paste into
-    const selectedItems = items.filter((item) => item.selected)
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
     const selectedTextItem = selectedItems.length === 1 &&
       (selectedItems[0].type === 'text' ||
        selectedItems[0].type === 'prompt' ||
@@ -274,7 +275,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       // Don't interfere if editing
       if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
 
-      const selectedItems = items.filter((item) => item.selected)
+      const selectedItems = items.filter((item) => selectedIds.includes(item.id))
       if (selectedItems.length !== 1) return
 
       const item = selectedItems[0]
@@ -291,7 +292,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
     document.addEventListener('copy', handleCopy)
     return () => document.removeEventListener('copy', handleCopy)
-  }, [items, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
+  }, [items, selectedIds, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
 
   // Handle Ctrl+C for images (needs async clipboard API)
   useEffect(() => {
@@ -302,7 +303,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       // Don't interfere if editing
       if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
 
-      const selectedItems = items.filter((item) => item.selected)
+      const selectedItems = items.filter((item) => selectedIds.includes(item.id))
       if (selectedItems.length !== 1) return
 
       const item = selectedItems[0]
@@ -383,7 +384,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [items, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
+  }, [items, selectedIds, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
 
   // Track mouse position globally
   useEffect(() => {
@@ -711,12 +712,12 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const handleItemClick = (e: Konva.KonvaEventObject<MouseEvent>, id: string) => {
     e.cancelBubble = true
     const metaPressed = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey
-    const item = items.find((i) => i.id === id)
+    const isSelected = selectedIds.includes(id)
 
-    if (metaPressed && item?.selected) {
-      onSelectItems(items.filter((i) => i.selected && i.id !== id).map((i) => i.id))
+    if (metaPressed && isSelected) {
+      onSelectItems(selectedIds.filter((selectedId) => selectedId !== id))
     } else if (metaPressed) {
-      onSelectItems([...items.filter((i) => i.selected).map((i) => i.id), id])
+      onSelectItems([...selectedIds, id])
     } else {
       onSelectItems([id])
     }
@@ -994,7 +995,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 <Rect
                   width={item.width + padding * 2}
                   height={textHeight + padding * 2}
-                  stroke={item.selected ? '#0066cc' : '#ccc'}
+                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
                   strokeWidth={1}
                   cornerRadius={4}
                 />
@@ -1004,7 +1005,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   text={item.text}
                   fontSize={item.fontSize}
                   width={item.width}
-                  fill={item.selected ? '#0066cc' : '#000'}
+                  fill={selectedIds.includes(item.id) ? '#0066cc' : '#000'}
                 />
               </Group>
             )
@@ -1046,8 +1047,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                     rotation: node.rotation(),
                   })
                 }}
-                stroke={item.selected ? '#0066cc' : undefined}
-                strokeWidth={item.selected ? 2 : 0}
+                stroke={selectedIds.includes(item.id) ? '#0066cc' : undefined}
+                strokeWidth={selectedIds.includes(item.id) ? 2 : 0}
               />
             )
           } else if (item.type === 'prompt') {
@@ -1063,10 +1064,11 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
             // Border color: pulse between dark orange (210, 105, 30) and light orange (255, 200, 100)
+            const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
               ? `rgb(${Math.round(210 + 45 * pulseIntensity)}, ${Math.round(105 + 95 * pulseIntensity)}, ${Math.round(30 + 70 * pulseIntensity)})`
-              : (item.selected ? '#0066cc' : '#c9a227')
-            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+              : (isSelected ? '#0066cc' : '#c9a227')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
             // Run button color: pulse between dark orange (200, 90, 20) and light orange (255, 180, 80)
             const runButtonColor = isRunning
@@ -1214,10 +1216,11 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
             // Border color: pulse between dark purple (138, 43, 226) and light purple (200, 150, 255)
+            const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
               ? `rgb(${Math.round(138 + 62 * pulseIntensity)}, ${Math.round(43 + 107 * pulseIntensity)}, ${Math.round(226 + 29 * pulseIntensity)})`
-              : (item.selected ? '#0066cc' : '#8b5cf6')
-            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+              : (isSelected ? '#0066cc' : '#8b5cf6')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
             // Run button color: pulse between dark purple and light purple
             const runButtonColor = isRunning
@@ -1365,10 +1368,11 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
             // Border color: pulse between dark teal (13, 148, 136) and light teal (94, 234, 212)
+            const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
               ? `rgb(${Math.round(13 + 81 * pulseIntensity)}, ${Math.round(148 + 86 * pulseIntensity)}, ${Math.round(136 + 76 * pulseIntensity)})`
-              : (item.selected ? '#0066cc' : '#0d9488')
-            const borderWidth = isRunning ? 2 + pulseIntensity : (item.selected ? 2 : 1)
+              : (isSelected ? '#0066cc' : '#0d9488')
+            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
             // Run button color: pulse between dark teal and light teal
             const runButtonColor = isRunning
@@ -1598,8 +1602,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   width={item.width}
                   height={headerHeight}
                   fill="#d0d0d0"
-                  stroke={item.selected ? '#0066cc' : '#ccc'}
-                  strokeWidth={item.selected ? 2 : 1}
+                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
+                  strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
                   cornerRadius={[4, 4, 0, 0]}
                 />
                 {/* Zoom out button */}
@@ -1674,8 +1678,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   width={item.width}
                   height={item.height}
                   fill="#fff"
-                  stroke={item.selected ? '#0066cc' : '#ccc'}
-                  strokeWidth={item.selected ? 2 : 1}
+                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
+                  strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
                   cornerRadius={[0, 0, 4, 4]}
                 />
               </Group>
@@ -1805,7 +1809,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
                   // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
-                  pointerEvents: (item.selected || isAnyDragActive) ? 'none' : 'auto',
+                  pointerEvents: (selectedIds.includes(item.id) || isAnyDragActive) ? 'none' : 'auto',
                   background: '#fff',
                 }}
               />

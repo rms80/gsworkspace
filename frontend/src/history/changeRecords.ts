@@ -2,6 +2,7 @@ import { CanvasItem } from '../types'
 import {
   ChangeRecord,
   ChangeRecordType,
+  HistoryState,
   SerializedChangeRecord,
   TransformData,
 } from './types'
@@ -19,8 +20,8 @@ abstract class BaseChangeRecord implements ChangeRecord {
     this.timestamp = timestamp ?? Date.now()
   }
 
-  abstract apply(items: CanvasItem[]): CanvasItem[]
-  abstract reverse(items: CanvasItem[]): CanvasItem[]
+  abstract apply(state: HistoryState): HistoryState
+  abstract reverse(state: HistoryState): HistoryState
   abstract serialize(): SerializedChangeRecord
 }
 
@@ -36,17 +37,17 @@ export class AddObjectChange extends BaseChangeRecord {
     this.object = { ...object }
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
+  apply(state: HistoryState): HistoryState {
     // Add the object if it doesn't exist
-    if (items.find((item) => item.id === this.objectId)) {
-      return items
+    if (state.items.find((item) => item.id === this.objectId)) {
+      return state
     }
-    return [...items, { ...this.object }]
+    return { ...state, items: [...state.items, { ...this.object }] }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
+  reverse(state: HistoryState): HistoryState {
     // Remove the object
-    return items.filter((item) => item.id !== this.objectId)
+    return { ...state, items: state.items.filter((item) => item.id !== this.objectId) }
   }
 
   serialize(): SerializedChangeRecord {
@@ -78,17 +79,20 @@ export class DeleteObjectChange extends BaseChangeRecord {
     this.object = { ...object }
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
-    // Remove the object
-    return items.filter((item) => item.id !== this.objectId)
+  apply(state: HistoryState): HistoryState {
+    // Remove the object and deselect it
+    return {
+      items: state.items.filter((item) => item.id !== this.objectId),
+      selectedIds: state.selectedIds.filter((id) => id !== this.objectId),
+    }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
+  reverse(state: HistoryState): HistoryState {
     // Restore the object if it doesn't exist
-    if (items.find((item) => item.id === this.objectId)) {
-      return items
+    if (state.items.find((item) => item.id === this.objectId)) {
+      return state
     }
-    return [...items, { ...this.object }]
+    return { ...state, items: [...state.items, { ...this.object }] }
   }
 
   serialize(): SerializedChangeRecord {
@@ -127,18 +131,24 @@ export class TransformObjectChange extends BaseChangeRecord {
     this.newTransform = { ...newTransform }
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      return { ...item, ...this.newTransform } as CanvasItem
-    })
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        return { ...item, ...this.newTransform } as CanvasItem
+      }),
+    }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      return { ...item, ...this.oldTransform } as CanvasItem
-    })
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        return { ...item, ...this.oldTransform } as CanvasItem
+      }),
+    }
   }
 
   serialize(): SerializedChangeRecord {
@@ -182,20 +192,26 @@ export class UpdateTextChange extends BaseChangeRecord {
     this.newText = newText
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'text') return item
-      return { ...item, text: this.newText }
-    })
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'text') return item
+        return { ...item, text: this.newText }
+      }),
+    }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'text') return item
-      return { ...item, text: this.oldText }
-    })
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'text') return item
+        return { ...item, text: this.oldText }
+      }),
+    }
   }
 
   serialize(): SerializedChangeRecord {
@@ -242,20 +258,26 @@ export class UpdatePromptChange extends BaseChangeRecord {
     this.newText = newText
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
-      return { ...item, label: this.newLabel, text: this.newText }
-    })
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        return { ...item, label: this.newLabel, text: this.newText }
+      }),
+    }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
-      return { ...item, label: this.oldLabel, text: this.oldText }
-    })
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        return { ...item, label: this.oldLabel, text: this.oldText }
+      }),
+    }
   }
 
   serialize(): SerializedChangeRecord {
@@ -303,20 +325,26 @@ export class UpdateModelChange extends BaseChangeRecord {
     this.newModel = newModel
   }
 
-  apply(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
-      return { ...item, model: this.newModel } as CanvasItem
-    })
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        return { ...item, model: this.newModel } as CanvasItem
+      }),
+    }
   }
 
-  reverse(items: CanvasItem[]): CanvasItem[] {
-    return items.map((item) => {
-      if (item.id !== this.objectId) return item
-      if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
-      return { ...item, model: this.oldModel } as CanvasItem
-    })
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        return { ...item, model: this.oldModel } as CanvasItem
+      }),
+    }
   }
 
   serialize(): SerializedChangeRecord {
@@ -333,6 +361,59 @@ export class UpdateModelChange extends BaseChangeRecord {
       record.objectId,
       record.data.oldModel as string,
       record.data.newModel as string,
+      record.timestamp
+    )
+  }
+}
+
+/**
+ * Record for changing the selection state
+ */
+export class SelectionChange extends BaseChangeRecord {
+  type: ChangeRecordType = 'selection'
+  private oldSelectedIds: string[]
+  private newSelectedIds: string[]
+
+  constructor(
+    oldSelectedIds: string[],
+    newSelectedIds: string[],
+    timestamp?: number
+  ) {
+    super('', timestamp) // No specific object ID for selection changes
+    this.oldSelectedIds = [...oldSelectedIds]
+    this.newSelectedIds = [...newSelectedIds]
+  }
+
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      selectedIds: [...this.newSelectedIds],
+    }
+  }
+
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      selectedIds: [...this.oldSelectedIds],
+    }
+  }
+
+  serialize(): SerializedChangeRecord {
+    return {
+      type: this.type,
+      objectId: this.objectId,
+      timestamp: this.timestamp,
+      data: {
+        oldSelectedIds: this.oldSelectedIds,
+        newSelectedIds: this.newSelectedIds,
+      },
+    }
+  }
+
+  static deserialize(record: SerializedChangeRecord): SelectionChange {
+    return new SelectionChange(
+      record.data.oldSelectedIds as string[],
+      record.data.newSelectedIds as string[],
       record.timestamp
     )
   }
@@ -357,6 +438,8 @@ export function deserializeChangeRecord(
       return UpdatePromptChange.deserialize(record)
     case 'update_model':
       return UpdateModelChange.deserialize(record)
+    case 'selection':
+      return SelectionChange.deserialize(record)
     default:
       throw new Error(`Unknown change record type: ${record.type}`)
   }

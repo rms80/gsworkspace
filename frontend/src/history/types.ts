@@ -10,6 +10,15 @@ export type ChangeRecordType =
   | 'update_text'
   | 'update_prompt'
   | 'update_model'
+  | 'selection'
+
+/**
+ * Combined state that change records operate on
+ */
+export interface HistoryState {
+  items: CanvasItem[]
+  selectedIds: string[]
+}
 
 /**
  * Interface for change records that can be undone/redone
@@ -17,24 +26,24 @@ export type ChangeRecordType =
 export interface ChangeRecord {
   /** Type identifier for serialization */
   type: ChangeRecordType
-  /** ID of the object this change applies to */
+  /** ID of the object this change applies to (empty string for selection changes) */
   objectId: string
   /** Timestamp when the change was made */
   timestamp: number
 
   /**
    * Apply this change (redo)
-   * @param items Current scene items
-   * @returns Updated scene items
+   * @param state Current scene state (items + selection)
+   * @returns Updated scene state
    */
-  apply(items: CanvasItem[]): CanvasItem[]
+  apply(state: HistoryState): HistoryState
 
   /**
    * Reverse this change (undo)
-   * @param items Current scene items
-   * @returns Updated scene items
+   * @param state Current scene state (items + selection)
+   * @returns Updated scene state
    */
-  reverse(items: CanvasItem[]): CanvasItem[]
+  reverse(state: HistoryState): HistoryState
 
   /**
    * Serialize this change record to a plain object for JSON storage
