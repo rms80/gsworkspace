@@ -12,12 +12,14 @@ import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spa
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import {
   HistoryStack,
+  HistoryState,
   AddObjectChange,
   DeleteObjectChange,
   TransformObjectChange,
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
+  SelectionChange,
   ChangeRecord,
 } from './history'
 
@@ -43,6 +45,7 @@ function App() {
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
+  const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const saveTimeoutRef = useRef<number | null>(null)
   const historySaveTimeoutRef = useRef<number | null>(null)
@@ -51,6 +54,9 @@ function App() {
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
+
+  // Selection for active scene (stored separately from items)
+  const selectedIds = activeSceneId ? (selectionMap.get(activeSceneId) ?? []) : []
 
   // History for active scene
   const activeHistory = activeSceneId ? historyMap.get(activeSceneId) : null
@@ -85,8 +91,9 @@ function App() {
           setOpenScenes([defaultScene])
           setActiveSceneId(defaultScene.id)
           lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
-          // Initialize empty history for new scene
+          // Initialize empty history and selection for new scene
           setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
+          setSelectionMap(new Map([[defaultScene.id, []]]))
         } else {
           // Load all scenes and their histories
           const scenesWithHistory = await Promise.all(
@@ -105,12 +112,15 @@ function App() {
           )
           // Mark all loaded scenes as saved
           const newHistoryMap = new Map<string, HistoryStack>()
+          const newSelectionMap = new Map<string, string[]>()
           scenesWithHistory.forEach(({ scene, history }) => {
             lastSavedRef.current.set(scene.id, JSON.stringify(scene))
             newHistoryMap.set(scene.id, history)
+            newSelectionMap.set(scene.id, []) // Start with empty selection
           })
           setOpenScenes(scenesWithHistory.map(({ scene }) => scene))
           setHistoryMap(newHistoryMap)
+          setSelectionMap(newSelectionMap)
           setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
         }
       } catch (error) {
@@ -121,6 +131,7 @@ function App() {
         setActiveSceneId(defaultScene.id)
         lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
         setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
+        setSelectionMap(new Map([[defaultScene.id, []]]))
       } finally {
         setIsLoading(false)
       }
@@ -206,39 +217,57 @@ function App() {
   const handleUndo = useCallback(() => {
     if (!activeSceneId || !activeHistory?.canUndo()) return
 
-    const currentItems = activeScene?.items ?? []
-    const newItems = activeHistory.undo(currentItems)
-    if (!newItems) return
+    const currentState: HistoryState = {
+      items: activeScene?.items ?? [],
+      selectedIds: selectionMap.get(activeSceneId) ?? [],
+    }
+    const newState = activeHistory.undo(currentState)
+    if (!newState) return
 
     // Update scene items directly (without creating a new history entry)
     setOpenScenes((prev) =>
       prev.map((scene) =>
         scene.id === activeSceneId
-          ? { ...scene, items: newItems, modifiedAt: new Date().toISOString() }
+          ? { ...scene, items: newState.items, modifiedAt: new Date().toISOString() }
           : scene
       )
     )
+    // Update selection state
+    setSelectionMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(activeSceneId, newState.selectedIds)
+      return newMap
+    })
     setHistoryVersion((v) => v + 1)
-  }, [activeSceneId, activeHistory, activeScene])
+  }, [activeSceneId, activeHistory, activeScene, selectionMap])
 
   // Redo handler
   const handleRedo = useCallback(() => {
     if (!activeSceneId || !activeHistory?.canRedo()) return
 
-    const currentItems = activeScene?.items ?? []
-    const newItems = activeHistory.redo(currentItems)
-    if (!newItems) return
+    const currentState: HistoryState = {
+      items: activeScene?.items ?? [],
+      selectedIds: selectionMap.get(activeSceneId) ?? [],
+    }
+    const newState = activeHistory.redo(currentState)
+    if (!newState) return
 
     // Update scene items directly (without creating a new history entry)
     setOpenScenes((prev) =>
       prev.map((scene) =>
         scene.id === activeSceneId
-          ? { ...scene, items: newItems, modifiedAt: new Date().toISOString() }
+          ? { ...scene, items: newState.items, modifiedAt: new Date().toISOString() }
           : scene
       )
     )
+    // Update selection state
+    setSelectionMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(activeSceneId, newState.selectedIds)
+      return newMap
+    })
     setHistoryVersion((v) => v + 1)
-  }, [activeSceneId, activeHistory, activeScene])
+  }, [activeSceneId, activeHistory, activeScene, selectionMap])
 
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
@@ -282,30 +311,21 @@ function App() {
     [activeSceneId]
   )
 
-  // Helper to update items without marking as modified (for selection changes)
-  const updateActiveSceneItemsSelectionOnly = useCallback(
-    (updater: (items: CanvasItem[]) => CanvasItem[]) => {
-      setOpenScenes((prev) =>
-        prev.map((scene) =>
-          scene.id === activeSceneId
-            ? { ...scene, items: updater(scene.items) }
-            : scene
-        )
-      )
-    },
-    [activeSceneId]
-  )
-
   // Scene management
   const addScene = useCallback(() => {
     const newScene = createScene(`Scene ${openScenes.length + 1}`)
     lastSavedRef.current.set(newScene.id, JSON.stringify(newScene))
     setOpenScenes((prev) => [...prev, newScene])
     setActiveSceneId(newScene.id)
-    // Initialize empty history for new scene
+    // Initialize empty history and selection for new scene
     setHistoryMap((prev) => {
       const newMap = new Map(prev)
       newMap.set(newScene.id, new HistoryStack())
+      return newMap
+    })
+    setSelectionMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(newScene.id, [])
       return newMap
     })
   }, [openScenes.length])
@@ -510,44 +530,39 @@ function App() {
       const hasModel = 'model' in changes &&
         (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
 
-      // Skip history for selection changes
-      const isSelectionOnly = Object.keys(changes).every((k) => k === 'selected')
-
-      if (!isSelectionOnly) {
-        if (hasText && item.type === 'text') {
-          // Only record if text actually changed
-          if (item.text !== changes.text) {
-            pushChange(new UpdateTextChange(id, item.text, changes.text as string))
-          }
-        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
-          const newLabel = ('label' in changes ? changes.label : item.label) as string
-          const newText = ('text' in changes ? changes.text : item.text) as string
-          // Only record if label or text actually changed
-          if (item.label !== newLabel || item.text !== newText) {
-            pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
-          }
-        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
-          // Only record if model actually changed
-          if (item.model !== changes.model) {
-            pushChange(new UpdateModelChange(id, item.model, changes.model as string))
-          }
-        } else if (hasTransform) {
-          const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
-          if (item.type === 'image') {
-            Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation })
-          }
-          const newTransform = { ...oldTransform }
-          if ('x' in changes) newTransform.x = changes.x as number
-          if ('y' in changes) newTransform.y = changes.y as number
-          if ('width' in changes) newTransform.width = changes.width as number
-          if ('height' in changes) newTransform.height = changes.height as number
-          if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
-          if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
-          if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
-          // Only record if transform actually changed
-          if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
-            pushChange(new TransformObjectChange(id, oldTransform, newTransform))
-          }
+      if (hasText && item.type === 'text') {
+        // Only record if text actually changed
+        if (item.text !== changes.text) {
+          pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+        }
+      } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+        const newLabel = ('label' in changes ? changes.label : item.label) as string
+        const newText = ('text' in changes ? changes.text : item.text) as string
+        // Only record if label or text actually changed
+        if (item.label !== newLabel || item.text !== newText) {
+          pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+        }
+      } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+        // Only record if model actually changed
+        if (item.model !== changes.model) {
+          pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+        }
+      } else if (hasTransform) {
+        const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
+        if (item.type === 'image') {
+          Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation })
+        }
+        const newTransform = { ...oldTransform }
+        if ('x' in changes) newTransform.x = changes.x as number
+        if ('y' in changes) newTransform.y = changes.y as number
+        if ('width' in changes) newTransform.width = changes.width as number
+        if ('height' in changes) newTransform.height = changes.height as number
+        if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
+        if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
+        if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
+        // Only record if transform actually changed
+        if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
+          pushChange(new TransformObjectChange(id, oldTransform, newTransform))
         }
       }
 
@@ -561,21 +576,45 @@ function App() {
   )
 
   const deleteSelected = useCallback(() => {
+    if (!activeSceneId) return
+    // Get currently selected items
+    const currentSelectedIds = selectionMap.get(activeSceneId) ?? []
+    const selectedItems = items.filter((item) => currentSelectedIds.includes(item.id))
+
     // Record deletion for each selected item
-    const selectedItems = items.filter((item) => item.selected)
     selectedItems.forEach((item) => {
       pushChange(new DeleteObjectChange(item))
     })
-    updateActiveSceneItems((prev) => prev.filter((item) => !item.selected))
-  }, [updateActiveSceneItems, items, pushChange])
+
+    // Clear selection and remove items
+    setSelectionMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(activeSceneId, [])
+      return newMap
+    })
+    updateActiveSceneItems((prev) => prev.filter((item) => !currentSelectedIds.includes(item.id)))
+  }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
 
   const selectItems = useCallback(
     (ids: string[]) => {
-      updateActiveSceneItemsSelectionOnly((prev) =>
-        prev.map((item) => ({ ...item, selected: ids.includes(item.id) }))
-      )
+      if (!activeSceneId) return
+
+      // Get current selection to record the change
+      const oldSelectedIds = selectionMap.get(activeSceneId) ?? []
+
+      // Only record change if selection actually changed
+      if (JSON.stringify(oldSelectedIds.sort()) !== JSON.stringify([...ids].sort())) {
+        pushChange(new SelectionChange(oldSelectedIds, ids))
+      }
+
+      // Update selection state
+      setSelectionMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(activeSceneId, ids)
+        return newMap
+      })
     },
-    [updateActiveSceneItemsSelectionOnly]
+    [activeSceneId, selectionMap, pushChange]
   )
 
   const handleRunPrompt = useCallback(async (promptId: string) => {
@@ -586,7 +625,7 @@ function App() {
     setRunningPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = selectedItems.map((item) => {
@@ -658,7 +697,7 @@ function App() {
         return next
       })
     }
-  }, [items, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
@@ -668,7 +707,7 @@ function App() {
     setRunningImageGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = selectedItems.map((item) => {
@@ -760,7 +799,7 @@ function App() {
         return next
       })
     }
-  }, [items, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')
@@ -770,7 +809,7 @@ function App() {
     setRunningHtmlGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => item.selected && item.id !== promptId)
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
 
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
     const { blocks: spatialItems, imageMap } = convertItemsToSpatialJson(selectedItems)
@@ -825,7 +864,7 @@ function App() {
         return next
       })
     }
-  }, [items, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   if (isLoading) {
     return (
@@ -860,6 +899,7 @@ function App() {
       {activeScene ? (
         <InfiniteCanvas
           items={items}
+          selectedIds={selectedIds}
           onUpdateItem={updateItem}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}

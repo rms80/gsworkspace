@@ -2,6 +2,7 @@
 export type {
   ChangeRecord,
   ChangeRecordType,
+  HistoryState,
   SerializedChangeRecord,
   SerializedHistory,
   TransformData,
@@ -15,6 +16,7 @@ export {
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
+  SelectionChange,
   deserializeChangeRecord,
 } from './changeRecords'
 

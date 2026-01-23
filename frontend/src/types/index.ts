@@ -7,7 +7,6 @@ export interface BaseItem {
   id: string
   x: number
   y: number
-  selected?: boolean
 }
 
 export interface TextItem extends BaseItem {

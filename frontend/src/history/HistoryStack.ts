@@ -1,5 +1,4 @@
-import { CanvasItem } from '../types'
-import { ChangeRecord, SerializedHistory, SerializedChangeRecord } from './types'
+import { ChangeRecord, HistoryState, SerializedHistory, SerializedChangeRecord } from './types'
 import { deserializeChangeRecord } from './changeRecords'
 
 const MAX_HISTORY_SIZE = 100
@@ -40,30 +39,30 @@ export class HistoryStack {
 
   /**
    * Undo the current change
-   * @param items Current scene items
-   * @returns Updated scene items, or null if nothing to undo
+   * @param state Current scene state (items + selection)
+   * @returns Updated scene state, or null if nothing to undo
    */
-  undo(items: CanvasItem[]): CanvasItem[] | null {
+  undo(state: HistoryState): HistoryState | null {
     if (!this.canUndo()) return null
 
     const record = this.records[this.currentIndex]
     this.currentIndex--
 
-    return record.reverse(items)
+    return record.reverse(state)
   }
 
   /**
    * Redo the next change
-   * @param items Current scene items
-   * @returns Updated scene items, or null if nothing to redo
+   * @param state Current scene state (items + selection)
+   * @returns Updated scene state, or null if nothing to redo
    */
-  redo(items: CanvasItem[]): CanvasItem[] | null {
+  redo(state: HistoryState): HistoryState | null {
     if (!this.canRedo()) return null
 
     this.currentIndex++
     const record = this.records[this.currentIndex]
 
-    return record.apply(items)
+    return record.apply(state)
   }
 
   /**
