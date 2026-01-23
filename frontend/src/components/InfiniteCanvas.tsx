@@ -200,11 +200,30 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
 
   // Handle paste from clipboard
   const handlePaste = async (e: ClipboardEvent, pasteX?: number, pasteY?: number) => {
-    // Don't paste if we're editing text
-    if (editingTextId) return
+    // Don't paste if we're editing text in an overlay
+    if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
+    // Don't paste if focus is in an input/textarea
+    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
 
     const clipboardItems = e.clipboardData?.items
     if (!clipboardItems) return
+
+    // Check if we have a single selected text-based item to paste into
+    const selectedItems = items.filter((item) => item.selected)
+    const selectedTextItem = selectedItems.length === 1 &&
+      (selectedItems[0].type === 'text' ||
+       selectedItems[0].type === 'prompt' ||
+       selectedItems[0].type === 'image-gen-prompt' ||
+       selectedItems[0].type === 'html-gen-prompt')
+      ? selectedItems[0] : null
+
+    // Check for text first if we have a selected text-based item
+    const text = e.clipboardData?.getData('text/plain')
+    if (text && selectedTextItem) {
+      e.preventDefault()
+      onUpdateItem(selectedTextItem.id, { text })
+      return
+    }
 
     // Determine paste position
     const x = pasteX ?? mousePos.x
@@ -233,8 +252,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
       }
     }
 
-    // Check for text
-    const text = e.clipboardData?.getData('text/plain')
+    // Check for text - create new text item
     if (text) {
       e.preventDefault()
       onAddTextAt(canvasPos.x, canvasPos.y, text)
@@ -246,7 +264,37 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
     const listener = (e: ClipboardEvent) => handlePaste(e)
     document.addEventListener('paste', listener)
     return () => document.removeEventListener('paste', listener)
-  }, [editingTextId, mousePos, stagePos, stageScale, onAddTextAt, onAddImageAt])
+  }, [editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId, mousePos, stagePos, stageScale, onAddTextAt, onAddImageAt, items, onUpdateItem])
+
+  // Handle Ctrl+C to copy text from selected items
+  useEffect(() => {
+    const handleCopy = (e: ClipboardEvent) => {
+      // Don't interfere if focus is in an input/textarea
+      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
+      // Don't interfere if editing
+      if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
+
+      const selectedItems = items.filter((item) => item.selected)
+      if (selectedItems.length !== 1) return
+
+      const item = selectedItems[0]
+      let textToCopy: string | null = null
+
+      if (item.type === 'text') {
+        textToCopy = item.text
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+        textToCopy = item.text
+      }
+
+      if (textToCopy) {
+        e.preventDefault()
+        e.clipboardData?.setData('text/plain', textToCopy)
+      }
+    }
+
+    document.addEventListener('copy', handleCopy)
+    return () => document.removeEventListener('copy', handleCopy)
+  }, [items, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
 
   // Track mouse position globally
   useEffect(() => {
