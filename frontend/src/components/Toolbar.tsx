@@ -4,18 +4,14 @@ interface ToolbarProps {
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
-  onAddTestHtml: () => void
-  onDelete: () => void
-  onSendToLLM: () => void
   onUndo: () => void
   onRedo: () => void
-  hasSelection: boolean
   canUndo: boolean
   canRedo: boolean
   saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddTestHtml, onDelete, onSendToLLM, onUndo, onRedo, hasSelection, canUndo, canRedo, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onUndo, onRedo, canUndo, canRedo, saveStatus }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -117,20 +113,6 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
       >
         HTML Gen
       </button>
-      <button
-        onClick={onAddTestHtml}
-        style={{
-          padding: '4px 12px',
-          backgroundColor: '#e8f5e9',
-          border: '1px solid #4caf50',
-          borderRadius: '4px',
-          cursor: 'pointer',
-          fontFamily: 'inherit',
-          fontSize: 'inherit',
-        }}
-      >
-        Test HTML
-      </button>
       <div style={{ width: '1px', height: '24px', backgroundColor: '#ccc', margin: '0 5px' }} />
       <button
         onClick={onUndo}
@@ -179,15 +161,6 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
         >
           {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save error'}
         </span>
-      )}
-      <div style={{ flex: 1 }} />
-      {hasSelection && (
-        <>
-          <button onClick={onDelete}>Delete Selected</button>
-          <button onClick={onSendToLLM} style={{ backgroundColor: '#4a90d9', color: 'white' }}>
-            Send to LLM
-          </button>
-        </>
       )}
     </div>
   )

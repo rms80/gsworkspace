@@ -448,45 +448,6 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addTestHtmlItem = useCallback(() => {
-    const testHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 16px;
-      margin: 0;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-    }
-    h1 { margin: 0 0 12px 0; font-size: 18px; }
-    p { margin: 0; font-size: 14px; line-height: 1.5; }
-    .highlight { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; }
-  </style>
-</head>
-<body>
-  <h1>HTML View Test</h1>
-  <p>This is a <span class="highlight">formatted HTML</span> content block.</p>
-  <p>It supports <strong>bold</strong>, <em>italic</em>, and other HTML elements.</p>
-</body>
-</html>
-    `.trim()
-
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'html',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
-      html: testHtml,
-      width: 300,
-      height: 200,
-    }
-    pushChange(new AddObjectChange(newItem))
-    updateActiveSceneItems((prev) => [...prev, newItem])
-  }, [updateActiveSceneItems, pushChange])
-
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
       const newItem: CanvasItem = {
@@ -603,10 +564,6 @@ function App() {
     },
     [updateActiveSceneItems]
   )
-
-  const getSelectedItems = useCallback(() => {
-    return items.filter((item) => item.selected)
-  }, [items])
 
   const handleRunPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
@@ -838,6 +795,7 @@ function App() {
         html: html,
         width: 800,
         height: 600,
+        zoom: 0.75,
       }
       updateActiveSceneItems((prev) => [...prev, newItem])
     } catch (error) {
@@ -869,16 +827,8 @@ function App() {
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
-        onAddTestHtml={addTestHtmlItem}
-        onDelete={deleteSelected}
-        onSendToLLM={() => {
-          const selected = getSelectedItems()
-          console.log('Send to LLM:', selected)
-          // TODO: Implement LLM integration
-        }}
         onUndo={handleUndo}
         onRedo={handleRedo}
-        hasSelection={items.some((item) => item.selected)}
         canUndo={canUndo}
         canRedo={canRedo}
         saveStatus={saveStatus}
