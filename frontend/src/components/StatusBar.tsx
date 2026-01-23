@@ -1,11 +1,31 @@
+export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
+
 interface StatusBarProps {
   onToggleDebug: () => void
   debugOpen: boolean
+  saveStatus: SaveStatus
 }
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus }: StatusBarProps) {
+  const getSaveStatusDisplay = () => {
+    switch (saveStatus) {
+      case 'unsaved':
+        return { text: 'Unsaved', bg: '#f59e0b', color: '#fff' }
+      case 'saving':
+        return { text: 'Saving...', bg: '#6b7280', color: '#fff' }
+      case 'saved':
+        return { text: 'Saved', bg: '#22c55e', color: '#fff' }
+      case 'error':
+        return { text: 'Save Error', bg: '#ef4444', color: '#fff' }
+      default:
+        return null
+    }
+  }
+
+  const statusDisplay = getSaveStatusDisplay()
+
   return (
     <div
       style={{
@@ -26,7 +46,22 @@ function StatusBar({ onToggleDebug, debugOpen }: StatusBarProps) {
       }}
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
+        {statusDisplay && (
+          <span
+            style={{
+              padding: '2px 12px',
+              backgroundColor: statusDisplay.bg,
+              color: statusDisplay.color,
+              borderRadius: 3,
+              fontSize: 11,
+              fontWeight: 500,
+            }}
+          >
+            {statusDisplay.text}
+          </span>
+        )}
+      </div>
       <button
         onClick={onToggleDebug}
         style={{

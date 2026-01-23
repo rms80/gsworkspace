@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
-import StatusBar from './components/StatusBar'
+import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
@@ -35,7 +35,7 @@ function createScene(name: string): Scene {
 function App() {
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
@@ -138,6 +138,9 @@ function App() {
     // Skip if nothing changed
     if (sceneJson === lastSaved) return
 
+    // Mark as unsaved immediately when changes detected
+    setSaveStatus('unsaved')
+
     // Clear any pending save
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current)
@@ -150,11 +153,9 @@ function App() {
         await saveScene(activeScene)
         lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
         setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 1500)
       } catch (error) {
         console.error('Failed to auto-save scene:', error)
         setSaveStatus('error')
-        setTimeout(() => setSaveStatus('idle'), 3000)
       }
     }, 1000)
 
@@ -281,6 +282,20 @@ function App() {
     [activeSceneId]
   )
 
+  // Helper to update items without marking as modified (for selection changes)
+  const updateActiveSceneItemsSelectionOnly = useCallback(
+    (updater: (items: CanvasItem[]) => CanvasItem[]) => {
+      setOpenScenes((prev) =>
+        prev.map((scene) =>
+          scene.id === activeSceneId
+            ? { ...scene, items: updater(scene.items) }
+            : scene
+        )
+      )
+    },
+    [activeSceneId]
+  )
+
   // Scene management
   const addScene = useCallback(() => {
     const newScene = createScene(`Scene ${openScenes.length + 1}`)
@@ -320,11 +335,9 @@ function App() {
         await saveScene(updatedScene)
         lastSavedRef.current.set(id, JSON.stringify(updatedScene))
         setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 1500)
       } catch (error) {
         console.error('Failed to save renamed scene:', error)
         setSaveStatus('error')
-        setTimeout(() => setSaveStatus('idle'), 3000)
       }
     }
   }, [])
@@ -558,11 +571,11 @@ function App() {
 
   const selectItems = useCallback(
     (ids: string[]) => {
-      updateActiveSceneItems((prev) =>
+      updateActiveSceneItemsSelectionOnly((prev) =>
         prev.map((item) => ({ ...item, selected: ids.includes(item.id) }))
       )
     },
-    [updateActiveSceneItems]
+    [updateActiveSceneItemsSelectionOnly]
   )
 
   const handleRunPrompt = useCallback(async (promptId: string) => {
@@ -834,7 +847,6 @@ function App() {
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
-        saveStatus={saveStatus}
       />
       <TabBar
         scenes={openScenes}
@@ -874,6 +886,7 @@ function App() {
       <StatusBar
         onToggleDebug={() => setDebugPanelOpen((prev) => !prev)}
         debugOpen={debugPanelOpen}
+        saveStatus={saveStatus}
       />
     </div>
   )

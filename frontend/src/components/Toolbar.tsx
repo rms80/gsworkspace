@@ -8,10 +8,9 @@ interface ToolbarProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
-  saveStatus: 'idle' | 'saving' | 'saved' | 'error'
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onUndo, onRedo, canUndo, canRedo, saveStatus }: ToolbarProps) {
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onUndo, onRedo, canUndo, canRedo }: ToolbarProps) {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -148,20 +147,6 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
       >
         Redo
       </button>
-      {saveStatus !== 'idle' && (
-        <span
-          style={{
-            padding: '4px 12px',
-            backgroundColor: saveStatus === 'saved' ? '#d4edda' : saveStatus === 'error' ? '#f8d7da' : '#fff',
-            border: '1px solid #ccc',
-            borderRadius: '4px',
-            fontSize: '13px',
-            color: saveStatus === 'error' ? '#721c24' : '#666',
-          }}
-        >
-          {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : 'Save error'}
-        </span>
-      )}
     </div>
   )
 }
