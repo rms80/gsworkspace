@@ -36,6 +36,8 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
         alignItems: 'center',
         gap: '10px',
         backgroundColor: '#f5f5f5',
+        position: 'relative',
+        zIndex: 50,
       }}
     >
       <button

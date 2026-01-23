@@ -91,6 +91,8 @@ function TabBar({
           gap: '4px',
           overflowX: 'auto',
           minHeight: '40px',
+          position: 'relative',
+          zIndex: 50,
         }}
         onClick={handleCloseContextMenu}
       >

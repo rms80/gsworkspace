@@ -1602,6 +1602,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                 height: height * stageScale,
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
+                zIndex: 10,
               }}
             >
               <iframe
