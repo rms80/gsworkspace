@@ -636,14 +636,22 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     })
   }
 
+  // Handle click on empty canvas to clear selection
+  // Using onClick instead of mouseDown so dragging (panning) doesn't clear selection
+  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (e.target !== stageRef.current) return
+    // Don't clear if Ctrl is held (user might be doing marquee)
+    if (e.evt.ctrlKey || e.evt.metaKey) return
+    // Clicking on empty canvas clears selection
+    onSelectItems([])
+  }
+
   // Selection rectangle (Ctrl + drag)
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.target !== stageRef.current) return
 
     // Only start marquee selection if Ctrl is held
     if (!e.evt.ctrlKey && !e.evt.metaKey) {
-      // Clicking on empty canvas without Ctrl clears selection
-      onSelectItems([])
       return
     }
 
@@ -944,6 +952,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           }
         }}
         onWheel={handleWheel}
+        onClick={handleStageClick}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
