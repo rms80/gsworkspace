@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
-import Toolbar from './components/Toolbar'
+import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
@@ -385,7 +385,7 @@ function App() {
       x: 100 + Math.random() * 200,
       y: 100 + Math.random() * 200,
       text: 'Double-click to edit',
-      fontSize: 16,
+      fontSize: 14,
       width: 200,
       height: 100,
     }
@@ -469,7 +469,7 @@ function App() {
         x,
         y,
         text,
-        fontSize: 16,
+        fontSize: 14,
         width: 200,
         height: 100,
       }
@@ -837,7 +837,7 @@ function App() {
 
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Toolbar
+      <MenuBar
         onAddText={addTextItem}
         onAddImage={addImageItem}
         onAddPrompt={addPromptItem}
