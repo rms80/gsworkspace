@@ -61,3 +61,88 @@ as newly pasted images start as data URLs.
 
 
 
+## HTMLGen Object and Functionality
+
+The goal of this task is to create a new type of object in the scene, called "HTML Gen",
+that calls an LLM to generate a small webpage from image and text content. The main
+use of this is to generate help/tutorial pages for other applications, I will drop
+in screenshots and write basic text (bullet points, etc) and ask the LLM to generate
+a formatted fleshed-out webpage. 
+
+The HTMLGen object will be similar to the existing Prompt or ImageGen objects.
+However in addition to the user-editable prompt, it will have a predefined system prompt.
+The system prompt will be stored in a separate text file on the server for now.
+
+The query to the LLM will include the user and system prompts, as well as information
+about the selected image and text objects. This needs to include spatial information
+so that the web page can be laid out properly. Lets try sending this as json, ie
+the input objects will be converted to json with separate interspersed blocks for the text and
+images. The blocks should be sorted by Y-height in the canvas. For images we can send
+the position and size information as well. Ignore rotation for now. Put the code
+that does this into a separate utility function.
+
+One complication will be how to send the images to the LLM and have it return references
+to the images in the HTML. In the json, include the server-side S3 URL for each image as a field.
+
+Do this work in a separate feature branch and create a PR when you are done.
+
+### Task List
+
+#### 1. Define Types
+- [ ] Add `HTMLGenPromptItem` interface to `frontend/src/types/index.ts`
+  - Fields: `type: 'html-gen-prompt'`, `label`, `text` (user prompt), `fontSize`, `width`, `height`, `model` (LLMModel)
+- [ ] Add `HTMLGenPromptItem` to the `CanvasItem` union type
+
+#### 2. Create Spatial JSON Utility (Frontend)
+- [ ] Create new utility file `frontend/src/utils/spatialJson.ts`
+- [ ] Implement `convertItemsToSpatialJson(items: CanvasItem[])` function that:
+  - Filters to only TextItem and ImageItem types
+  - Sorts items by Y position (top to bottom)
+  - Returns JSON array with blocks containing:
+    - For text: `{ type: 'text', content: string, position: { x, y }, size: { width, height } }`
+    - For images: `{ type: 'image', s3Url: string, position: { x, y }, size: { width, height } }`. Bake the scale into the width and height.
+
+#### 3. Create System Prompt Storage (Backend)
+- [ ] Create directory `backend/prompts/` for storing system prompts
+- [ ] Create `backend/prompts/html-gen-system.txt` with the HTML generation system prompt
+  - Instruct LLM to generate clean, semantic HTML
+  - Include instructions for using provided image URLs
+  - Specify layout guidance based on spatial positions
+
+#### 4. Backend API Endpoint
+- [ ] Add route `POST /api/llm/generate-html` to `backend/src/routes/llm.ts`
+  - Accept: `{ spatialItems: SpatialItem[], userPrompt: string, model: LLMModel }`
+  - Load system prompt from file
+  - Combine system prompt + spatial JSON + user prompt
+  - Call LLM service
+  - Return: `{ html: string }`
+
+#### 5. Frontend API Function
+- [ ] Add `generateHtml()` function to `frontend/src/api/llm.ts`
+  - Parameters: `items: CanvasItem[]`, `prompt: string`, `model: LLMModel`
+  - Use `convertItemsToSpatialJson()` to prepare items
+  - Call `/api/llm/generate-html` endpoint
+  - Return the generated HTML string
+
+#### 6. HTMLGen Canvas Component
+- [ ] Create or update component to render `HTMLGenPromptItem` on canvas
+  - Similar styling to existing PromptItem (editable text area, label)
+  - Include model selector dropdown
+  - Add "Generate" button
+
+#### 7. Toolbar Integration
+- [ ] Add "HTML Gen" button to `frontend/src/components/Toolbar.tsx`
+- [ ] Implement handler to create new HTMLGenPromptItem at canvas center
+
+#### 8. Generation Flow in App.tsx
+- [ ] Add handler for HTMLGen generation trigger
+  - Get selected items (excluding the HTMLGenPromptItem itself)
+  - Call `generateHtml()` with selected items and prompt
+  - Create new `HtmlItem` with the result, positioned to the right of the prompt
+
+#### 9. Image S3 URL Handling
+- [ ] Ensure images have S3 URLs available (may need to upload on-demand before generation)
+- [ ] Update `convertItemsToSpatialJson()` to extract/use S3 URLs from ImageItem.src or upload if needed
+
+
+

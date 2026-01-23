@@ -100,5 +100,48 @@ Had it fix UX issures around the embedded web views (the iframe causes various c
 No problems!
 
 
+*Jan 23*
+
+Todays main task is to implement the LLM webpage generation given the images and text blocks in the canvas.
+I wrote a detailed description of this feature in the TODO.md and then asked it to generate a task list. 
+My description was a mix of concept, UX description, and notes on particular implementation aspects.
+It generated a very detailed set of TODO steps (9 sections each w/ multiple steps).
+I did some light editing and set it to it.
+
+This more or less worked. There was an issue with sending the images where it sends too many tokens.
+For now it stopped sending the actual images and just sends their description, we need to revisit this.
+And it forgot to implement save/load and undo/redo for the HTMLGen objects (again).
+
+[[ At this point I had approximately achieved what I set out to do in the description above. The system
+prompt for the html generation needs work, and there are workflow improvements that will make it easier
+to actually use this, and lots of possible UX improvements. But it's a very functional MVP (way, way past 
+what I would have done in a C# prototype). It's been about 8-10 hours total wallclock time that I have
+been "working" on this project (mostly doing something else while CC cooked). I have not written a line
+of code, or reviewed any of it before committing (I have skimmed a bit afterwards though). 
+I had to go into the debugger twice, and JS console a few times. Wild!! ]]
+
+I wasn't sure what it was actually sending for the HTMLGen so I had it make a debug view, launched from
+a new status bar. It had a bit of trouble with this, I think it was always "working" but it took a few
+iterations for it to get the UI layout to work.
+
+Next I had it add zoom support to the embedded web views. It suggested 3 possible ways to do this.
+I let it do the one it wanted to do. Works OK.
+
+Next I did a bunch of UI improvements. Did these by prompting one-by-one and testing. Mostly got things
+right on the first try, a few times we had to iterate. App looks much cleaner now, and UX is nicer.
+
+Discovered some weirdness around the selection system. Figured out it was storing selection state as part of objects.
+I gave it paragraph description of how I wanted the selection system to work at the code level and asked it to refactor.
+Seems to have done what I asked w/o issues.
+
+
+
+
+
+
+
+
+
+
 
 
