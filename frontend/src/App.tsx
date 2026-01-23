@@ -583,6 +583,8 @@ function App() {
         return { type: 'image' as const, src: item.src }
       } else if (item.type === 'prompt') {
         return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      } else if (item.type === 'html') {
+        return { type: 'text' as const, text: `[HTML Content]:\n${item.html}` }
       }
       return { type: 'text' as const, text: '' }
     }).filter((item) => item.text || item.src)
