@@ -44,6 +44,7 @@ interface StoredImageGenPromptItem extends StoredItemBase {
 interface StoredHtmlItem extends StoredItemBase {
   type: 'html'
   file: string // reference to .html file
+  zoom?: number
 }
 
 interface StoredHtmlGenPromptItem extends StoredItemBase {
@@ -166,6 +167,7 @@ router.post('/:id', async (req, res) => {
           width: item.width,
           height: item.height,
           file: htmlFile,
+          zoom: item.zoom,
         })
       }
     }
@@ -290,6 +292,7 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             html: html || '',
+            zoom: item.zoom,
           }
         }
       })

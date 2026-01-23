@@ -1315,6 +1315,8 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
             )
           } else if (item.type === 'html') {
             const headerHeight = 24
+            const zoom = item.zoom ?? 1
+            const zoomButtonWidth = 24
             return (
               <Group
                 key={item.id}
@@ -1410,6 +1412,72 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
                   strokeWidth={item.selected ? 2 : 1}
                   cornerRadius={[4, 4, 0, 0]}
                 />
+                {/* Zoom out button */}
+                <Group
+                  x={item.width - zoomButtonWidth * 3 - 8}
+                  y={2}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    const newZoom = Math.max(0.25, zoom - 0.25)
+                    onUpdateItem(item.id, { zoom: newZoom })
+                  }}
+                >
+                  <Rect
+                    width={zoomButtonWidth}
+                    height={20}
+                    fill="#888"
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text="-"
+                    width={zoomButtonWidth}
+                    height={20}
+                    fontSize={14}
+                    fontStyle="bold"
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
+                {/* Zoom level display */}
+                <Text
+                  x={item.width - zoomButtonWidth * 2 - 6}
+                  y={2}
+                  text={`${Math.round(zoom * 100)}%`}
+                  width={zoomButtonWidth}
+                  height={20}
+                  fontSize={11}
+                  fill="#555"
+                  align="center"
+                  verticalAlign="middle"
+                />
+                {/* Zoom in button */}
+                <Group
+                  x={item.width - zoomButtonWidth - 4}
+                  y={2}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    const newZoom = Math.min(3, zoom + 0.25)
+                    onUpdateItem(item.id, { zoom: newZoom })
+                  }}
+                >
+                  <Rect
+                    width={zoomButtonWidth}
+                    height={20}
+                    fill="#888"
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text="+"
+                    width={zoomButtonWidth}
+                    height={20}
+                    fontSize={14}
+                    fontStyle="bold"
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
                 {/* Content area background */}
                 <Rect
                   y={headerHeight}
@@ -1516,6 +1584,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
         .map((item) => {
           if (item.type !== 'html') return null
           const headerHeight = 24
+          const zoom = item.zoom ?? 1
           // Use real-time transform state if available, otherwise use item state
           const transform = htmlItemTransforms.get(item.id)
           const x = transform?.x ?? item.x
@@ -1523,23 +1592,33 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
           return (
-            <iframe
+            <div
               key={`html-${item.id}`}
-              srcDoc={item.html}
-              sandbox="allow-same-origin allow-scripts"
               style={{
                 position: 'absolute',
                 top: (y + headerHeight) * stageScale + stagePos.y,
                 left: x * stageScale + stagePos.x,
                 width: width * stageScale,
                 height: height * stageScale,
-                border: 'none',
+                overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
-                // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
-                pointerEvents: (item.selected || isAnyDragActive) ? 'none' : 'auto',
-                background: '#fff',
               }}
-            />
+            >
+              <iframe
+                srcDoc={item.html}
+                sandbox="allow-same-origin allow-scripts"
+                style={{
+                  width: (width * stageScale) / zoom,
+                  height: (height * stageScale) / zoom,
+                  border: 'none',
+                  transform: `scale(${zoom})`,
+                  transformOrigin: 'top left',
+                  // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
+                  pointerEvents: (item.selected || isAnyDragActive) ? 'none' : 'auto',
+                  background: '#fff',
+                }}
+              />
+            </div>
           )
         })}
 

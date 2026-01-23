@@ -57,6 +57,7 @@ export interface HtmlItem extends BaseItem {
   html: string
   width: number
   height: number
+  zoom?: number  // default 1.0
 }
 
 export interface HTMLGenPromptItem extends BaseItem {
