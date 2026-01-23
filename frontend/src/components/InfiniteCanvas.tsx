@@ -27,6 +27,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionStartRef = useRef({ x: 0, y: 0 })
+  // Middle-mouse panning
+  const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false)
+  const middleMouseStartRef = useRef({ x: 0, y: 0, stageX: 0, stageY: 0 })
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const textTransformerRef = useRef<Konva.Transformer>(null)
@@ -395,6 +398,60 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     return () => document.removeEventListener('mousemove', handleMouseMove)
   }, [])
 
+  // Middle-mouse panning - use native events on container to intercept before Konva
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleMiddleMouseDown = (e: MouseEvent) => {
+      if (e.button !== 1) return // Only middle mouse
+      e.preventDefault()
+      e.stopPropagation()
+      setIsMiddleMousePanning(true)
+      setIsAnyDragActive(true)
+      middleMouseStartRef.current = {
+        x: e.clientX,
+        y: e.clientY,
+        stageX: stagePos.x,
+        stageY: stagePos.y,
+      }
+      if (config.features.hideHtmlDuringTransform) {
+        setIsViewportTransforming(true)
+      }
+    }
+
+    const handleMiddleMouseMove = (e: MouseEvent) => {
+      if (!isMiddleMousePanning) return
+      const dx = e.clientX - middleMouseStartRef.current.x
+      const dy = e.clientY - middleMouseStartRef.current.y
+      setStagePos({
+        x: middleMouseStartRef.current.stageX + dx,
+        y: middleMouseStartRef.current.stageY + dy,
+      })
+    }
+
+    const handleMiddleMouseUp = (e: MouseEvent) => {
+      if (e.button !== 1) return // Only middle mouse
+      if (!isMiddleMousePanning) return
+      setIsMiddleMousePanning(false)
+      setIsAnyDragActive(false)
+      if (config.features.hideHtmlDuringTransform) {
+        setIsViewportTransforming(false)
+      }
+    }
+
+    // Use capture phase to intercept before Konva handles the events
+    container.addEventListener('mousedown', handleMiddleMouseDown, { capture: true })
+    document.addEventListener('mousemove', handleMiddleMouseMove)
+    document.addEventListener('mouseup', handleMiddleMouseUp)
+
+    return () => {
+      container.removeEventListener('mousedown', handleMiddleMouseDown, { capture: true })
+      document.removeEventListener('mousemove', handleMiddleMouseMove)
+      document.removeEventListener('mouseup', handleMiddleMouseUp)
+    }
+  }, [isMiddleMousePanning, stagePos.x, stagePos.y])
+
   // Handle Delete/Backspace keys
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -648,6 +705,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
 
   // Selection rectangle (Ctrl + drag)
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Middle mouse is handled by native event listener at container level
+    if (e.evt.button === 1) return
+
     if (e.target !== stageRef.current) return
 
     // Only start marquee selection if Ctrl is held
@@ -671,6 +731,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   }
 
   const handleMouseMove = (_e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Middle-mouse panning is handled by native event listener
     if (!isSelecting) return
 
     const stage = stageRef.current
@@ -692,6 +753,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   }
 
   const handleMouseUp = () => {
+    // Middle-mouse panning is handled by native event listener
     if (!isSelecting || !selectionRect) {
       setIsSelecting(false)
       setSelectionRect(null)
