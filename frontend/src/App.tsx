@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
 import Toolbar from './components/Toolbar'
 import TabBar from './components/TabBar'
+import StatusBar from './components/StatusBar'
+import DebugPanel from './components/DebugPanel'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, ContentItem } from './api/llm'
@@ -38,6 +40,8 @@ function App() {
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
+  const [debugPanelOpen, setDebugPanelOpen] = useState(false)
+  const [debugContent, setDebugContent] = useState('')
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const saveTimeoutRef = useRef<number | null>(null)
@@ -798,6 +802,15 @@ function App() {
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
     const { blocks: spatialItems, imageMap } = convertItemsToSpatialJson(selectedItems)
 
+    // Update debug panel with request payload
+    const debugPayload = {
+      spatialItems,
+      userPrompt: promptItem.text,
+      model: promptItem.model,
+      imageMapKeys: Array.from(imageMap.keys()),
+    }
+    setDebugContent(JSON.stringify(debugPayload, null, 2))
+
     try {
       let html = await generateHtml(spatialItems, promptItem.text, promptItem.model)
 
@@ -899,6 +912,16 @@ function App() {
           No scene open. Click + to create a new scene.
         </div>
       )}
+      {debugPanelOpen && (
+        <DebugPanel
+          content={debugContent}
+          onClose={() => setDebugPanelOpen(false)}
+        />
+      )}
+      <StatusBar
+        onToggleDebug={() => setDebugPanelOpen((prev) => !prev)}
+        debugOpen={debugPanelOpen}
+      />
     </div>
   )
 }

@@ -66,14 +66,29 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   // Track when any drag/transform is in progress to disable iframe pointer events
   const [isAnyDragActive, setIsAnyDragActive] = useState(false)
 
-  // Handle window resize
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // Handle container resize
   useEffect(() => {
-    const handleResize = () => {
-      setStageSize({ width: window.innerWidth, height: window.innerHeight - 50 })
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect()
+        setStageSize({ width: rect.width, height: rect.height })
+      }
     }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    updateSize()
+    window.addEventListener('resize', updateSize)
+
+    // Use ResizeObserver for more accurate container size tracking
+    const resizeObserver = new ResizeObserver(updateSize)
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current)
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize)
+      resizeObserver.disconnect()
+    }
   }, [])
 
   // Pulse animation for running prompts
@@ -751,7 +766,7 @@ function InfiniteCanvas({ items, onUpdateItem, onSelectItems, onAddTextAt, onAdd
   const editingHtmlGenPrompt = getEditingHtmlGenPromptItem()
 
   return (
-    <div style={{ position: 'relative' }} onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div ref={containerRef} style={{ position: 'relative', flex: 1 }} onDragOver={handleDragOver} onDrop={handleDrop}>
       <Stage
         ref={stageRef}
         width={stageSize.width}
