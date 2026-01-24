@@ -25,12 +25,12 @@ Proposed flow:
 
 ### Implementation Tasks
 
-- [ ] Add `/api/upload-image` endpoint that accepts image data and returns S3 URL
-- [ ] Modify `addImageItem` to upload first, then add item with S3 URL
-- [ ] Update paste handler in `InfiniteCanvas.tsx` to upload before creating item
-- [ ] Update drag-drop handler similarly
+- [x] Add `/api/upload-image` endpoint that accepts image data and returns S3 URL (already existed)
+- [x] Update paste handler in `InfiniteCanvas.tsx` to upload before creating item
+- [x] Update drag-drop handler similarly
+- [x] Update context menu paste handler similarly
 - [ ] Consider showing upload progress indicator for large images
-- [ ] History records will now only store small S3 URLs instead of data URLs
+- [x] History records will now only store small S3 URLs instead of data URLs
 
 ### Benefits
 

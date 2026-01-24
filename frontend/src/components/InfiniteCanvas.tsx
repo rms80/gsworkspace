@@ -3,6 +3,7 @@ import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } fro
 import Konva from 'konva'
 import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
 import { config } from '../config'
+import { uploadImage } from '../api/images'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -242,12 +243,20 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         if (!blob) continue
 
         const reader = new FileReader()
-        reader.onload = (event) => {
+        reader.onload = async (event) => {
           const dataUrl = event.target?.result as string
           const img = new window.Image()
-          img.onload = () => {
+          img.onload = async () => {
             const scaled = scaleImageToViewport(img.width, img.height)
-            onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
+            try {
+              // Upload to S3 immediately to avoid storing large data URLs in memory
+              const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+              onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height)
+            } catch (err) {
+              console.error('Failed to upload image, using data URL:', err)
+              // Fallback to data URL if upload fails
+              onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
+            }
           }
           img.src = dataUrl
         }
@@ -492,13 +501,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       if (!file.type.startsWith('image/')) return
 
       const reader = new FileReader()
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         const dataUrl = event.target?.result as string
         const img = new window.Image()
-        img.onload = () => {
+        img.onload = async () => {
           const scaled = scaleImageToViewport(img.width, img.height)
-          // Offset multiple images so they don't stack exactly
-          onAddImageAt(canvasPos.x + index * 20, canvasPos.y + index * 20, dataUrl, scaled.width, scaled.height)
+          try {
+            // Upload to S3 immediately to avoid storing large data URLs in memory
+            const s3Url = await uploadImage(dataUrl, file.name || `dropped-${Date.now()}.png`)
+            // Offset multiple images so they don't stack exactly
+            onAddImageAt(canvasPos.x + index * 20, canvasPos.y + index * 20, s3Url, scaled.width, scaled.height)
+          } catch (err) {
+            console.error('Failed to upload image, using data URL:', err)
+            // Fallback to data URL if upload fails
+            onAddImageAt(canvasPos.x + index * 20, canvasPos.y + index * 20, dataUrl, scaled.width, scaled.height)
+          }
         }
         img.src = dataUrl
       }
@@ -536,12 +553,20 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         if (imageType) {
           const blob = await item.getType(imageType)
           const reader = new FileReader()
-          reader.onload = (event) => {
+          reader.onload = async (event) => {
             const dataUrl = event.target?.result as string
             const img = new window.Image()
-            img.onload = () => {
+            img.onload = async () => {
               const scaled = scaleImageToViewport(img.width, img.height)
-              onAddImageAt(contextMenu.canvasX, contextMenu.canvasY, dataUrl, scaled.width, scaled.height)
+              try {
+                // Upload to S3 immediately to avoid storing large data URLs in memory
+                const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+                onAddImageAt(contextMenu.canvasX, contextMenu.canvasY, s3Url, scaled.width, scaled.height)
+              } catch (err) {
+                console.error('Failed to upload image, using data URL:', err)
+                // Fallback to data URL if upload fails
+                onAddImageAt(contextMenu.canvasX, contextMenu.canvasY, dataUrl, scaled.width, scaled.height)
+              }
             }
             img.src = dataUrl
           }
