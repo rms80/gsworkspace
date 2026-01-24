@@ -134,6 +134,14 @@ Discovered some weirdness around the selection system. Figured out it was storin
 I gave it paragraph description of how I wanted the selection system to work at the code level and asked it to refactor.
 Seems to have done what I asked w/o issues.
 
+Asked CC to do a security audit of the frontend and backend. It found about 20 problems,
+several critical. It made a large doc explaining all the issues, with an exmaple of how
+it could be abused and suggestions of fixes, and a plan for working through fixing everything.
+Did not try this right now.
+
+Asked about usage of data URLs for images. CC identified various places that large data URLs
+were likely gettin serialized, and made suggestions to fix. Added to TODO.
+
 
 
 
