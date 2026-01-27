@@ -2541,7 +2541,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 setExportMenuItemId(null)
                 setExportMenuPosition(null)
                 try {
-                  await exportHtmlWithImages(htmlItem.html, `export_${Date.now()}`)
+                  await exportHtmlWithImages(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
                   if (error instanceof Error && error.name === 'AbortError') {
                     return
@@ -2570,7 +2570,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 setExportMenuItemId(null)
                 setExportMenuPosition(null)
                 try {
-                  await exportMarkdownWithImages(htmlItem.html, `export_${Date.now()}`)
+                  await exportMarkdownWithImages(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
                   if (error instanceof Error && error.name === 'AbortError') {
                     return
