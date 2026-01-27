@@ -77,3 +77,34 @@ export async function generateHtml(
   const data: GenerateHtmlResponse = await response.json()
   return data.html
 }
+
+/**
+ * Generate a short PascalCase title (1-3 words) for HTML content using Claude Haiku.
+ * This is a fire-and-forget operation - errors are caught and a default is returned.
+ */
+export async function generateHtmlTitle(htmlContent: string): Promise<string> {
+  try {
+    // Take first 2000 chars of HTML to keep the request small
+    const truncatedHtml = htmlContent.slice(0, 2000)
+
+    const prompt = `Based on this HTML content, generate a very short descriptive title (1-3 words) in PascalCase format with no spaces. Examples: "UserProfile", "LoginForm", "DashboardChart", "ProductCard". Just output the PascalCase title, nothing else.
+
+HTML:
+${truncatedHtml}`
+
+    const result = await generateFromPrompt([], prompt, 'claude-haiku')
+
+    // Clean up the result - remove any whitespace, quotes, or extra text
+    const cleaned = result.trim().replace(/[^a-zA-Z0-9]/g, '')
+
+    // Ensure it starts with uppercase
+    if (cleaned.length > 0) {
+      return cleaned.charAt(0).toUpperCase() + cleaned.slice(1)
+    }
+
+    return 'HtmlContent'
+  } catch (error) {
+    console.warn('Failed to generate HTML title:', error)
+    return 'HtmlContent'
+  }
+}

@@ -7,7 +7,7 @@ import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
-import { generateFromPrompt, generateImage, generateHtml, ContentItem } from './api/llm'
+import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import {
@@ -662,10 +662,12 @@ function App() {
         // Create an HTML view item for webpage content
         // Strip code fences that LLMs often wrap around HTML
         const htmlContent = stripCodeFences(result).trim()
+        // Generate title before creating item so it's saved properly
+        const title = await generateHtmlTitle(htmlContent)
         newItem = {
           id: uuidv4(),
           type: 'html',
-          label: 'HTML',
+          label: title,
           x: outputX,
           y: outputY,
           html: htmlContent,
@@ -842,11 +844,14 @@ function App() {
         ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
         : promptItem.y
 
+      // Generate title before creating item so it's saved properly
+      const title = await generateHtmlTitle(html)
+
       // Create new HtmlItem with result
       const newItem: CanvasItem = {
         id: uuidv4(),
         type: 'html',
-        label: 'HTML',
+        label: title,
         x: outputX,
         y: outputY,
         html: html,
