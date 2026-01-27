@@ -3,6 +3,13 @@ export interface Point {
   y: number
 }
 
+export interface CropRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface BaseItem {
   id: string
   x: number
@@ -25,6 +32,7 @@ export interface ImageItem extends BaseItem {
   scaleX?: number
   scaleY?: number
   rotation?: number
+  cropRect?: CropRect
 }
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'

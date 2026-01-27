@@ -523,7 +523,8 @@ function App() {
 
       // Determine change type and create appropriate record
       const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
-        'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes
+        'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes ||
+        'cropRect' in changes
       const hasText = 'text' in changes && item.type === 'text'
       const hasPromptText = ('text' in changes || 'label' in changes) &&
         (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
@@ -550,7 +551,7 @@ function App() {
       } else if (hasTransform) {
         const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
         if (item.type === 'image') {
-          Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation })
+          Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation, cropRect: item.cropRect ?? null })
         }
         const newTransform = { ...oldTransform }
         if ('x' in changes) newTransform.x = changes.x as number
@@ -560,6 +561,7 @@ function App() {
         if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
         if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
         if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
+        if ('cropRect' in changes) (newTransform as Record<string, unknown>).cropRect = (changes as Record<string, unknown>).cropRect ?? null
         // Only record if transform actually changed
         if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
           pushChange(new TransformObjectChange(id, oldTransform, newTransform))

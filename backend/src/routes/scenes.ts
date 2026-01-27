@@ -27,6 +27,7 @@ interface StoredImageItem extends StoredItemBase {
   scaleX?: number
   scaleY?: number
   rotation?: number
+  cropRect?: { x: number; y: number; width: number; height: number }
 }
 
 interface StoredPromptItem extends StoredItemBase {
@@ -114,6 +115,7 @@ router.post('/:id', async (req, res) => {
           scaleX: item.scaleX,
           scaleY: item.scaleY,
           rotation: item.rotation,
+          cropRect: item.cropRect,
         })
       } else if (item.type === 'prompt') {
         const promptFile = `${item.id}.prompt.json`
@@ -234,6 +236,7 @@ router.get('/:id', async (req, res) => {
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
+            cropRect: item.cropRect,
           }
         } else if (item.type === 'prompt') {
           // For prompts, load the JSON file

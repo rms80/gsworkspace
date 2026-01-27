@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
+import { CanvasItem, SelectionRect, LLMModel, ImageGenModel, CropRect, ImageItem } from '../types'
+import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../utils/htmlExport'
@@ -77,6 +78,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   // Track editing state for HTML item labels
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
+  // Crop mode state
+  const [croppingImageId, setCroppingImageId] = useState<string | null>(null)
+  const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -155,7 +159,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       .filter(Boolean) as Konva.Node[]
 
     const selectedImageNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'image')
+      .filter((item) => selectedIds.includes(item.id) && item.type === 'image' && item.id !== croppingImageId)
       .map((item) => stageRef.current?.findOne(`#${item.id}`))
       .filter(Boolean) as Konva.Node[]
 
@@ -185,7 +189,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
     htmlGenPromptTransformerRef.current?.nodes(selectedHtmlGenPromptNodes)
     htmlTransformerRef.current?.nodes(selectedHtmlNodes)
-  }, [items, selectedIds])
+  }, [items, selectedIds, croppingImageId])
 
   // Convert screen coordinates to canvas coordinates
   const screenToCanvas = (screenX: number, screenY: number) => {
@@ -471,8 +475,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   // Handle Delete/Backspace keys
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't delete if editing text
-      if (editingTextId) return
+      // Don't delete if editing text or in crop mode
+      if (editingTextId || croppingImageId) return
       // Don't delete if focus is in an input/textarea
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
 
@@ -483,7 +487,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [editingTextId, onDeleteSelected])
+  }, [editingTextId, croppingImageId, onDeleteSelected])
 
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
@@ -747,6 +751,13 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   // Handle click on empty canvas to clear selection
   // Using onClick instead of mouseDown so dragging (panning) doesn't clear selection
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // If in crop mode and clicking on empty canvas, apply crop
+    if (croppingImageId) {
+      if (e.target === stageRef.current) {
+        applyCrop()
+      }
+      return
+    }
     if (e.target !== stageRef.current) return
     // Don't clear if Ctrl is held (user might be doing marquee)
     if (e.evt.ctrlKey || e.evt.metaKey) return
@@ -1056,6 +1067,73 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const editingImageGenPrompt = getEditingImageGenPromptItem()
   const editingHtmlGenPrompt = getEditingHtmlGenPromptItem()
 
+  // Crop mode helpers
+  const applyCrop = () => {
+    if (!croppingImageId || !pendingCropRect) {
+      setCroppingImageId(null)
+      setPendingCropRect(null)
+      return
+    }
+    const item = items.find((i) => i.id === croppingImageId)
+    if (!item || item.type !== 'image') {
+      setCroppingImageId(null)
+      setPendingCropRect(null)
+      return
+    }
+    const img = loadedImages.get(item.src)
+    if (!img) {
+      setCroppingImageId(null)
+      setPendingCropRect(null)
+      return
+    }
+
+    const natW = img.naturalWidth
+    const currentSourceW = item.cropRect?.width ?? natW
+    const displayScale = item.width / currentSourceW
+
+    const newWidth = pendingCropRect.width * displayScale
+    const newHeight = pendingCropRect.height * displayScale
+
+    // Adjust x/y so the crop region stays at the same visual position
+    const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScale
+    const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScale
+    const newX = offsetX + pendingCropRect.x * displayScale
+    const newY = offsetY + pendingCropRect.y * displayScale
+
+    onUpdateItem(croppingImageId, {
+      x: newX,
+      y: newY,
+      width: newWidth,
+      height: newHeight,
+      cropRect: pendingCropRect,
+    })
+
+    setCroppingImageId(null)
+    setPendingCropRect(null)
+  }
+
+  const cancelCrop = () => {
+    setCroppingImageId(null)
+    setPendingCropRect(null)
+  }
+
+  // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
+  useEffect(() => {
+    if (!croppingImageId) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        applyCrop()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        cancelCrop()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [croppingImageId, pendingCropRect, items, loadedImages])
+
   return (
     <div ref={containerRef} style={{ position: 'relative', flex: 1 }} onDragOver={handleDragOver} onDrop={handleDrop}>
       <Stage
@@ -1066,7 +1144,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         y={stagePos.y}
         scaleX={stageScale}
         scaleY={stageScale}
-        draggable
+        draggable={!croppingImageId}
         onDragStart={(e) => {
           // Prevent dragging when Ctrl is held (for marquee selection)
           if (e.evt.ctrlKey || e.evt.metaKey) {
@@ -1165,6 +1243,19 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           } else if (item.type === 'image') {
             const img = loadedImages.get(item.src)
             if (!img) return null
+            const isCropping = croppingImageId === item.id
+            if (isCropping && pendingCropRect) {
+              return (
+                <ImageCropOverlay
+                  key={`crop-${item.id}`}
+                  item={item}
+                  image={img}
+                  cropRect={pendingCropRect}
+                  stageScale={stageScale}
+                  onCropChange={setPendingCropRect}
+                />
+              )
+            }
             return (
               <KonvaImage
                 key={item.id}
@@ -1174,6 +1265,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 image={img}
                 width={item.width}
                 height={item.height}
+                crop={item.cropRect ? { x: item.cropRect.x, y: item.cropRect.y, width: item.cropRect.width, height: item.cropRect.height } : undefined}
                 scaleX={item.scaleX ?? 1}
                 scaleY={item.scaleY ?? 1}
                 rotation={item.rotation ?? 0}
@@ -1181,6 +1273,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onClick={(e) => handleItemClick(e, item.id)}
                 onContextMenu={(e) => {
                   e.evt.preventDefault()
+                  e.cancelBubble = true
                   setImageContextMenu({
                     imageId: item.id,
                     x: e.evt.clientX,
@@ -2480,7 +2573,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Image context menu */}
-      {imageContextMenu && (
+      {imageContextMenu && (() => {
+        const contextImageItem = items.find((i) => i.id === imageContextMenu.imageId && i.type === 'image') as ImageItem | undefined
+        return (
         <div
           style={{
             position: 'fixed',
@@ -2519,8 +2614,79 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           >
             Reset Transform
           </button>
+          <button
+            onClick={() => {
+              const imgItem = contextImageItem
+              if (!imgItem) { setImageContextMenu(null); return }
+              const img = loadedImages.get(imgItem.src)
+              if (!img) { setImageContextMenu(null); return }
+              const natW = img.naturalWidth
+              const natH = img.naturalHeight
+              // Initialize pending crop rect from existing crop or full image
+              const initialCrop = imgItem.cropRect
+                ? { ...imgItem.cropRect }
+                : { x: 0, y: 0, width: natW, height: natH }
+              setCroppingImageId(imgItem.id)
+              setPendingCropRect(initialCrop)
+              setImageContextMenu(null)
+            }}
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '8px 16px',
+              border: 'none',
+              background: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontSize: 14,
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          >
+            Crop
+          </button>
+          {contextImageItem?.cropRect && (
+            <button
+              onClick={() => {
+                const imgItem = contextImageItem
+                if (!imgItem) { setImageContextMenu(null); return }
+                const img = loadedImages.get(imgItem.src)
+                if (!img) { setImageContextMenu(null); return }
+                const natW = img.naturalWidth
+                const natH = img.naturalHeight
+                // Restore full image dimensions using current display scale
+                const currentSourceW = imgItem.cropRect?.width ?? natW
+                const displayScale = imgItem.width / currentSourceW
+                const offsetX = imgItem.x - (imgItem.cropRect?.x ?? 0) * displayScale
+                const offsetY = imgItem.y - (imgItem.cropRect?.y ?? 0) * displayScale
+                onUpdateItem(imgItem.id, {
+                  x: offsetX,
+                  y: offsetY,
+                  width: natW * displayScale,
+                  height: natH * displayScale,
+                  cropRect: undefined,
+                })
+                setImageContextMenu(null)
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Remove Crop
+            </button>
+          )}
         </div>
-      )}
+        )
+      })()}
 
       {/* Export menu */}
       {exportMenuItemId && exportMenuPosition && (() => {

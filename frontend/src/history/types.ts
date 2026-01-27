@@ -1,4 +1,4 @@
-import { CanvasItem } from '../types'
+import { CanvasItem, CropRect } from '../types'
 
 /**
  * Type identifiers for different change records
@@ -80,4 +80,5 @@ export interface TransformData {
   scaleX?: number
   scaleY?: number
   rotation?: number
+  cropRect?: CropRect | null
 }
