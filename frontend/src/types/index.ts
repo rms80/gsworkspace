@@ -33,6 +33,7 @@ export interface ImageItem extends BaseItem {
   scaleY?: number
   rotation?: number
   cropRect?: CropRect
+  cropSrc?: string
 }
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'

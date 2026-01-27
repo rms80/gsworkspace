@@ -4,7 +4,7 @@ import Konva from 'konva'
 import { CanvasItem, SelectionRect, LLMModel, ImageGenModel, CropRect, ImageItem } from '../types'
 import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
-import { uploadImage } from '../api/images'
+import { uploadImage, cropImage } from '../api/images'
 import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../utils/htmlExport'
 
 interface InfiniteCanvasProps {
@@ -1100,16 +1100,28 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     const newX = offsetX + pendingCropRect.x * displayScale
     const newY = offsetY + pendingCropRect.y * displayScale
 
-    onUpdateItem(croppingImageId, {
+    // Apply visual crop immediately (responsive)
+    const itemId = croppingImageId
+    const cropRect = pendingCropRect
+    onUpdateItem(itemId, {
       x: newX,
       y: newY,
       width: newWidth,
       height: newHeight,
-      cropRect: pendingCropRect,
+      cropRect,
     })
 
     setCroppingImageId(null)
     setPendingCropRect(null)
+
+    // Create server-side crop file asynchronously
+    cropImage(item.src, cropRect)
+      .then((cropUrl) => {
+        onUpdateItem(itemId, { cropSrc: cropUrl })
+      })
+      .catch((err) => {
+        console.error('Failed to create server-side crop, LLM canvas crop still works:', err)
+      })
   }
 
   const cancelCrop = () => {
@@ -2665,6 +2677,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   width: natW * displayScale,
                   height: natH * displayScale,
                   cropRect: undefined,
+                  cropSrc: undefined,
                 })
                 setImageContextMenu(null)
               }}

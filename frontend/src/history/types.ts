@@ -81,4 +81,5 @@ export interface TransformData {
   scaleY?: number
   rotation?: number
   cropRect?: CropRect | null
+  cropSrc?: string | null
 }

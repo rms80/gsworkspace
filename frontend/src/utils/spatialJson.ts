@@ -52,7 +52,7 @@ export function convertItemsToSpatialJson(items: CanvasItem[]): SpatialConversio
       }
     } else {
       const imageId = `IMAGE_${imageCounter++}`
-      imageMap.set(imageId, item.src)
+      imageMap.set(imageId, item.cropSrc ?? item.src)
       return {
         type: 'image',
         imageId,
