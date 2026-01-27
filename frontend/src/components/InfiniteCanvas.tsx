@@ -4,7 +4,7 @@ import Konva from 'konva'
 import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
-import { exportHtmlWithImages, exportMarkdownWithImages } from '../utils/htmlExport'
+import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../utils/htmlExport'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -2593,6 +2593,65 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
             >
               Markdown
+            </button>
+            <hr style={{ margin: '2px 8px', border: 'none', borderTop: '1px solid #ddd' }} />
+            <button
+              onClick={async () => {
+                setExportMenuItemId(null)
+                setExportMenuPosition(null)
+                try {
+                  await exportHtmlZip(htmlItem.html, htmlItem.label || 'export')
+                } catch (error) {
+                  if (error instanceof Error && error.name === 'AbortError') {
+                    return
+                  }
+                  console.error('Export failed:', error)
+                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+                }
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              HTML (Zip)
+            </button>
+            <button
+              onClick={async () => {
+                setExportMenuItemId(null)
+                setExportMenuPosition(null)
+                try {
+                  await exportMarkdownZip(htmlItem.html, htmlItem.label || 'export')
+                } catch (error) {
+                  if (error instanceof Error && error.name === 'AbortError') {
+                    return
+                  }
+                  console.error('Export failed:', error)
+                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+                }
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Markdown (Zip)
             </button>
           </div>
         )

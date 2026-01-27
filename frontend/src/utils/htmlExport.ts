@@ -4,6 +4,7 @@
  */
 
 import TurndownService from 'turndown'
+import JSZip from 'jszip'
 
 /**
  * Extract all image sources from HTML content
@@ -402,4 +403,111 @@ export async function exportMarkdownWithImages(html: string, suggestedFilename: 
   const mdWritable = await mdFileHandle.createWritable()
   await mdWritable.write(rewrittenMarkdown)
   await mdWritable.close()
+}
+
+/**
+ * Helper to trigger a zip download via save file picker or fallback <a> download
+ */
+async function downloadZip(zip: JSZip, suggestedFilename: string): Promise<void> {
+  const zipBlob = await zip.generateAsync({ type: 'blob' })
+
+  if (hasFileSystemAccess()) {
+    const fsWindow = window as unknown as FileSystemWindow
+    const fileHandle = await fsWindow.showSaveFilePicker({
+      suggestedName: suggestedFilename,
+      types: [
+        {
+          description: 'ZIP Files',
+          accept: { 'application/zip': ['.zip'] },
+        },
+      ],
+    })
+    const writable = await fileHandle.createWritable()
+    await writable.write(zipBlob)
+    await writable.close()
+  } else {
+    const url = URL.createObjectURL(zipBlob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = suggestedFilename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+}
+
+/**
+ * Collect images and build an image map for zip export.
+ * Returns the imageMap (originalSrc -> relative path) and adds files to the zip.
+ */
+async function collectImagesForZip(
+  html: string,
+  imagesFolderName: string,
+  zip: JSZip
+): Promise<Map<string, string>> {
+  const sources = extractImageSources(html)
+  const imageMap = new Map<string, string>()
+
+  if (sources.length > 0) {
+    const imagesFolder = zip.folder(imagesFolderName)!
+
+    let imageIndex = 0
+    for (const src of sources) {
+      try {
+        const { blob, extension } = await fetchImageAsBlob(src)
+        const imageFilename = `image_${imageIndex}.${extension}`
+        imagesFolder.file(imageFilename, blob)
+        imageMap.set(src, `${imagesFolderName}/${imageFilename}`)
+        imageIndex++
+      } catch (error) {
+        console.warn(`Failed to add image ${src} to zip:`, error)
+      }
+    }
+  }
+
+  return imageMap
+}
+
+/**
+ * Export HTML with images as a ZIP file
+ */
+export async function exportHtmlZip(html: string, suggestedFilename: string): Promise<void> {
+  const zip = new JSZip()
+  const imagesFolderName = `${suggestedFilename}_images`
+
+  // Collect images
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip)
+
+  // Rewrite HTML with local paths
+  const rewrittenHtml = rewriteHtmlImagePaths(html, imageMap)
+
+  // Add HTML file
+  zip.file(`${suggestedFilename}.html`, rewrittenHtml)
+
+  // Download
+  await downloadZip(zip, `${suggestedFilename}.zip`)
+}
+
+/**
+ * Export Markdown with images as a ZIP file
+ */
+export async function exportMarkdownZip(html: string, suggestedFilename: string): Promise<void> {
+  const zip = new JSZip()
+  const imagesFolderName = `${suggestedFilename}_images`
+
+  // Collect images
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip)
+
+  // Convert HTML to Markdown
+  const markdown = htmlToMarkdown(html)
+
+  // Rewrite Markdown with local image paths
+  const rewrittenMarkdown = rewriteMarkdownImagePaths(markdown, imageMap)
+
+  // Add Markdown file
+  zip.file(`${suggestedFilename}.md`, rewrittenMarkdown)
+
+  // Download
+  await downloadZip(zip, `${suggestedFilename}.zip`)
 }
