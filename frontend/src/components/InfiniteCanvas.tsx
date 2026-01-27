@@ -4,6 +4,7 @@ import Konva from 'konva'
 import { CanvasItem, SelectionRect, LLMModel, ImageGenModel } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
+import { exportHtmlWithImages, exportMarkdownWithImages } from '../utils/htmlExport'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -70,6 +71,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   // Track when any drag/transform is in progress to disable iframe pointer events
   const [isAnyDragActive, setIsAnyDragActive] = useState(false)
+  // Track which HTML item has its export menu open and its position
+  const [exportMenuItemId, setExportMenuItemId] = useState<string | null>(null)
+  const [exportMenuPosition, setExportMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  // Track editing state for HTML item labels
+  const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
+  const htmlLabelInputRef = useRef<HTMLInputElement>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -681,6 +688,25 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     }
   }, [imageContextMenu])
 
+  // Close export menu on click elsewhere
+  useEffect(() => {
+    if (!exportMenuItemId) return
+
+    const handleClick = () => {
+      setExportMenuItemId(null)
+      setExportMenuPosition(null)
+    }
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClick)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('click', handleClick)
+    }
+  }, [exportMenuItemId])
+
   // Wheel zoom
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
     e.evt.preventDefault()
@@ -965,6 +991,38 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     }
   }
 
+  // HTML item label editing handlers
+  const handleHtmlLabelDblClick = (id: string) => {
+    setEditingHtmlLabelId(id)
+    setTimeout(() => {
+      htmlLabelInputRef.current?.focus()
+      htmlLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleHtmlLabelBlur = () => {
+    if (editingHtmlLabelId && htmlLabelInputRef.current) {
+      onUpdateItem(editingHtmlLabelId, { label: htmlLabelInputRef.current.value })
+    }
+    setEditingHtmlLabelId(null)
+  }
+
+  const handleHtmlLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingHtmlLabelId(null)
+    } else if (e.key === 'Enter') {
+      handleHtmlLabelBlur()
+    }
+  }
+
+  const getEditingHtmlItem = () => {
+    if (!editingHtmlLabelId) return null
+    const item = items.find((i) => i.id === editingHtmlLabelId)
+    if (!item || item.type !== 'html') return null
+    return item
+  }
+  const editingHtmlItem = getEditingHtmlItem()
+
   const getEditingTextItem = () => {
     if (!editingTextId) return null
     const item = items.find((i) => i.id === editingTextId)
@@ -1075,7 +1133,6 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onTransformEnd={(e) => {
                   const node = e.target
                   const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
                   // Reset scale and apply to width only (text reflows)
                   node.scaleX(1)
                   node.scaleY(1)
@@ -1607,6 +1664,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             const headerHeight = 24
             const zoom = item.zoom ?? 1
             const zoomButtonWidth = 24
+            const exportButtonWidth = 50
             return (
               <Group
                 key={item.id}
@@ -1702,6 +1760,54 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
                   cornerRadius={[4, 4, 0, 0]}
                 />
+                {/* Label text */}
+                <Text
+                  x={8}
+                  y={4}
+                  text={item.label || 'HTML'}
+                  fontSize={14}
+                  fontStyle="bold"
+                  fill="#333"
+                  width={item.width - zoomButtonWidth * 3 - exportButtonWidth - 24}
+                  ellipsis={true}
+                  onDblClick={() => handleHtmlLabelDblClick(item.id)}
+                  visible={editingHtmlLabelId !== item.id}
+                />
+                {/* Export button with dropdown */}
+                <Group
+                  x={item.width - zoomButtonWidth * 3 - exportButtonWidth - 12}
+                  y={2}
+                  onClick={(e) => {
+                    e.cancelBubble = true
+                    if (exportMenuItemId === item.id) {
+                      setExportMenuItemId(null)
+                      setExportMenuPosition(null)
+                    } else {
+                      // Position menu below the button using click coordinates
+                      setExportMenuPosition({
+                        x: e.evt.clientX - 40, // Center under button
+                        y: e.evt.clientY + 10, // Below the click
+                      })
+                      setExportMenuItemId(item.id)
+                    }
+                  }}
+                >
+                  <Rect
+                    width={exportButtonWidth}
+                    height={20}
+                    fill={exportMenuItemId === item.id ? '#3d6640' : '#4a7c4e'}
+                    cornerRadius={3}
+                  />
+                  <Text
+                    text="Export ▾"
+                    width={exportButtonWidth}
+                    height={20}
+                    fontSize={11}
+                    fill="#fff"
+                    align="center"
+                    verticalAlign="middle"
+                  />
+                </Group>
                 {/* Zoom out button */}
                 <Group
                   x={item.width - zoomButtonWidth * 3 - 8}
@@ -2146,6 +2252,34 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         />
       )}
 
+      {/* Input overlay for editing HTML item label */}
+      {editingHtmlItem && (
+        <input
+          ref={htmlLabelInputRef}
+          defaultValue={editingHtmlItem.label || 'HTML'}
+          onBlur={handleHtmlLabelBlur}
+          onKeyDown={handleHtmlLabelKeyDown}
+          style={{
+            position: 'absolute',
+            top: editingHtmlItem.y * stageScale + stagePos.y + 4 * stageScale,
+            left: editingHtmlItem.x * stageScale + stagePos.x + 8 * stageScale,
+            width: (editingHtmlItem.width - 150) * stageScale,
+            height: 16 * stageScale,
+            fontSize: 14 * stageScale,
+            fontFamily: 'sans-serif',
+            fontWeight: 'bold',
+            padding: '0 2px',
+            margin: 0,
+            border: '2px solid #0066cc',
+            borderRadius: 2,
+            outline: 'none',
+            background: '#e8f4ff',
+            color: '#333',
+            boxSizing: 'border-box',
+          }}
+        />
+      )}
+
       {/* Context menu */}
       {contextMenu && (
         <div
@@ -2382,6 +2516,87 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           </button>
         </div>
       )}
+
+      {/* Export menu */}
+      {exportMenuItemId && exportMenuPosition && (() => {
+        const htmlItem = items.find((i) => i.id === exportMenuItemId && i.type === 'html')
+        if (!htmlItem || htmlItem.type !== 'html') return null
+        return (
+          <div
+            style={{
+              position: 'fixed',
+              top: exportMenuPosition.y,
+              left: exportMenuPosition.x,
+              background: 'white',
+              border: '1px solid #ccc',
+              borderRadius: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              zIndex: 1000,
+              minWidth: 100,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={async () => {
+                setExportMenuItemId(null)
+                setExportMenuPosition(null)
+                try {
+                  await exportHtmlWithImages(htmlItem.html, `export_${Date.now()}`)
+                } catch (error) {
+                  if (error instanceof Error && error.name === 'AbortError') {
+                    return
+                  }
+                  console.error('Export failed:', error)
+                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+                }
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              HTML
+            </button>
+            <button
+              onClick={async () => {
+                setExportMenuItemId(null)
+                setExportMenuPosition(null)
+                try {
+                  await exportMarkdownWithImages(htmlItem.html, `export_${Date.now()}`)
+                } catch (error) {
+                  if (error instanceof Error && error.name === 'AbortError') {
+                    return
+                  }
+                  console.error('Export failed:', error)
+                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
+                }
+              }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Markdown
+            </button>
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -665,6 +665,7 @@ function App() {
         newItem = {
           id: uuidv4(),
           type: 'html',
+          label: 'HTML',
           x: outputX,
           y: outputY,
           html: htmlContent,
@@ -845,6 +846,7 @@ function App() {
       const newItem: CanvasItem = {
         id: uuidv4(),
         type: 'html',
+        label: 'HTML',
         x: outputX,
         y: outputY,
         html: html,

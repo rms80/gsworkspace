@@ -53,6 +53,7 @@ export interface ImageGenPromptItem extends BaseItem {
 
 export interface HtmlItem extends BaseItem {
   type: 'html'
+  label: string
   html: string
   width: number
   height: number
