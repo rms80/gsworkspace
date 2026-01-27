@@ -1917,8 +1917,13 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             return newBox
           }}
         />
-        {/* Transformer for images - full controls */}
-        <Transformer ref={imageTransformerRef} />
+        {/* Transformer for images - corner handles only, no rotation */}
+        <Transformer
+          ref={imageTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+        />
         {/* Transformer for prompts - free resize, no rotation */}
         <Transformer
           ref={promptTransformerRef}
