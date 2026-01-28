@@ -12,6 +12,9 @@ import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
+import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
+import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
+import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
@@ -22,7 +25,6 @@ import { useMenuState } from '../hooks/useMenuState'
 import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import {
-  PROMPT_HEADER_HEIGHT,
   HTML_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
@@ -589,264 +591,58 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           )
         })}
 
-      {/* Textarea overlay for editing text */}
-      {editingItem && (() => {
-        const measureText = () => {
-          const textNode = new Konva.Text({
-            text: editingItem.text,
-            fontSize: editingItem.fontSize,
-            width: editingItem.width,
-          })
-          return textNode.height()
-        }
-        const textHeight = measureText()
-        return (
-          <textarea
-            ref={textareaRef}
-            defaultValue={editingItem.text}
-            onBlur={handleTextareaBlur}
-            onKeyDown={handleTextareaKeyDown}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement
-              target.style.height = 'auto'
-              target.style.height = target.scrollHeight + 'px'
-            }}
-            style={{
-              position: 'absolute',
-              top: (editingItem.y + 8) * stageScale + stagePos.y,
-              left: (editingItem.x + 8) * stageScale + stagePos.x,
-              width: editingItem.width * stageScale,
-              minHeight: textHeight * stageScale,
-              fontSize: editingItem.fontSize * stageScale,
-              fontFamily: 'sans-serif',
-              padding: 0,
-              margin: 0,
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              outline: 'none',
-              resize: 'none',
-              overflow: 'hidden',
-              background: 'white',
-              transformOrigin: 'top left',
-            }}
-          />
-        )
-      })()}
-
-      {/* Input overlay for editing prompt label */}
-      {editingPrompt && promptEditing.editingField === 'label' && (
-        <input
-          ref={promptEditing.labelInputRef}
-          type="text"
-          defaultValue={editingPrompt.label}
-          onBlur={promptEditing.handleLabelBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              promptEditing.handleLabelBlur()
-            }
-            promptEditing.handleKeyDown(e)
-          }}
-          style={{
-            position: 'absolute',
-            top: editingPrompt.y * stageScale + stagePos.y + 4 * stageScale,
-            left: editingPrompt.x * stageScale + stagePos.x + 6 * stageScale,
-            width: (editingPrompt.width - 16) * stageScale,
-            height: 20 * stageScale,
-            fontSize: 14 * stageScale,
-            fontFamily: 'sans-serif',
-            fontWeight: 'bold',
-            padding: '0 2px',
-            margin: 0,
-            border: `2px solid ${PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            background: PROMPT_THEME.inputBg,
-            color: PROMPT_THEME.inputText,
-            boxSizing: 'border-box',
-          }}
+      {/* Text editing overlay */}
+      {editingItem && (
+        <TextEditingOverlay
+          item={editingItem}
+          textareaRef={textareaRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleTextareaBlur}
+          onKeyDown={handleTextareaKeyDown}
         />
       )}
 
-      {/* Textarea overlay for editing prompt text */}
-      {editingPrompt && promptEditing.editingField === 'text' && (
-        <textarea
-          ref={promptEditing.textareaRef}
-          defaultValue={editingPrompt.text}
-          onBlur={promptEditing.handleTextBlur}
-          onKeyDown={promptEditing.handleKeyDown}
-          style={{
-            position: 'absolute',
-            top: (editingPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
-            left: (editingPrompt.x + 6) * stageScale + stagePos.x,
-            width: (editingPrompt.width - 16) * stageScale,
-            height: (editingPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
-            fontSize: editingPrompt.fontSize * stageScale,
-            fontFamily: 'sans-serif',
-            padding: '2px',
-            margin: 0,
-            border: `2px solid ${PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            resize: 'none',
-            overflow: 'hidden',
-            background: PROMPT_THEME.textareaBg,
-            color: PROMPT_THEME.contentText,
-            boxSizing: 'border-box',
-          }}
+      {/* Prompt editing overlays */}
+      {editingPrompt && (
+        <PromptEditingOverlay
+          item={editingPrompt}
+          theme={PROMPT_THEME}
+          editing={promptEditing}
+          stageScale={stageScale}
+          stagePos={stagePos}
         />
       )}
 
-      {/* Input overlay for editing image gen prompt label */}
-      {editingImageGenPrompt && imageGenPromptEditing.editingField === 'label' && (
-        <input
-          ref={imageGenPromptEditing.labelInputRef}
-          type="text"
-          defaultValue={editingImageGenPrompt.label}
-          onBlur={imageGenPromptEditing.handleLabelBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              imageGenPromptEditing.handleLabelBlur()
-            }
-            imageGenPromptEditing.handleKeyDown(e)
-          }}
-          style={{
-            position: 'absolute',
-            top: editingImageGenPrompt.y * stageScale + stagePos.y + 4 * stageScale,
-            left: editingImageGenPrompt.x * stageScale + stagePos.x + 6 * stageScale,
-            width: (editingImageGenPrompt.width - 16) * stageScale,
-            height: 20 * stageScale,
-            fontSize: 14 * stageScale,
-            fontFamily: 'sans-serif',
-            fontWeight: 'bold',
-            padding: '0 2px',
-            margin: 0,
-            border: `2px solid ${IMAGE_GEN_PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            background: IMAGE_GEN_PROMPT_THEME.inputBg,
-            color: IMAGE_GEN_PROMPT_THEME.inputText,
-            boxSizing: 'border-box',
-          }}
+      {editingImageGenPrompt && (
+        <PromptEditingOverlay
+          item={editingImageGenPrompt}
+          theme={IMAGE_GEN_PROMPT_THEME}
+          editing={imageGenPromptEditing}
+          stageScale={stageScale}
+          stagePos={stagePos}
         />
       )}
 
-      {/* Textarea overlay for editing image gen prompt text */}
-      {editingImageGenPrompt && imageGenPromptEditing.editingField === 'text' && (
-        <textarea
-          ref={imageGenPromptEditing.textareaRef}
-          defaultValue={editingImageGenPrompt.text}
-          onBlur={imageGenPromptEditing.handleTextBlur}
-          onKeyDown={imageGenPromptEditing.handleKeyDown}
-          style={{
-            position: 'absolute',
-            top: (editingImageGenPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
-            left: (editingImageGenPrompt.x + 6) * stageScale + stagePos.x,
-            width: (editingImageGenPrompt.width - 16) * stageScale,
-            height: (editingImageGenPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
-            fontSize: editingImageGenPrompt.fontSize * stageScale,
-            fontFamily: 'sans-serif',
-            padding: '2px',
-            margin: 0,
-            border: `2px solid ${IMAGE_GEN_PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            resize: 'none',
-            overflow: 'hidden',
-            background: IMAGE_GEN_PROMPT_THEME.textareaBg,
-            color: IMAGE_GEN_PROMPT_THEME.contentText,
-            boxSizing: 'border-box',
-          }}
+      {editingHtmlGenPrompt && (
+        <PromptEditingOverlay
+          item={editingHtmlGenPrompt}
+          theme={HTML_GEN_PROMPT_THEME}
+          editing={htmlGenPromptEditing}
+          stageScale={stageScale}
+          stagePos={stagePos}
         />
       )}
 
-      {/* Input overlay for editing HTML gen prompt label */}
-      {editingHtmlGenPrompt && htmlGenPromptEditing.editingField === 'label' && (
-        <input
-          ref={htmlGenPromptEditing.labelInputRef}
-          type="text"
-          defaultValue={editingHtmlGenPrompt.label}
-          onBlur={htmlGenPromptEditing.handleLabelBlur}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              htmlGenPromptEditing.handleLabelBlur()
-            }
-            htmlGenPromptEditing.handleKeyDown(e)
-          }}
-          style={{
-            position: 'absolute',
-            top: editingHtmlGenPrompt.y * stageScale + stagePos.y + 4 * stageScale,
-            left: editingHtmlGenPrompt.x * stageScale + stagePos.x + 6 * stageScale,
-            width: (editingHtmlGenPrompt.width - 16) * stageScale,
-            height: 20 * stageScale,
-            fontSize: 14 * stageScale,
-            fontFamily: 'sans-serif',
-            fontWeight: 'bold',
-            padding: '0 2px',
-            margin: 0,
-            border: `2px solid ${HTML_GEN_PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            background: HTML_GEN_PROMPT_THEME.inputBg,
-            color: HTML_GEN_PROMPT_THEME.inputText,
-            boxSizing: 'border-box',
-          }}
-        />
-      )}
-
-      {/* Textarea overlay for editing HTML gen prompt text */}
-      {editingHtmlGenPrompt && htmlGenPromptEditing.editingField === 'text' && (
-        <textarea
-          ref={htmlGenPromptEditing.textareaRef}
-          defaultValue={editingHtmlGenPrompt.text}
-          onBlur={htmlGenPromptEditing.handleTextBlur}
-          onKeyDown={htmlGenPromptEditing.handleKeyDown}
-          style={{
-            position: 'absolute',
-            top: (editingHtmlGenPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
-            left: (editingHtmlGenPrompt.x + 6) * stageScale + stagePos.x,
-            width: (editingHtmlGenPrompt.width - 16) * stageScale,
-            height: (editingHtmlGenPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
-            fontSize: editingHtmlGenPrompt.fontSize * stageScale,
-            fontFamily: 'sans-serif',
-            padding: '2px',
-            margin: 0,
-            border: `2px solid ${HTML_GEN_PROMPT_THEME.inputBorder}`,
-            borderRadius: 2,
-            outline: 'none',
-            resize: 'none',
-            overflow: 'hidden',
-            background: HTML_GEN_PROMPT_THEME.textareaBg,
-            color: HTML_GEN_PROMPT_THEME.contentText,
-            boxSizing: 'border-box',
-          }}
-        />
-      )}
-
-      {/* Input overlay for editing HTML item label */}
+      {/* HTML label editing overlay */}
       {editingHtmlItem && (
-        <input
-          ref={htmlLabelInputRef}
-          defaultValue={editingHtmlItem.label || 'HTML'}
+        <HtmlLabelEditingOverlay
+          item={editingHtmlItem}
+          inputRef={htmlLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
           onBlur={handleHtmlLabelBlur}
           onKeyDown={handleHtmlLabelKeyDown}
-          style={{
-            position: 'absolute',
-            top: editingHtmlItem.y * stageScale + stagePos.y + 4 * stageScale,
-            left: editingHtmlItem.x * stageScale + stagePos.x + 8 * stageScale,
-            width: (editingHtmlItem.width - 150) * stageScale,
-            height: 16 * stageScale,
-            fontSize: 14 * stageScale,
-            fontFamily: 'sans-serif',
-            fontWeight: 'bold',
-            padding: '0 2px',
-            margin: 0,
-            border: `2px solid ${COLOR_SELECTED}`,
-            borderRadius: 2,
-            outline: 'none',
-            background: '#e8f4ff',
-            color: '#333',
-            boxSizing: 'border-box',
-          }}
         />
       )}
 

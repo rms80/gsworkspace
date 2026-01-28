@@ -14,13 +14,13 @@ Extracted into `components/canvas/items/`. The generic `PromptItemRenderer` repl
 - [x] **`PromptItemRenderer.tsx`** — Generic renderer used for all 3 prompt types (prompt, image-gen-prompt, html-gen-prompt) via theme config prop
 - [x] **`HtmlItemRenderer.tsx`** — Header bar with label, export/zoom buttons, content rect, drag/transform with real-time iframe sync
 
-### Phase 2: Extract Editing Overlays (~240 lines)
+### Phase 2: Extract Editing Overlays (~240 lines) ✅
 
-HTML overlay elements positioned absolutely on top of the Konva Stage for text editing.
+Extracted into `components/canvas/overlays/`. The generic `PromptEditingOverlay` replaced 3 duplicated label+text overlay blocks (6 inline elements → 3 component calls).
 
-- [ ] **`TextEditingOverlay.tsx`** (~45 lines) — Textarea overlay for text item editing (lines ~1443-1485)
-- [ ] **`PromptEditingOverlay.tsx`** (~60 lines, generic) — Input for label + textarea for text, parameterized by color/position. Currently duplicated 3 times (lines ~1487-1674). One component replaces all three
-- [ ] **`HtmlLabelEditingOverlay.tsx`** (~30 lines) — Input overlay for HTML item label (lines ~1676-1702)
+- [x] **`TextEditingOverlay.tsx`** — Textarea overlay for text item editing, with Konva text measurement for min-height
+- [x] **`PromptEditingOverlay.tsx`** — Generic input (label) + textarea (text) overlay, parameterized by theme colors. One component used for all 3 prompt types
+- [x] **`HtmlLabelEditingOverlay.tsx`** — Input overlay for HTML item label editing
 
 ### Phase 3: Extract Context Menus (~450 lines) ✅
 
