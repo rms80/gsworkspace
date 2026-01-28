@@ -33,16 +33,16 @@ All menus are absolutely-positioned divs with click handlers and useEffect clean
 - [ ] **`ImageContextMenu.tsx`** (~115 lines) — Reset transform, crop, remove crop (lines ~1898-2013)
 - [ ] **`HtmlExportMenu.tsx`** (~140 lines) — HTML/Markdown single-file and ZIP exports (lines ~2015-2153)
 
-### Phase 4: Extract Supporting Hooks (~120 lines)
+### Phase 4: Extract Supporting Hooks (~120 lines) ✅
 
-- [ ] **`usePulseAnimation.ts`** — Pulse phase animation loop + color calculation for running prompts (lines ~136-162). Returns `pulsePhase` and a `getPulseColors(baseColor)` helper
-- [ ] **`useMenuState.ts`** — Generic hook for menu open/close with click-outside-to-dismiss. Currently 5 separate useEffect blocks (lines ~290-393) doing the same thing. One hook called per menu instance replaces all of them
-- [ ] **`useImageLoader.ts`** — Load HTMLImageElements for image items into a Map cache (lines ~164-175)
-- [ ] **`useTransformerSync.ts`** — Attach/detach Konva Transformer nodes on selection change (lines ~177-217). Currently manages 6 transformer refs
+- [x] **`usePulseAnimation.ts`** — Pulse phase animation loop + layer redraw for running prompts. Returns `pulsePhase`
+- [x] **`useMenuState.ts`** — Generic hook for menu open/close with click-outside-to-dismiss. Replaced 12 state declarations and 6 useEffect blocks with 6 one-liner hook calls
+- [x] **`useImageLoader.ts`** — Load HTMLImageElements for image items into a Map cache
+- [x] **`useTransformerSync.ts`** — Attach/detach Konva Transformer nodes on selection change via a declarative config array
 
-### Phase 5: Extract Constants
+### Phase 5: Extract Constants ✅
 
-- [ ] **`canvasConstants.ts`** — Magic numbers scattered through the file: button dimensions, header heights, padding values, zoom limits, colors per prompt type, model lists
+- [x] **`constants/canvas.ts`** — Extracted prompt theme colors (3 themes with pulse ranges), model lists with labels, button/header dimensions, zoom constraints, z-index values, selection colors, and a `getPulseColor()` helper
 
 ### Expected Result
 
@@ -84,12 +84,12 @@ frontend/src/
     useCropMode.ts                  (already extracted)
     useClipboard.ts                 (already extracted)
     usePromptEditing.ts             (already extracted)
-    usePulseAnimation.ts
-    useMenuState.ts
-    useImageLoader.ts
-    useTransformerSync.ts
+    usePulseAnimation.ts            (already extracted)
+    useMenuState.ts                 (already extracted)
+    useImageLoader.ts               (already extracted)
+    useTransformerSync.ts           (already extracted)
   constants/
-    canvasConstants.ts
+    canvas.ts                       (already extracted)
 ```
 
 ### Implementation Order

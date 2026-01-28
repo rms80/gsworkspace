@@ -145,6 +145,28 @@ were likely gettin serialized, and made suggestions to fix. Added to TODO.
 
 
 
+Jan 24-26
+
+mostly not working on this project. I added HTML and Markdown export to HTML objects, 
+to be able to re-use the generated content. No significant issues. CC found some third-party
+libraries suitable for html-to-markdown conversion and creating zip files. It did possibly
+create some duplicate utility functions instead of using existing ones, but I'm not sure, just
+inferring by the fact that it had CORS issues w/ image downloads that it already had fixed once before.
+
+
+Jan 27
+
+had it implement image cropping support. It did not have problems doing this, however this was the first
+time I noticed that the main infinite-canvas typescript file was too big for a single query (> 25000 tokens).
+
+Asked for suggestions for refactoring this file. It made a list of 5 steps and a suggestion for an order of refactors.
+I had it add to TODO file and then we did it step by step. After each step I did a bit of testing to make sure things
+did not seem to have been super broken.
+
+this refactoring seemed to have burned through a lot of tokens...it was spawning lots of background agents
+that presumably were all reading this large file. Seems like it might be a good idea to have something in
+the claude.md system prompt stuff to try to get it to make separate functions rather than just spamming
+functionality into the main canvas file...
 
 
 
@@ -152,4 +174,28 @@ were likely gettin serialized, and made suggestions to fix. Added to TODO.
 
 
 
+
+
+----------------------
+rms80 website migration
+----------------------
+
+Asked CC to migrate my rms80.com website from squarespace to a new Astro site.
+
+Continuously shit the bed.
+
+Refuses to directly copy text, even when I beg it to copy it verbatim without any editing.
+Sometimes works but any large block of text is edited.
+
+Trying to copy large Research page with sections like Papers, Patents, Talks, Service.
+It has changed many of the paper citation blocks (but titles and authors seem to still be correct). 
+It insists on re-ordering things, drops parts of the lists, etc.
+
+As a workaround I used 
+https://euangoddard.github.io/clipboard2markdown/ to convert squarespace text+links to markdown,
+and then ask CC to convert that markdown back to the new format. This works better
+but it still wants to (eg) add in subsections, etc. 
+
+it was able to do some cool stuff, like go through my list of patents and check if each patent
+had been granted and update the description
 

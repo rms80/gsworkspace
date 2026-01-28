@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, LLMModel, ImageGenModel, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
+import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
@@ -15,6 +15,17 @@ import { usePulseAnimation } from '../hooks/usePulseAnimation'
 import { useMenuState } from '../hooks/useMenuState'
 import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
+import {
+  PROMPT_HEADER_HEIGHT, RUN_BUTTON_WIDTH, MODEL_BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_GAP,
+  HTML_HEADER_HEIGHT, EXPORT_BUTTON_WIDTH, ZOOM_BUTTON_WIDTH,
+  MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
+  ZOOM_STEP, ZOOM_MIN, ZOOM_MAX,
+  Z_IFRAME_OVERLAY, Z_MENU,
+  COLOR_SELECTED, COLOR_BORDER_DEFAULT,
+  PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
+  getPulseColor,
+  LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
+} from '../constants/canvas'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -369,7 +380,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   // Reset scale and apply to width only (text reflows)
                   node.scaleX(1)
                   node.scaleY(1)
-                  const newWidth = Math.max(50, item.width * scaleX)
+                  const newWidth = Math.max(MIN_TEXT_WIDTH, item.width * scaleX)
                   onUpdateItem(item.id, {
                     x: node.x(),
                     y: node.y(),
@@ -381,7 +392,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Rect
                   width={item.width + padding * 2}
                   height={textHeight + padding * 2}
-                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
+                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
                   strokeWidth={1}
                   cornerRadius={4}
                 />
@@ -391,7 +402,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   text={item.text}
                   fontSize={item.fontSize}
                   width={item.width}
-                  fill={selectedIds.includes(item.id) ? '#0066cc' : '#000'}
+                  fill={selectedIds.includes(item.id) ? COLOR_SELECTED : '#000'}
                 />
               </Group>
             )
@@ -447,33 +458,28 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                     rotation: node.rotation(),
                   })
                 }}
-                stroke={selectedIds.includes(item.id) ? '#0066cc' : undefined}
+                stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : undefined}
                 strokeWidth={selectedIds.includes(item.id) ? 2 : 0}
               />
             )
           } else if (item.type === 'prompt') {
-            const headerHeight = 28
             const isEditingThis = promptEditing.editingId === item.id
             const isRunning = runningPromptIds.has(item.id)
-            const runButtonWidth = 40
-            const modelButtonWidth = 20
-            const buttonHeight = 20
-            const buttonGap = 4
 
             // Calculate pulse intensity (0 to 1) for running prompts
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
-            // Border color: pulse between dark orange (210, 105, 30) and light orange (255, 200, 100)
+            // Border color: pulse between dark orange and light orange
             const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
-              ? `rgb(${Math.round(210 + 45 * pulseIntensity)}, ${Math.round(105 + 95 * pulseIntensity)}, ${Math.round(30 + 70 * pulseIntensity)})`
-              : (isSelected ? '#0066cc' : '#c9a227')
+              ? getPulseColor(pulseIntensity, PROMPT_THEME.pulseBorder)
+              : (isSelected ? COLOR_SELECTED : PROMPT_THEME.border)
             const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
-            // Run button color: pulse between dark orange (200, 90, 20) and light orange (255, 180, 80)
+            // Run button color: pulse between dark orange and light orange
             const runButtonColor = isRunning
-              ? `rgb(${Math.round(200 + 55 * pulseIntensity)}, ${Math.round(90 + 90 * pulseIntensity)}, ${Math.round(20 + 60 * pulseIntensity)})`
-              : '#4a7c59'
+              ? getPulseColor(pulseIntensity, PROMPT_THEME.pulseRunButton)
+              : PROMPT_THEME.runButton
 
             return (
               <Group
@@ -497,8 +503,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   onUpdateItem(item.id, {
                     x: node.x(),
                     y: node.y(),
-                    width: Math.max(100, item.width * scaleX),
-                    height: Math.max(60, item.height * scaleY),
+                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
+                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
                   })
                 }}
               >
@@ -506,7 +512,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Rect
                   width={item.width}
                   height={item.height}
-                  fill="#f8f4e8"
+                  fill={PROMPT_THEME.itemBg}
                   stroke={borderColor}
                   strokeWidth={borderWidth}
                   cornerRadius={4}
@@ -514,8 +520,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 {/* Header background */}
                 <Rect
                   width={item.width}
-                  height={headerHeight}
-                  fill="#e8d89c"
+                  height={PROMPT_HEADER_HEIGHT}
+                  fill={PROMPT_THEME.headerBg}
                   cornerRadius={[4, 4, 0, 0]}
                 />
                 {/* Header label */}
@@ -523,20 +529,20 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   text={item.label}
                   x={8}
                   y={6}
-                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
-                  height={headerHeight - 6}
+                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
+                  height={PROMPT_HEADER_HEIGHT - 6}
                   fontSize={14}
                   fontStyle="bold"
-                  fill="#5c4d1a"
+                  fill={PROMPT_THEME.headerText}
                   onDblClick={() => promptEditing.handleLabelDblClick(item.id)}
                   visible={!(isEditingThis && promptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fill="#666"
                   cornerRadius={3}
                   onClick={(e) => {
@@ -548,11 +554,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 />
                 <Text
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
                   text="..."
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fontSize={12}
                   fontStyle="bold"
                   fill="#fff"
@@ -562,7 +568,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 />
                 {/* Run button */}
                 <Group
-                  x={item.width - runButtonWidth - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - 8}
                   y={4}
                   onClick={(e) => {
                     e.cancelBubble = true
@@ -572,15 +578,15 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 >
                   <Rect
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fill={runButtonColor}
                     cornerRadius={3}
                   />
                   <Text
                     text={isRunning ? '...' : 'Run'}
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fontSize={12}
                     fontStyle="bold"
                     fill="#fff"
@@ -592,39 +598,34 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Text
                   text={item.text}
                   x={8}
-                  y={headerHeight + 8}
+                  y={PROMPT_HEADER_HEIGHT + 8}
                   width={item.width - 16}
-                  height={item.height - headerHeight - 16}
+                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
                   fontSize={item.fontSize}
-                  fill="#333"
+                  fill={PROMPT_THEME.contentText}
                   onDblClick={() => promptEditing.handleTextDblClick(item.id)}
                   visible={!(isEditingThis && promptEditing.editingField === 'text')}
                 />
               </Group>
             )
           } else if (item.type === 'image-gen-prompt') {
-            const headerHeight = 28
             const isEditingThis = imageGenPromptEditing.editingId === item.id
             const isRunning = runningImageGenPromptIds.has(item.id)
-            const runButtonWidth = 40
-            const modelButtonWidth = 20
-            const buttonHeight = 20
-            const buttonGap = 4
 
             // Calculate pulse intensity (0 to 1) for running prompts
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
-            // Border color: pulse between dark purple (138, 43, 226) and light purple (200, 150, 255)
+            // Border color: pulse between dark purple and light purple
             const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
-              ? `rgb(${Math.round(138 + 62 * pulseIntensity)}, ${Math.round(43 + 107 * pulseIntensity)}, ${Math.round(226 + 29 * pulseIntensity)})`
-              : (isSelected ? '#0066cc' : '#8b5cf6')
+              ? getPulseColor(pulseIntensity, IMAGE_GEN_PROMPT_THEME.pulseBorder)
+              : (isSelected ? COLOR_SELECTED : IMAGE_GEN_PROMPT_THEME.border)
             const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
             // Run button color: pulse between dark purple and light purple
             const runButtonColor = isRunning
-              ? `rgb(${Math.round(138 + 62 * pulseIntensity)}, ${Math.round(43 + 107 * pulseIntensity)}, ${Math.round(200 + 55 * pulseIntensity)})`
-              : '#7c3aed'
+              ? getPulseColor(pulseIntensity, IMAGE_GEN_PROMPT_THEME.pulseRunButton)
+              : IMAGE_GEN_PROMPT_THEME.runButton
 
             return (
               <Group
@@ -648,8 +649,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   onUpdateItem(item.id, {
                     x: node.x(),
                     y: node.y(),
-                    width: Math.max(100, item.width * scaleX),
-                    height: Math.max(60, item.height * scaleY),
+                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
+                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
                   })
                 }}
               >
@@ -657,7 +658,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Rect
                   width={item.width}
                   height={item.height}
-                  fill="#f5f3ff"
+                  fill={IMAGE_GEN_PROMPT_THEME.itemBg}
                   stroke={borderColor}
                   strokeWidth={borderWidth}
                   cornerRadius={4}
@@ -665,8 +666,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 {/* Header background */}
                 <Rect
                   width={item.width}
-                  height={headerHeight}
-                  fill="#ddd6fe"
+                  height={PROMPT_HEADER_HEIGHT}
+                  fill={IMAGE_GEN_PROMPT_THEME.headerBg}
                   cornerRadius={[4, 4, 0, 0]}
                 />
                 {/* Header label */}
@@ -674,20 +675,20 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   text={item.label}
                   x={8}
                   y={6}
-                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
-                  height={headerHeight - 6}
+                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
+                  height={PROMPT_HEADER_HEIGHT - 6}
                   fontSize={14}
                   fontStyle="bold"
-                  fill="#5b21b6"
+                  fill={IMAGE_GEN_PROMPT_THEME.headerText}
                   onDblClick={() => imageGenPromptEditing.handleLabelDblClick(item.id)}
                   visible={!(isEditingThis && imageGenPromptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fill="#666"
                   cornerRadius={3}
                   onClick={(e) => {
@@ -699,11 +700,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 />
                 <Text
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
                   text="..."
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fontSize={12}
                   fontStyle="bold"
                   fill="#fff"
@@ -713,7 +714,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 />
                 {/* Run button */}
                 <Group
-                  x={item.width - runButtonWidth - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - 8}
                   y={4}
                   onClick={(e) => {
                     e.cancelBubble = true
@@ -723,15 +724,15 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 >
                   <Rect
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fill={runButtonColor}
                     cornerRadius={3}
                   />
                   <Text
                     text={isRunning ? '...' : 'Run'}
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fontSize={12}
                     fontStyle="bold"
                     fill="#fff"
@@ -743,39 +744,34 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Text
                   text={item.text}
                   x={8}
-                  y={headerHeight + 8}
+                  y={PROMPT_HEADER_HEIGHT + 8}
                   width={item.width - 16}
-                  height={item.height - headerHeight - 16}
+                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
                   fontSize={item.fontSize}
-                  fill="#333"
+                  fill={IMAGE_GEN_PROMPT_THEME.contentText}
                   onDblClick={() => imageGenPromptEditing.handleTextDblClick(item.id)}
                   visible={!(isEditingThis && imageGenPromptEditing.editingField === 'text')}
                 />
               </Group>
             )
           } else if (item.type === 'html-gen-prompt') {
-            const headerHeight = 28
             const isEditingThis = htmlGenPromptEditing.editingId === item.id
             const isRunning = runningHtmlGenPromptIds.has(item.id)
-            const runButtonWidth = 40
-            const modelButtonWidth = 20
-            const buttonHeight = 20
-            const buttonGap = 4
 
             // Calculate pulse intensity (0 to 1) for running prompts
             const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
-            // Border color: pulse between dark teal (13, 148, 136) and light teal (94, 234, 212)
+            // Border color: pulse between dark teal and light teal
             const isSelected = selectedIds.includes(item.id)
             const borderColor = isRunning
-              ? `rgb(${Math.round(13 + 81 * pulseIntensity)}, ${Math.round(148 + 86 * pulseIntensity)}, ${Math.round(136 + 76 * pulseIntensity)})`
-              : (isSelected ? '#0066cc' : '#0d9488')
+              ? getPulseColor(pulseIntensity, HTML_GEN_PROMPT_THEME.pulseBorder)
+              : (isSelected ? COLOR_SELECTED : HTML_GEN_PROMPT_THEME.border)
             const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
 
             // Run button color: pulse between dark teal and light teal
             const runButtonColor = isRunning
-              ? `rgb(${Math.round(13 + 81 * pulseIntensity)}, ${Math.round(148 + 86 * pulseIntensity)}, ${Math.round(136 + 76 * pulseIntensity)})`
-              : '#0f766e'
+              ? getPulseColor(pulseIntensity, HTML_GEN_PROMPT_THEME.pulseRunButton)
+              : HTML_GEN_PROMPT_THEME.runButton
 
             return (
               <Group
@@ -799,8 +795,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   onUpdateItem(item.id, {
                     x: node.x(),
                     y: node.y(),
-                    width: Math.max(100, item.width * scaleX),
-                    height: Math.max(60, item.height * scaleY),
+                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
+                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
                   })
                 }}
               >
@@ -808,7 +804,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Rect
                   width={item.width}
                   height={item.height}
-                  fill="#ccfbf1"
+                  fill={HTML_GEN_PROMPT_THEME.itemBg}
                   stroke={borderColor}
                   strokeWidth={borderWidth}
                   cornerRadius={4}
@@ -816,8 +812,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 {/* Header background */}
                 <Rect
                   width={item.width}
-                  height={headerHeight}
-                  fill="#99f6e4"
+                  height={PROMPT_HEADER_HEIGHT}
+                  fill={HTML_GEN_PROMPT_THEME.headerBg}
                   cornerRadius={[4, 4, 0, 0]}
                 />
                 {/* Header label */}
@@ -825,20 +821,20 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   text={item.label}
                   x={8}
                   y={6}
-                  width={item.width - runButtonWidth - modelButtonWidth - buttonGap - 24}
-                  height={headerHeight - 6}
+                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
+                  height={PROMPT_HEADER_HEIGHT - 6}
                   fontSize={14}
                   fontStyle="bold"
-                  fill="#134e4a"
+                  fill={HTML_GEN_PROMPT_THEME.headerText}
                   onDblClick={() => htmlGenPromptEditing.handleLabelDblClick(item.id)}
                   visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fill="#666"
                   cornerRadius={3}
                   onClick={(e) => {
@@ -850,11 +846,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 />
                 <Text
-                  x={item.width - runButtonWidth - modelButtonWidth - buttonGap - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
                   y={4}
                   text="..."
-                  width={modelButtonWidth}
-                  height={buttonHeight}
+                  width={MODEL_BUTTON_WIDTH}
+                  height={BUTTON_HEIGHT}
                   fontSize={12}
                   fontStyle="bold"
                   fill="#fff"
@@ -864,7 +860,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 />
                 {/* Run button */}
                 <Group
-                  x={item.width - runButtonWidth - 8}
+                  x={item.width - RUN_BUTTON_WIDTH - 8}
                   y={4}
                   onClick={(e) => {
                     e.cancelBubble = true
@@ -874,15 +870,15 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 >
                   <Rect
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fill={runButtonColor}
                     cornerRadius={3}
                   />
                   <Text
                     text={isRunning ? '...' : 'Run'}
-                    width={runButtonWidth}
-                    height={buttonHeight}
+                    width={RUN_BUTTON_WIDTH}
+                    height={BUTTON_HEIGHT}
                     fontSize={12}
                     fontStyle="bold"
                     fill="#fff"
@@ -894,21 +890,18 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 <Text
                   text={item.text}
                   x={8}
-                  y={headerHeight + 8}
+                  y={PROMPT_HEADER_HEIGHT + 8}
                   width={item.width - 16}
-                  height={item.height - headerHeight - 16}
+                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
                   fontSize={item.fontSize}
-                  fill="#333"
+                  fill={HTML_GEN_PROMPT_THEME.contentText}
                   onDblClick={() => htmlGenPromptEditing.handleTextDblClick(item.id)}
                   visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'text')}
                 />
               </Group>
             )
           } else if (item.type === 'html') {
-            const headerHeight = 24
             const zoom = item.zoom ?? 1
-            const zoomButtonWidth = 24
-            const exportButtonWidth = 50
             return (
               <Group
                 key={item.id}
@@ -916,7 +909,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 x={item.x}
                 y={item.y}
                 width={item.width}
-                height={item.height + headerHeight}
+                height={item.height + HTML_HEADER_HEIGHT}
                 draggable
                 onClick={(e) => handleItemClick(e, item.id)}
                 onDragStart={() => {
@@ -966,7 +959,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                       x: node.x(),
                       y: node.y(),
                       width: item.width * scaleX,
-                      height: (item.height + headerHeight) * scaleY - headerHeight,
+                      height: (item.height + HTML_HEADER_HEIGHT) * scaleY - HTML_HEADER_HEIGHT,
                     })
                     return next
                   })
@@ -981,8 +974,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   onUpdateItem(item.id, {
                     x: node.x(),
                     y: node.y(),
-                    width: Math.max(100, node.width() * scaleX),
-                    height: Math.max(60, (node.height() - headerHeight) * scaleY),
+                    width: Math.max(MIN_PROMPT_WIDTH, node.width() * scaleX),
+                    height: Math.max(MIN_PROMPT_HEIGHT, (node.height() - HTML_HEADER_HEIGHT) * scaleY),
                   })
                   // Clear real-time transform tracking
                   setHtmlItemTransforms((prev) => {
@@ -998,9 +991,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 {/* Header bar for dragging */}
                 <Rect
                   width={item.width}
-                  height={headerHeight}
+                  height={HTML_HEADER_HEIGHT}
                   fill="#d0d0d0"
-                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
+                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
                   strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
                   cornerRadius={[4, 4, 0, 0]}
                 />
@@ -1012,14 +1005,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   fontSize={14}
                   fontStyle="bold"
                   fill="#333"
-                  width={item.width - zoomButtonWidth * 3 - exportButtonWidth - 24}
+                  width={item.width - ZOOM_BUTTON_WIDTH * 3 - EXPORT_BUTTON_WIDTH - 24}
                   ellipsis={true}
                   onDblClick={() => handleHtmlLabelDblClick(item.id)}
                   visible={editingHtmlLabelId !== item.id}
                 />
                 {/* Export button with dropdown */}
                 <Group
-                  x={item.width - zoomButtonWidth * 3 - exportButtonWidth - 12}
+                  x={item.width - ZOOM_BUTTON_WIDTH * 3 - EXPORT_BUTTON_WIDTH - 12}
                   y={2}
                   onClick={(e) => {
                     e.cancelBubble = true
@@ -1035,14 +1028,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   }}
                 >
                   <Rect
-                    width={exportButtonWidth}
+                    width={EXPORT_BUTTON_WIDTH}
                     height={20}
                     fill={exportMenu.menuData === item.id ? '#3d6640' : '#4a7c4e'}
                     cornerRadius={3}
                   />
                   <Text
                     text="Export ▾"
-                    width={exportButtonWidth}
+                    width={EXPORT_BUTTON_WIDTH}
                     height={20}
                     fontSize={11}
                     fill="#fff"
@@ -1052,23 +1045,23 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 </Group>
                 {/* Zoom out button */}
                 <Group
-                  x={item.width - zoomButtonWidth * 3 - 8}
+                  x={item.width - ZOOM_BUTTON_WIDTH * 3 - 8}
                   y={2}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    const newZoom = Math.max(0.25, zoom - 0.25)
+                    const newZoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP)
                     onUpdateItem(item.id, { zoom: newZoom })
                   }}
                 >
                   <Rect
-                    width={zoomButtonWidth}
+                    width={ZOOM_BUTTON_WIDTH}
                     height={20}
                     fill="#888"
                     cornerRadius={3}
                   />
                   <Text
                     text="-"
-                    width={zoomButtonWidth}
+                    width={ZOOM_BUTTON_WIDTH}
                     height={20}
                     fontSize={14}
                     fontStyle="bold"
@@ -1079,10 +1072,10 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 </Group>
                 {/* Zoom level display */}
                 <Text
-                  x={item.width - zoomButtonWidth * 2 - 6}
+                  x={item.width - ZOOM_BUTTON_WIDTH * 2 - 6}
                   y={2}
                   text={`${Math.round(zoom * 100)}%`}
-                  width={zoomButtonWidth}
+                  width={ZOOM_BUTTON_WIDTH}
                   height={20}
                   fontSize={11}
                   fill="#555"
@@ -1091,23 +1084,23 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 />
                 {/* Zoom in button */}
                 <Group
-                  x={item.width - zoomButtonWidth - 4}
+                  x={item.width - ZOOM_BUTTON_WIDTH - 4}
                   y={2}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    const newZoom = Math.min(3, zoom + 0.25)
+                    const newZoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP)
                     onUpdateItem(item.id, { zoom: newZoom })
                   }}
                 >
                   <Rect
-                    width={zoomButtonWidth}
+                    width={ZOOM_BUTTON_WIDTH}
                     height={20}
                     fill="#888"
                     cornerRadius={3}
                   />
                   <Text
                     text="+"
-                    width={zoomButtonWidth}
+                    width={ZOOM_BUTTON_WIDTH}
                     height={20}
                     fontSize={14}
                     fontStyle="bold"
@@ -1118,11 +1111,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 </Group>
                 {/* Content area background */}
                 <Rect
-                  y={headerHeight}
+                  y={HTML_HEADER_HEIGHT}
                   width={item.width}
                   height={item.height}
                   fill="#fff"
-                  stroke={selectedIds.includes(item.id) ? '#0066cc' : '#ccc'}
+                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
                   strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
                   cornerRadius={[0, 0, 4, 4]}
                 />
@@ -1140,7 +1133,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             width={selectionRect.width}
             height={selectionRect.height}
             fill="rgba(0, 102, 204, 0.1)"
-            stroke="#0066cc"
+            stroke={COLOR_SELECTED}
             strokeWidth={1}
           />
         )}
@@ -1153,7 +1146,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
             // Prevent too small width
-            if (newBox.width < 50) {
+            if (newBox.width < MIN_TEXT_WIDTH) {
               return oldBox
             }
             return newBox
@@ -1173,7 +1166,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 100 || newBox.height < 60) {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
               return oldBox
             }
             return newBox
@@ -1186,7 +1179,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 100 || newBox.height < 60) {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
               return oldBox
             }
             return newBox
@@ -1199,7 +1192,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 100 || newBox.height < 60) {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
               return oldBox
             }
             return newBox
@@ -1212,7 +1205,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
           keepRatio={false}
           boundBoxFunc={(oldBox, newBox) => {
-            if (newBox.width < 100 || newBox.height < 60) {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
               return oldBox
             }
             return newBox
@@ -1226,7 +1219,6 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         .filter((item) => item.type === 'html')
         .map((item) => {
           if (item.type !== 'html') return null
-          const headerHeight = 24
           const zoom = item.zoom ?? 1
           // Use real-time transform state if available, otherwise use item state
           const transform = htmlItemTransforms.get(item.id)
@@ -1239,13 +1231,13 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               key={`html-${item.id}`}
               style={{
                 position: 'absolute',
-                top: (y + headerHeight) * stageScale + stagePos.y,
+                top: (y + HTML_HEADER_HEIGHT) * stageScale + stagePos.y,
                 left: x * stageScale + stagePos.x,
                 width: width * stageScale,
                 height: height * stageScale,
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
-                zIndex: 10,
+                zIndex: Z_IFRAME_OVERLAY,
               }}
             >
               <iframe
@@ -1334,11 +1326,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             fontWeight: 'bold',
             padding: '0 2px',
             margin: 0,
-            border: '2px solid #c9a227',
+            border: `2px solid ${PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
-            background: '#e8d89c',
-            color: '#5c4d1a',
+            background: PROMPT_THEME.inputBg,
+            color: PROMPT_THEME.inputText,
             boxSizing: 'border-box',
           }}
         />
@@ -1353,21 +1345,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onKeyDown={promptEditing.handleKeyDown}
           style={{
             position: 'absolute',
-            top: (editingPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            top: (editingPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
             left: (editingPrompt.x + 6) * stageScale + stagePos.x,
             width: (editingPrompt.width - 16) * stageScale,
-            height: (editingPrompt.height - 28 - 16) * stageScale,
+            height: (editingPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
             fontSize: editingPrompt.fontSize * stageScale,
             fontFamily: 'sans-serif',
             padding: '2px',
             margin: 0,
-            border: '2px solid #c9a227',
+            border: `2px solid ${PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
             resize: 'none',
             overflow: 'hidden',
-            background: '#f8f4e8',
-            color: '#333',
+            background: PROMPT_THEME.textareaBg,
+            color: PROMPT_THEME.contentText,
             boxSizing: 'border-box',
           }}
         />
@@ -1397,11 +1389,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             fontWeight: 'bold',
             padding: '0 2px',
             margin: 0,
-            border: '2px solid #8b5cf6',
+            border: `2px solid ${IMAGE_GEN_PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
-            background: '#ddd6fe',
-            color: '#5b21b6',
+            background: IMAGE_GEN_PROMPT_THEME.inputBg,
+            color: IMAGE_GEN_PROMPT_THEME.inputText,
             boxSizing: 'border-box',
           }}
         />
@@ -1416,21 +1408,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onKeyDown={imageGenPromptEditing.handleKeyDown}
           style={{
             position: 'absolute',
-            top: (editingImageGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            top: (editingImageGenPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
             left: (editingImageGenPrompt.x + 6) * stageScale + stagePos.x,
             width: (editingImageGenPrompt.width - 16) * stageScale,
-            height: (editingImageGenPrompt.height - 28 - 16) * stageScale,
+            height: (editingImageGenPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
             fontSize: editingImageGenPrompt.fontSize * stageScale,
             fontFamily: 'sans-serif',
             padding: '2px',
             margin: 0,
-            border: '2px solid #8b5cf6',
+            border: `2px solid ${IMAGE_GEN_PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
             resize: 'none',
             overflow: 'hidden',
-            background: '#f5f3ff',
-            color: '#333',
+            background: IMAGE_GEN_PROMPT_THEME.textareaBg,
+            color: IMAGE_GEN_PROMPT_THEME.contentText,
             boxSizing: 'border-box',
           }}
         />
@@ -1460,11 +1452,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             fontWeight: 'bold',
             padding: '0 2px',
             margin: 0,
-            border: '2px solid #0d9488',
+            border: `2px solid ${HTML_GEN_PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
-            background: '#99f6e4',
-            color: '#134e4a',
+            background: HTML_GEN_PROMPT_THEME.inputBg,
+            color: HTML_GEN_PROMPT_THEME.inputText,
             boxSizing: 'border-box',
           }}
         />
@@ -1479,21 +1471,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onKeyDown={htmlGenPromptEditing.handleKeyDown}
           style={{
             position: 'absolute',
-            top: (editingHtmlGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
+            top: (editingHtmlGenPrompt.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
             left: (editingHtmlGenPrompt.x + 6) * stageScale + stagePos.x,
             width: (editingHtmlGenPrompt.width - 16) * stageScale,
-            height: (editingHtmlGenPrompt.height - 28 - 16) * stageScale,
+            height: (editingHtmlGenPrompt.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
             fontSize: editingHtmlGenPrompt.fontSize * stageScale,
             fontFamily: 'sans-serif',
             padding: '2px',
             margin: 0,
-            border: '2px solid #0d9488',
+            border: `2px solid ${HTML_GEN_PROMPT_THEME.inputBorder}`,
             borderRadius: 2,
             outline: 'none',
             resize: 'none',
             overflow: 'hidden',
-            background: '#ccfbf1',
-            color: '#333',
+            background: HTML_GEN_PROMPT_THEME.textareaBg,
+            color: HTML_GEN_PROMPT_THEME.contentText,
             boxSizing: 'border-box',
           }}
         />
@@ -1517,7 +1509,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             fontWeight: 'bold',
             padding: '0 2px',
             margin: 0,
-            border: '2px solid #0066cc',
+            border: `2px solid ${COLOR_SELECTED}`,
             borderRadius: 2,
             outline: 'none',
             background: '#e8f4ff',
@@ -1538,7 +1530,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             border: '1px solid #ccc',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
+            zIndex: Z_MENU,
             minWidth: 120,
           }}
         >
@@ -1573,12 +1565,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             border: '1px solid #ccc',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
+            zIndex: Z_MENU,
             minWidth: 100,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
+          {LLM_MODELS.map((model) => {
             const promptItem = items.find((i) => i.id === modelMenu.menuData && i.type === 'prompt')
             const isSelected = promptItem?.type === 'prompt' && promptItem.model === model
             return (
@@ -1602,13 +1594,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
               >
-                {{
-                  'claude-haiku': 'Claude Haiku',
-                  'claude-sonnet': 'Claude Sonnet',
-                  'claude-opus': 'Claude Opus',
-                  'gemini-flash': 'Gemini 3 Flash',
-                  'gemini-pro': 'Gemini 3 Pro',
-                }[model]}
+                {LLM_MODEL_LABELS[model]}
               </button>
             )
           })}
@@ -1626,12 +1612,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             border: '1px solid #ccc',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
+            zIndex: Z_MENU,
             minWidth: 100,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {(['gemini-imagen', 'gemini-flash-imagen'] as ImageGenModel[]).map((model) => {
+          {IMAGE_GEN_MODELS.map((model) => {
             const promptItem = items.find((i) => i.id === imageGenModelMenu.menuData && i.type === 'image-gen-prompt')
             const isSelected = promptItem?.type === 'image-gen-prompt' && promptItem.model === model
             return (
@@ -1655,10 +1641,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
               >
-                {{
-                  'gemini-imagen': 'Gemini Imagen',
-                  'gemini-flash-imagen': 'Gemini Flash Imagen',
-                }[model]}
+                {IMAGE_GEN_MODEL_LABELS[model]}
               </button>
             )
           })}
@@ -1676,12 +1659,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             border: '1px solid #ccc',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
+            zIndex: Z_MENU,
             minWidth: 100,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
+          {LLM_MODELS.map((model) => {
             const promptItem = items.find((i) => i.id === htmlGenModelMenu.menuData && i.type === 'html-gen-prompt')
             const isSelected = promptItem?.type === 'html-gen-prompt' && promptItem.model === model
             return (
@@ -1705,13 +1688,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
                 onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
               >
-                {{
-                  'claude-haiku': 'Claude Haiku',
-                  'claude-sonnet': 'Claude Sonnet',
-                  'claude-opus': 'Claude Opus',
-                  'gemini-flash': 'Gemini 3 Flash',
-                  'gemini-pro': 'Gemini 3 Pro',
-                }[model]}
+                {LLM_MODEL_LABELS[model]}
               </button>
             )
           })}
@@ -1731,7 +1708,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             border: '1px solid #ccc',
             borderRadius: 4,
             boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 1000,
+            zIndex: Z_MENU,
             minWidth: 150,
           }}
           onClick={(e) => e.stopPropagation()}
@@ -1849,7 +1826,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               border: '1px solid #ccc',
               borderRadius: 4,
               boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              zIndex: 1000,
+              zIndex: Z_MENU,
               minWidth: 100,
             }}
             onClick={(e) => e.stopPropagation()}
