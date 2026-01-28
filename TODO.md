@@ -24,14 +24,14 @@ HTML overlay elements positioned absolutely on top of the Konva Stage for text e
 - [ ] **`PromptEditingOverlay.tsx`** (~60 lines, generic) — Input for label + textarea for text, parameterized by color/position. Currently duplicated 3 times (lines ~1487-1674). One component replaces all three
 - [ ] **`HtmlLabelEditingOverlay.tsx`** (~30 lines) — Input overlay for HTML item label (lines ~1676-1702)
 
-### Phase 3: Extract Context Menus (~450 lines)
+### Phase 3: Extract Context Menus (~450 lines) ✅
 
-All menus are absolutely-positioned divs with click handlers and useEffect cleanup.
+All menus extracted into `components/canvas/menus/`. Click-outside dismiss handled by `useMenuState` hook.
 
-- [ ] **`CanvasContextMenu.tsx`** (~35 lines) — Right-click paste menu (lines ~1705-1737)
-- [ ] **`ModelSelectorMenu.tsx`** (~55 lines, generic) — Dropdown listing models with checkmark for current selection. Currently duplicated 3 times for prompt/image-gen/html-gen (lines ~1740-1896). One component with a models list prop replaces all three
-- [ ] **`ImageContextMenu.tsx`** (~115 lines) — Reset transform, crop, remove crop (lines ~1898-2013)
-- [ ] **`HtmlExportMenu.tsx`** (~140 lines) — HTML/Markdown single-file and ZIP exports (lines ~2015-2153)
+- [x] **`CanvasContextMenu.tsx`** — Right-click paste menu
+- [x] **`ModelSelectorMenu.tsx`** — Generic model selector with type parameter, used for all 3 prompt types
+- [x] **`ImageContextMenu.tsx`** — Reset transform, crop, remove crop
+- [x] **`HtmlExportMenu.tsx`** — HTML/Markdown single-file and ZIP exports, with shared error handling
 
 ### Phase 4: Extract Supporting Hooks (~120 lines) ✅
 

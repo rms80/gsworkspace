@@ -5,7 +5,10 @@ import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptIte
 import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
-import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../utils/htmlExport'
+import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
+import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
+import ImageContextMenu from './canvas/menus/ImageContextMenu'
+import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
@@ -20,7 +23,7 @@ import {
   HTML_HEADER_HEIGHT, EXPORT_BUTTON_WIDTH, ZOOM_BUTTON_WIDTH,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   ZOOM_STEP, ZOOM_MIN, ZOOM_MAX,
-  Z_IFRAME_OVERLAY, Z_MENU,
+  Z_IFRAME_OVERLAY,
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
   getPulseColor,
@@ -1521,430 +1524,89 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
 
       {/* Context menu */}
       {contextMenuState.menuPosition && (
-        <div
-          style={{
-            position: 'fixed',
-            top: contextMenuState.menuPosition.y,
-            left: contextMenuState.menuPosition.x,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: Z_MENU,
-            minWidth: 120,
-          }}
-        >
-          <button
-            onClick={handleContextMenuPaste}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '8px 16px',
-              border: 'none',
-              background: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-          >
-            Paste
-          </button>
-        </div>
+        <CanvasContextMenu
+          position={contextMenuState.menuPosition}
+          onPaste={handleContextMenuPaste}
+        />
       )}
 
       {/* Model selector menu */}
-      {modelMenu.menuData && modelMenu.menuPosition && (
-        <div
-          style={{
-            position: 'fixed',
-            top: modelMenu.menuPosition.y,
-            left: modelMenu.menuPosition.x,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: Z_MENU,
-            minWidth: 100,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {LLM_MODELS.map((model) => {
-            const promptItem = items.find((i) => i.id === modelMenu.menuData && i.type === 'prompt')
-            const isSelected = promptItem?.type === 'prompt' && promptItem.model === model
-            return (
-              <button
-                key={model}
-                onClick={() => {
-                  onUpdateItem(modelMenu.menuData!, { model })
-                  modelMenu.closeMenu()
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: isSelected ? '#e8e8e8' : 'none',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: isSelected ? 'bold' : 'normal',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
-              >
-                {LLM_MODEL_LABELS[model]}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Image gen model selector menu */}
-      {imageGenModelMenu.menuData && imageGenModelMenu.menuPosition && (
-        <div
-          style={{
-            position: 'fixed',
-            top: imageGenModelMenu.menuPosition.y,
-            left: imageGenModelMenu.menuPosition.x,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: Z_MENU,
-            minWidth: 100,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {IMAGE_GEN_MODELS.map((model) => {
-            const promptItem = items.find((i) => i.id === imageGenModelMenu.menuData && i.type === 'image-gen-prompt')
-            const isSelected = promptItem?.type === 'image-gen-prompt' && promptItem.model === model
-            return (
-              <button
-                key={model}
-                onClick={() => {
-                  onUpdateItem(imageGenModelMenu.menuData!, { model })
-                  imageGenModelMenu.closeMenu()
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: isSelected ? '#e8e8e8' : 'none',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: isSelected ? 'bold' : 'normal',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
-              >
-                {IMAGE_GEN_MODEL_LABELS[model]}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* HTML gen model selector menu */}
-      {htmlGenModelMenu.menuData && htmlGenModelMenu.menuPosition && (
-        <div
-          style={{
-            position: 'fixed',
-            top: htmlGenModelMenu.menuPosition.y,
-            left: htmlGenModelMenu.menuPosition.x,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: Z_MENU,
-            minWidth: 100,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {LLM_MODELS.map((model) => {
-            const promptItem = items.find((i) => i.id === htmlGenModelMenu.menuData && i.type === 'html-gen-prompt')
-            const isSelected = promptItem?.type === 'html-gen-prompt' && promptItem.model === model
-            return (
-              <button
-                key={model}
-                onClick={() => {
-                  onUpdateItem(htmlGenModelMenu.menuData!, { model })
-                  htmlGenModelMenu.closeMenu()
-                }}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '8px 16px',
-                  border: 'none',
-                  background: isSelected ? '#e8e8e8' : 'none',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: isSelected ? 'bold' : 'normal',
-                }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = isSelected ? '#e0e0e0' : '#f0f0f0')}
-                onMouseLeave={(e) => (e.currentTarget.style.background = isSelected ? '#e8e8e8' : 'none')}
-              >
-                {LLM_MODEL_LABELS[model]}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Image context menu */}
-      {imageContextMenuState.menuData && imageContextMenuState.menuPosition && (() => {
-        const contextImageItem = items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined
+      {modelMenu.menuData && modelMenu.menuPosition && (() => {
+        const promptItem = items.find((i) => i.id === modelMenu.menuData && i.type === 'prompt') as PromptItem | undefined
         return (
-        <div
-          style={{
-            position: 'fixed',
-            top: imageContextMenuState.menuPosition.y,
-            left: imageContextMenuState.menuPosition.x,
-            background: 'white',
-            border: '1px solid #ccc',
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: Z_MENU,
-            minWidth: 150,
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <button
-            onClick={() => {
-              onUpdateItem(imageContextMenuState.menuData!.imageId, {
-                scaleX: 1,
-                scaleY: 1,
-                rotation: 0,
-              })
-              imageContextMenuState.closeMenu()
+          <ModelSelectorMenu
+            position={modelMenu.menuPosition}
+            models={LLM_MODELS}
+            labels={LLM_MODEL_LABELS}
+            selectedModel={promptItem?.model}
+            onSelect={(model) => {
+              onUpdateItem(modelMenu.menuData!, { model })
+              modelMenu.closeMenu()
             }}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '8px 16px',
-              border: 'none',
-              background: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-          >
-            Reset Transform
-          </button>
-          <button
-            onClick={() => {
-              const imgItem = contextImageItem
-              if (!imgItem) { imageContextMenuState.closeMenu(); return }
-              const img = loadedImages.get(imgItem.src)
-              if (!img) { imageContextMenuState.closeMenu(); return }
-              const natW = img.naturalWidth
-              const natH = img.naturalHeight
-              // Initialize pending crop rect from existing crop or full image
-              const initialCrop = imgItem.cropRect
-                ? { ...imgItem.cropRect }
-                : { x: 0, y: 0, width: natW, height: natH }
-              setCroppingImageId(imgItem.id)
-              setPendingCropRect(initialCrop)
-              imageContextMenuState.closeMenu()
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '8px 16px',
-              border: 'none',
-              background: 'none',
-              textAlign: 'left',
-              cursor: 'pointer',
-              fontSize: 14,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-          >
-            Crop
-          </button>
-          {contextImageItem?.cropRect && (
-            <button
-              onClick={() => {
-                const imgItem = contextImageItem
-                if (!imgItem) { imageContextMenuState.closeMenu(); return }
-                const img = loadedImages.get(imgItem.src)
-                if (!img) { imageContextMenuState.closeMenu(); return }
-                const natW = img.naturalWidth
-                const natH = img.naturalHeight
-                // Restore full image dimensions using current display scale
-                const currentSourceW = imgItem.cropRect?.width ?? natW
-                const displayScale = imgItem.width / currentSourceW
-                const offsetX = imgItem.x - (imgItem.cropRect?.x ?? 0) * displayScale
-                const offsetY = imgItem.y - (imgItem.cropRect?.y ?? 0) * displayScale
-                onUpdateItem(imgItem.id, {
-                  x: offsetX,
-                  y: offsetY,
-                  width: natW * displayScale,
-                  height: natH * displayScale,
-                  cropRect: undefined,
-                  cropSrc: undefined,
-                })
-                imageContextMenuState.closeMenu()
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-            >
-              Remove Crop
-            </button>
-          )}
-        </div>
+          />
         )
       })()}
+
+      {/* Image gen model selector menu */}
+      {imageGenModelMenu.menuData && imageGenModelMenu.menuPosition && (() => {
+        const promptItem = items.find((i) => i.id === imageGenModelMenu.menuData && i.type === 'image-gen-prompt') as ImageGenPromptItem | undefined
+        return (
+          <ModelSelectorMenu
+            position={imageGenModelMenu.menuPosition}
+            models={IMAGE_GEN_MODELS}
+            labels={IMAGE_GEN_MODEL_LABELS}
+            selectedModel={promptItem?.model}
+            onSelect={(model) => {
+              onUpdateItem(imageGenModelMenu.menuData!, { model })
+              imageGenModelMenu.closeMenu()
+            }}
+          />
+        )
+      })()}
+
+      {/* HTML gen model selector menu */}
+      {htmlGenModelMenu.menuData && htmlGenModelMenu.menuPosition && (() => {
+        const promptItem = items.find((i) => i.id === htmlGenModelMenu.menuData && i.type === 'html-gen-prompt') as HTMLGenPromptItem | undefined
+        return (
+          <ModelSelectorMenu
+            position={htmlGenModelMenu.menuPosition}
+            models={LLM_MODELS}
+            labels={LLM_MODEL_LABELS}
+            selectedModel={promptItem?.model}
+            onSelect={(model) => {
+              onUpdateItem(htmlGenModelMenu.menuData!, { model })
+              htmlGenModelMenu.closeMenu()
+            }}
+          />
+        )
+      })()}
+
+      {/* Image context menu */}
+      {imageContextMenuState.menuData && imageContextMenuState.menuPosition && (
+        <ImageContextMenu
+          position={imageContextMenuState.menuPosition}
+          imageItem={items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined}
+          loadedImages={loadedImages}
+          onUpdateItem={onUpdateItem}
+          onStartCrop={(id, initialCrop) => {
+            setCroppingImageId(id)
+            setPendingCropRect(initialCrop)
+          }}
+          onClose={imageContextMenuState.closeMenu}
+        />
+      )}
 
       {/* Export menu */}
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
         if (!htmlItem || htmlItem.type !== 'html') return null
         return (
-          <div
-            style={{
-              position: 'fixed',
-              top: exportMenu.menuPosition.y,
-              left: exportMenu.menuPosition.x,
-              background: 'white',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              zIndex: Z_MENU,
-              minWidth: 100,
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={async () => {
-                exportMenu.closeMenu()
-                try {
-                  await exportHtmlWithImages(htmlItem.html, htmlItem.label || 'export')
-                } catch (error) {
-                  if (error instanceof Error && error.name === 'AbortError') {
-                    return
-                  }
-                  console.error('Export failed:', error)
-                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
-                }
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-            >
-              HTML
-            </button>
-            <button
-              onClick={async () => {
-                exportMenu.closeMenu()
-                try {
-                  await exportMarkdownWithImages(htmlItem.html, htmlItem.label || 'export')
-                } catch (error) {
-                  if (error instanceof Error && error.name === 'AbortError') {
-                    return
-                  }
-                  console.error('Export failed:', error)
-                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
-                }
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-            >
-              Markdown
-            </button>
-            <hr style={{ margin: '2px 8px', border: 'none', borderTop: '1px solid #ddd' }} />
-            <button
-              onClick={async () => {
-                exportMenu.closeMenu()
-                try {
-                  await exportHtmlZip(htmlItem.html, htmlItem.label || 'export')
-                } catch (error) {
-                  if (error instanceof Error && error.name === 'AbortError') {
-                    return
-                  }
-                  console.error('Export failed:', error)
-                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
-                }
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-            >
-              HTML (Zip)
-            </button>
-            <button
-              onClick={async () => {
-                exportMenu.closeMenu()
-                try {
-                  await exportMarkdownZip(htmlItem.html, htmlItem.label || 'export')
-                } catch (error) {
-                  if (error instanceof Error && error.name === 'AbortError') {
-                    return
-                  }
-                  console.error('Export failed:', error)
-                  alert('Export failed: ' + (error instanceof Error ? error.message : 'Unknown error'))
-                }
-              }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-            >
-              Markdown (Zip)
-            </button>
-          </div>
+          <HtmlExportMenu
+            position={exportMenu.menuPosition}
+            html={htmlItem.html}
+            label={htmlItem.label || 'export'}
+            onClose={exportMenu.closeMenu}
+          />
         )
       })()}
     </div>
