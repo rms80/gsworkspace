@@ -5,16 +5,14 @@
 
 The file is currently **2,158 lines**. After the first round of hook extraction (viewport, selection, crop, clipboard, prompt editing), the remaining bulk is item renderers, editing overlays, and context menus — all inline JSX and handler functions. The goal is to extract these into focused components and hooks, bringing InfiniteCanvas down to ~400-500 lines as a thin orchestrator.
 
-### Phase 1: Extract Item Renderers (~800 lines)
+### Phase 1: Extract Item Renderers (~800 lines) ✅
 
-The `items.map()` block (lines ~509-1307) renders 6 item types inline. Each should become a standalone component.
+Extracted into `components/canvas/items/`. The generic `PromptItemRenderer` replaced 3 duplicated prompt blocks.
 
-- [ ] **`TextItemRenderer.tsx`** (~55 lines) — Group with Rect+Text, drag/transform handlers, double-click to edit
-- [ ] **`ImageItemRenderer.tsx`** (~55 lines) — KonvaImage with crop overlay branch, right-click context menu trigger, transform handlers
-- [ ] **`PromptItemRenderer.tsx`** (~150 lines) — Background rect with pulsing border, header with label/model/run buttons, text area. Takes prompt type config (colors, run handler) as props so it can be reused for all 3 prompt types
-- [ ] **`HtmlItemRenderer.tsx`** (~225 lines) — Header bar with label, export/zoom buttons, content rect, drag/transform with real-time iframe sync
-
-The three prompt types (prompt, image-gen-prompt, html-gen-prompt) currently have ~150 lines each of nearly identical JSX differing only in colors, model type, and run handler. A single generic `PromptItemRenderer` with a theme/config prop replaces all three, saving ~300 lines of duplication.
+- [x] **`TextItemRenderer.tsx`** — Group with Rect+Text, drag/transform handlers, double-click to edit
+- [x] **`ImageItemRenderer.tsx`** — KonvaImage with crop overlay branch, right-click context menu trigger, transform handlers
+- [x] **`PromptItemRenderer.tsx`** — Generic renderer used for all 3 prompt types (prompt, image-gen-prompt, html-gen-prompt) via theme config prop
+- [x] **`HtmlItemRenderer.tsx`** — Header bar with label, export/zoom buttons, content rect, drag/transform with real-time iframe sync
 
 ### Phase 2: Extract Editing Overlays (~240 lines)
 

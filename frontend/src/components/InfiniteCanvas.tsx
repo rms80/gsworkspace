@@ -1,14 +1,17 @@
 import { useState, useRef } from 'react'
-import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
+import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
-import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
+import TextItemRenderer from './canvas/items/TextItemRenderer'
+import ImageItemRenderer from './canvas/items/ImageItemRenderer'
+import PromptItemRenderer from './canvas/items/PromptItemRenderer'
+import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
@@ -19,14 +22,12 @@ import { useMenuState } from '../hooks/useMenuState'
 import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import {
-  PROMPT_HEADER_HEIGHT, RUN_BUTTON_WIDTH, MODEL_BUTTON_WIDTH, BUTTON_HEIGHT, BUTTON_GAP,
-  HTML_HEADER_HEIGHT, EXPORT_BUTTON_WIDTH, ZOOM_BUTTON_WIDTH,
+  PROMPT_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
-  ZOOM_STEP, ZOOM_MIN, ZOOM_MAX,
   Z_IFRAME_OVERLAY,
-  COLOR_SELECTED, COLOR_BORDER_DEFAULT,
+  COLOR_SELECTED,
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
-  getPulseColor,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
 } from '../constants/canvas'
 
@@ -354,775 +355,102 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
-            const padding = 8
-            // Calculate text height dynamically based on content
-            const measureText = () => {
-              const textNode = new Konva.Text({
-                text: item.text,
-                fontSize: item.fontSize,
-                width: item.width,
-              })
-              return textNode.height()
-            }
-            const textHeight = measureText()
             return (
-              <Group
+              <TextItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
-                draggable
-                onClick={(e) => handleItemClick(e, item.id)}
-                onDblClick={() => handleTextDblClick(item.id)}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  // Reset scale and apply to width only (text reflows)
-                  node.scaleX(1)
-                  node.scaleY(1)
-                  const newWidth = Math.max(MIN_TEXT_WIDTH, item.width * scaleX)
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    width: newWidth,
-                  })
-                }}
-                visible={editingTextId !== item.id}
-              >
-                <Rect
-                  width={item.width + padding * 2}
-                  height={textHeight + padding * 2}
-                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
-                  strokeWidth={1}
-                  cornerRadius={4}
-                />
-                <Text
-                  x={padding}
-                  y={padding}
-                  text={item.text}
-                  fontSize={item.fontSize}
-                  width={item.width}
-                  fill={selectedIds.includes(item.id) ? COLOR_SELECTED : '#000'}
-                />
-              </Group>
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                isEditing={editingTextId === item.id}
+                onItemClick={handleItemClick}
+                onDblClick={handleTextDblClick}
+                onUpdateItem={onUpdateItem}
+              />
             )
           } else if (item.type === 'image') {
             const img = loadedImages.get(item.src)
             if (!img) return null
-            const isCropping = croppingImageId === item.id
-            if (isCropping && pendingCropRect) {
-              return (
-                <ImageCropOverlay
-                  key={`crop-${item.id}`}
-                  item={item}
-                  image={img}
-                  cropRect={pendingCropRect}
-                  stageScale={stageScale}
-                  onCropChange={setPendingCropRect}
-                />
-              )
-            }
             return (
-              <KonvaImage
+              <ImageItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
+                item={item}
                 image={img}
-                width={item.width}
-                height={item.height}
-                crop={item.cropRect ? { x: item.cropRect.x, y: item.cropRect.y, width: item.cropRect.width, height: item.cropRect.height } : undefined}
-                scaleX={item.scaleX ?? 1}
-                scaleY={item.scaleY ?? 1}
-                rotation={item.rotation ?? 0}
-                draggable
-                onClick={(e) => handleItemClick(e, item.id)}
-                onContextMenu={(e) => {
-                  e.evt.preventDefault()
-                  e.cancelBubble = true
+                isSelected={selectedIds.includes(item.id)}
+                isCropping={croppingImageId === item.id}
+                pendingCropRect={pendingCropRect}
+                stageScale={stageScale}
+                onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
                   imageContextMenuState.openMenu(
-                    { imageId: item.id },
+                    { imageId: id },
                     { x: e.evt.clientX, y: e.evt.clientY },
                   )
                 }}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    scaleX: node.scaleX(),
-                    scaleY: node.scaleY(),
-                    rotation: node.rotation(),
-                  })
-                }}
-                stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : undefined}
-                strokeWidth={selectedIds.includes(item.id) ? 2 : 0}
+                onUpdateItem={onUpdateItem}
+                onCropChange={setPendingCropRect}
               />
             )
           } else if (item.type === 'prompt') {
-            const isEditingThis = promptEditing.editingId === item.id
-            const isRunning = runningPromptIds.has(item.id)
-
-            // Calculate pulse intensity (0 to 1) for running prompts
-            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
-
-            // Border color: pulse between dark orange and light orange
-            const isSelected = selectedIds.includes(item.id)
-            const borderColor = isRunning
-              ? getPulseColor(pulseIntensity, PROMPT_THEME.pulseBorder)
-              : (isSelected ? COLOR_SELECTED : PROMPT_THEME.border)
-            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
-
-            // Run button color: pulse between dark orange and light orange
-            const runButtonColor = isRunning
-              ? getPulseColor(pulseIntensity, PROMPT_THEME.pulseRunButton)
-              : PROMPT_THEME.runButton
-
             return (
-              <Group
+              <PromptItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
-                width={item.width}
-                height={item.height}
-                draggable={!isRunning}
-                onClick={(e) => handleItemClick(e, item.id)}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
-                  node.scaleX(1)
-                  node.scaleY(1)
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
-                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
-                  })
-                }}
-              >
-                {/* Background */}
-                <Rect
-                  width={item.width}
-                  height={item.height}
-                  fill={PROMPT_THEME.itemBg}
-                  stroke={borderColor}
-                  strokeWidth={borderWidth}
-                  cornerRadius={4}
-                />
-                {/* Header background */}
-                <Rect
-                  width={item.width}
-                  height={PROMPT_HEADER_HEIGHT}
-                  fill={PROMPT_THEME.headerBg}
-                  cornerRadius={[4, 4, 0, 0]}
-                />
-                {/* Header label */}
-                <Text
-                  text={item.label}
-                  x={8}
-                  y={6}
-                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
-                  height={PROMPT_HEADER_HEIGHT - 6}
-                  fontSize={14}
-                  fontStyle="bold"
-                  fill={PROMPT_THEME.headerText}
-                  onDblClick={() => promptEditing.handleLabelDblClick(item.id)}
-                  visible={!(isEditingThis && promptEditing.editingField === 'label')}
-                />
-                {/* Model selector button */}
-                <Rect
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fill="#666"
-                  cornerRadius={3}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    modelMenu.openMenu(item.id, {
-                      x: e.evt.clientX,
-                      y: e.evt.clientY,
-                    })
-                  }}
-                />
-                <Text
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  text="..."
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fontSize={12}
-                  fontStyle="bold"
-                  fill="#fff"
-                  align="center"
-                  verticalAlign="middle"
-                  listening={false}
-                />
-                {/* Run button */}
-                <Group
-                  x={item.width - RUN_BUTTON_WIDTH - 8}
-                  y={4}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    if (!isRunning) {
-                      onRunPrompt(item.id)
-                    }
-                  }}
-                >
-                  <Rect
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fill={runButtonColor}
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text={isRunning ? '...' : 'Run'}
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fontSize={12}
-                    fontStyle="bold"
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Content text */}
-                <Text
-                  text={item.text}
-                  x={8}
-                  y={PROMPT_HEADER_HEIGHT + 8}
-                  width={item.width - 16}
-                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
-                  fontSize={item.fontSize}
-                  fill={PROMPT_THEME.contentText}
-                  onDblClick={() => promptEditing.handleTextDblClick(item.id)}
-                  visible={!(isEditingThis && promptEditing.editingField === 'text')}
-                />
-              </Group>
+                item={item}
+                theme={PROMPT_THEME}
+                isSelected={selectedIds.includes(item.id)}
+                isRunning={runningPromptIds.has(item.id)}
+                pulsePhase={pulsePhase}
+                editing={promptEditing}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+                onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
+                onRun={onRunPrompt}
+              />
             )
           } else if (item.type === 'image-gen-prompt') {
-            const isEditingThis = imageGenPromptEditing.editingId === item.id
-            const isRunning = runningImageGenPromptIds.has(item.id)
-
-            // Calculate pulse intensity (0 to 1) for running prompts
-            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
-
-            // Border color: pulse between dark purple and light purple
-            const isSelected = selectedIds.includes(item.id)
-            const borderColor = isRunning
-              ? getPulseColor(pulseIntensity, IMAGE_GEN_PROMPT_THEME.pulseBorder)
-              : (isSelected ? COLOR_SELECTED : IMAGE_GEN_PROMPT_THEME.border)
-            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
-
-            // Run button color: pulse between dark purple and light purple
-            const runButtonColor = isRunning
-              ? getPulseColor(pulseIntensity, IMAGE_GEN_PROMPT_THEME.pulseRunButton)
-              : IMAGE_GEN_PROMPT_THEME.runButton
-
             return (
-              <Group
+              <PromptItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
-                width={item.width}
-                height={item.height}
-                draggable={!isRunning}
-                onClick={(e) => handleItemClick(e, item.id)}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
-                  node.scaleX(1)
-                  node.scaleY(1)
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
-                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
-                  })
-                }}
-              >
-                {/* Background */}
-                <Rect
-                  width={item.width}
-                  height={item.height}
-                  fill={IMAGE_GEN_PROMPT_THEME.itemBg}
-                  stroke={borderColor}
-                  strokeWidth={borderWidth}
-                  cornerRadius={4}
-                />
-                {/* Header background */}
-                <Rect
-                  width={item.width}
-                  height={PROMPT_HEADER_HEIGHT}
-                  fill={IMAGE_GEN_PROMPT_THEME.headerBg}
-                  cornerRadius={[4, 4, 0, 0]}
-                />
-                {/* Header label */}
-                <Text
-                  text={item.label}
-                  x={8}
-                  y={6}
-                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
-                  height={PROMPT_HEADER_HEIGHT - 6}
-                  fontSize={14}
-                  fontStyle="bold"
-                  fill={IMAGE_GEN_PROMPT_THEME.headerText}
-                  onDblClick={() => imageGenPromptEditing.handleLabelDblClick(item.id)}
-                  visible={!(isEditingThis && imageGenPromptEditing.editingField === 'label')}
-                />
-                {/* Model selector button */}
-                <Rect
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fill="#666"
-                  cornerRadius={3}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    imageGenModelMenu.openMenu(item.id, {
-                      x: e.evt.clientX,
-                      y: e.evt.clientY,
-                    })
-                  }}
-                />
-                <Text
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  text="..."
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fontSize={12}
-                  fontStyle="bold"
-                  fill="#fff"
-                  align="center"
-                  verticalAlign="middle"
-                  listening={false}
-                />
-                {/* Run button */}
-                <Group
-                  x={item.width - RUN_BUTTON_WIDTH - 8}
-                  y={4}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    if (!isRunning) {
-                      onRunImageGenPrompt(item.id)
-                    }
-                  }}
-                >
-                  <Rect
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fill={runButtonColor}
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text={isRunning ? '...' : 'Run'}
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fontSize={12}
-                    fontStyle="bold"
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Content text */}
-                <Text
-                  text={item.text}
-                  x={8}
-                  y={PROMPT_HEADER_HEIGHT + 8}
-                  width={item.width - 16}
-                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
-                  fontSize={item.fontSize}
-                  fill={IMAGE_GEN_PROMPT_THEME.contentText}
-                  onDblClick={() => imageGenPromptEditing.handleTextDblClick(item.id)}
-                  visible={!(isEditingThis && imageGenPromptEditing.editingField === 'text')}
-                />
-              </Group>
+                item={item}
+                theme={IMAGE_GEN_PROMPT_THEME}
+                isSelected={selectedIds.includes(item.id)}
+                isRunning={runningImageGenPromptIds.has(item.id)}
+                pulsePhase={pulsePhase}
+                editing={imageGenPromptEditing}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+                onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
+                onRun={onRunImageGenPrompt}
+              />
             )
           } else if (item.type === 'html-gen-prompt') {
-            const isEditingThis = htmlGenPromptEditing.editingId === item.id
-            const isRunning = runningHtmlGenPromptIds.has(item.id)
-
-            // Calculate pulse intensity (0 to 1) for running prompts
-            const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
-
-            // Border color: pulse between dark teal and light teal
-            const isSelected = selectedIds.includes(item.id)
-            const borderColor = isRunning
-              ? getPulseColor(pulseIntensity, HTML_GEN_PROMPT_THEME.pulseBorder)
-              : (isSelected ? COLOR_SELECTED : HTML_GEN_PROMPT_THEME.border)
-            const borderWidth = isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)
-
-            // Run button color: pulse between dark teal and light teal
-            const runButtonColor = isRunning
-              ? getPulseColor(pulseIntensity, HTML_GEN_PROMPT_THEME.pulseRunButton)
-              : HTML_GEN_PROMPT_THEME.runButton
-
             return (
-              <Group
+              <PromptItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
-                width={item.width}
-                height={item.height}
-                draggable={!isRunning}
-                onClick={(e) => handleItemClick(e, item.id)}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
-                  node.scaleX(1)
-                  node.scaleY(1)
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
-                    height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
-                  })
-                }}
-              >
-                {/* Background */}
-                <Rect
-                  width={item.width}
-                  height={item.height}
-                  fill={HTML_GEN_PROMPT_THEME.itemBg}
-                  stroke={borderColor}
-                  strokeWidth={borderWidth}
-                  cornerRadius={4}
-                />
-                {/* Header background */}
-                <Rect
-                  width={item.width}
-                  height={PROMPT_HEADER_HEIGHT}
-                  fill={HTML_GEN_PROMPT_THEME.headerBg}
-                  cornerRadius={[4, 4, 0, 0]}
-                />
-                {/* Header label */}
-                <Text
-                  text={item.label}
-                  x={8}
-                  y={6}
-                  width={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 24}
-                  height={PROMPT_HEADER_HEIGHT - 6}
-                  fontSize={14}
-                  fontStyle="bold"
-                  fill={HTML_GEN_PROMPT_THEME.headerText}
-                  onDblClick={() => htmlGenPromptEditing.handleLabelDblClick(item.id)}
-                  visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'label')}
-                />
-                {/* Model selector button */}
-                <Rect
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fill="#666"
-                  cornerRadius={3}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    htmlGenModelMenu.openMenu(item.id, {
-                      x: e.evt.clientX,
-                      y: e.evt.clientY,
-                    })
-                  }}
-                />
-                <Text
-                  x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-                  y={4}
-                  text="..."
-                  width={MODEL_BUTTON_WIDTH}
-                  height={BUTTON_HEIGHT}
-                  fontSize={12}
-                  fontStyle="bold"
-                  fill="#fff"
-                  align="center"
-                  verticalAlign="middle"
-                  listening={false}
-                />
-                {/* Run button */}
-                <Group
-                  x={item.width - RUN_BUTTON_WIDTH - 8}
-                  y={4}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    if (!isRunning) {
-                      onRunHtmlGenPrompt(item.id)
-                    }
-                  }}
-                >
-                  <Rect
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fill={runButtonColor}
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text={isRunning ? '...' : 'Run'}
-                    width={RUN_BUTTON_WIDTH}
-                    height={BUTTON_HEIGHT}
-                    fontSize={12}
-                    fontStyle="bold"
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Content text */}
-                <Text
-                  text={item.text}
-                  x={8}
-                  y={PROMPT_HEADER_HEIGHT + 8}
-                  width={item.width - 16}
-                  height={item.height - PROMPT_HEADER_HEIGHT - 16}
-                  fontSize={item.fontSize}
-                  fill={HTML_GEN_PROMPT_THEME.contentText}
-                  onDblClick={() => htmlGenPromptEditing.handleTextDblClick(item.id)}
-                  visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'text')}
-                />
-              </Group>
+                item={item}
+                theme={HTML_GEN_PROMPT_THEME}
+                isSelected={selectedIds.includes(item.id)}
+                isRunning={runningHtmlGenPromptIds.has(item.id)}
+                pulsePhase={pulsePhase}
+                editing={htmlGenPromptEditing}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+                onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
+                onRun={onRunHtmlGenPrompt}
+              />
             )
           } else if (item.type === 'html') {
-            const zoom = item.zoom ?? 1
             return (
-              <Group
+              <HtmlItemRenderer
                 key={item.id}
-                id={item.id}
-                x={item.x}
-                y={item.y}
-                width={item.width}
-                height={item.height + HTML_HEADER_HEIGHT}
-                draggable
-                onClick={(e) => handleItemClick(e, item.id)}
-                onDragStart={() => {
-                  if (config.features.hideHtmlDuringTransform) {
-                    setIsViewportTransforming(true)
-                  }
-                }}
-                onDragMove={(e) => {
-                  // Track position in real-time for iframe sync
-                  const node = e.target
-                  setHtmlItemTransforms((prev) => {
-                    const next = new Map(prev)
-                    next.set(item.id, {
-                      x: node.x(),
-                      y: node.y(),
-                      width: item.width,
-                      height: item.height,
-                    })
-                    return next
-                  })
-                }}
-                onDragEnd={(e) => {
-                  onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
-                  // Clear real-time transform tracking
-                  setHtmlItemTransforms((prev) => {
-                    const next = new Map(prev)
-                    next.delete(item.id)
-                    return next
-                  })
-                  if (config.features.hideHtmlDuringTransform) {
-                    setIsViewportTransforming(false)
-                  }
-                }}
-                onTransformStart={() => {
-                  if (config.features.hideHtmlDuringTransform) {
-                    setIsViewportTransforming(true)
-                  }
-                }}
-                onTransform={(e) => {
-                  // Track transform in real-time for iframe sync
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
-                  setHtmlItemTransforms((prev) => {
-                    const next = new Map(prev)
-                    next.set(item.id, {
-                      x: node.x(),
-                      y: node.y(),
-                      width: item.width * scaleX,
-                      height: (item.height + HTML_HEADER_HEIGHT) * scaleY - HTML_HEADER_HEIGHT,
-                    })
-                    return next
-                  })
-                }}
-                onTransformEnd={(e) => {
-                  const node = e.target
-                  const scaleX = node.scaleX()
-                  const scaleY = node.scaleY()
-                  // Reset scale and apply to width/height
-                  node.scaleX(1)
-                  node.scaleY(1)
-                  onUpdateItem(item.id, {
-                    x: node.x(),
-                    y: node.y(),
-                    width: Math.max(MIN_PROMPT_WIDTH, node.width() * scaleX),
-                    height: Math.max(MIN_PROMPT_HEIGHT, (node.height() - HTML_HEADER_HEIGHT) * scaleY),
-                  })
-                  // Clear real-time transform tracking
-                  setHtmlItemTransforms((prev) => {
-                    const next = new Map(prev)
-                    next.delete(item.id)
-                    return next
-                  })
-                  if (config.features.hideHtmlDuringTransform) {
-                    setIsViewportTransforming(false)
-                  }
-                }}
-              >
-                {/* Header bar for dragging */}
-                <Rect
-                  width={item.width}
-                  height={HTML_HEADER_HEIGHT}
-                  fill="#d0d0d0"
-                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
-                  strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
-                  cornerRadius={[4, 4, 0, 0]}
-                />
-                {/* Label text */}
-                <Text
-                  x={8}
-                  y={4}
-                  text={item.label || 'HTML'}
-                  fontSize={14}
-                  fontStyle="bold"
-                  fill="#333"
-                  width={item.width - ZOOM_BUTTON_WIDTH * 3 - EXPORT_BUTTON_WIDTH - 24}
-                  ellipsis={true}
-                  onDblClick={() => handleHtmlLabelDblClick(item.id)}
-                  visible={editingHtmlLabelId !== item.id}
-                />
-                {/* Export button with dropdown */}
-                <Group
-                  x={item.width - ZOOM_BUTTON_WIDTH * 3 - EXPORT_BUTTON_WIDTH - 12}
-                  y={2}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    if (exportMenu.menuData === item.id) {
-                      exportMenu.closeMenu()
-                    } else {
-                      // Position menu below the button using click coordinates
-                      exportMenu.openMenu(item.id, {
-                        x: e.evt.clientX - 40, // Center under button
-                        y: e.evt.clientY + 10, // Below the click
-                      })
-                    }
-                  }}
-                >
-                  <Rect
-                    width={EXPORT_BUTTON_WIDTH}
-                    height={20}
-                    fill={exportMenu.menuData === item.id ? '#3d6640' : '#4a7c4e'}
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text="Export ▾"
-                    width={EXPORT_BUTTON_WIDTH}
-                    height={20}
-                    fontSize={11}
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Zoom out button */}
-                <Group
-                  x={item.width - ZOOM_BUTTON_WIDTH * 3 - 8}
-                  y={2}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    const newZoom = Math.max(ZOOM_MIN, zoom - ZOOM_STEP)
-                    onUpdateItem(item.id, { zoom: newZoom })
-                  }}
-                >
-                  <Rect
-                    width={ZOOM_BUTTON_WIDTH}
-                    height={20}
-                    fill="#888"
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text="-"
-                    width={ZOOM_BUTTON_WIDTH}
-                    height={20}
-                    fontSize={14}
-                    fontStyle="bold"
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Zoom level display */}
-                <Text
-                  x={item.width - ZOOM_BUTTON_WIDTH * 2 - 6}
-                  y={2}
-                  text={`${Math.round(zoom * 100)}%`}
-                  width={ZOOM_BUTTON_WIDTH}
-                  height={20}
-                  fontSize={11}
-                  fill="#555"
-                  align="center"
-                  verticalAlign="middle"
-                />
-                {/* Zoom in button */}
-                <Group
-                  x={item.width - ZOOM_BUTTON_WIDTH - 4}
-                  y={2}
-                  onClick={(e) => {
-                    e.cancelBubble = true
-                    const newZoom = Math.min(ZOOM_MAX, zoom + ZOOM_STEP)
-                    onUpdateItem(item.id, { zoom: newZoom })
-                  }}
-                >
-                  <Rect
-                    width={ZOOM_BUTTON_WIDTH}
-                    height={20}
-                    fill="#888"
-                    cornerRadius={3}
-                  />
-                  <Text
-                    text="+"
-                    width={ZOOM_BUTTON_WIDTH}
-                    height={20}
-                    fontSize={14}
-                    fontStyle="bold"
-                    fill="#fff"
-                    align="center"
-                    verticalAlign="middle"
-                  />
-                </Group>
-                {/* Content area background */}
-                <Rect
-                  y={HTML_HEADER_HEIGHT}
-                  width={item.width}
-                  height={item.height}
-                  fill="#fff"
-                  stroke={selectedIds.includes(item.id) ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
-                  strokeWidth={selectedIds.includes(item.id) ? 2 : 1}
-                  cornerRadius={[0, 0, 4, 4]}
-                />
-              </Group>
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                editingHtmlLabelId={editingHtmlLabelId}
+                exportMenu={exportMenu}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+                onLabelDblClick={handleHtmlLabelDblClick}
+                setHtmlItemTransforms={setHtmlItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
             )
           }
           return null
