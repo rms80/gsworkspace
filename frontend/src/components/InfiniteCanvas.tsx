@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect, LLMModel, ImageGenModel, CropRect, ImageItem } from '../types'
+import { CanvasItem, LLMModel, ImageGenModel, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import ImageCropOverlay from './ImageCropOverlay'
 import { config } from '../config'
-import { uploadImage, cropImage } from '../api/images'
+import { uploadImage } from '../api/images'
 import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../utils/htmlExport'
+import { useCanvasViewport } from '../hooks/useCanvasViewport'
+import { useClipboard } from '../hooks/useClipboard'
+import { useCanvasSelection } from '../hooks/useCanvasSelection'
+import { useCropMode } from '../hooks/useCropMode'
+import { usePromptEditing } from '../hooks/usePromptEditing'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -24,15 +29,8 @@ interface InfiniteCanvasProps {
 }
 
 function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds }: InfiniteCanvasProps) {
-  const [stageSize, setStageSize] = useState({ width: 800, height: 600 })
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 })
-  const [stageScale, setStageScale] = useState(1)
-  const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
-  const [isSelecting, setIsSelecting] = useState(false)
-  const selectionStartRef = useRef({ x: 0, y: 0 })
-  // Middle-mouse panning
-  const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false)
-  const middleMouseStartRef = useRef({ x: 0, y: 0, stageX: 0, stageY: 0 })
+  // Refs
+  const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
   const layerRef = useRef<Konva.Layer>(null)
   const textTransformerRef = useRef<Konva.Transformer>(null)
@@ -41,71 +39,98 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
+
+  // 1. Viewport hook
+  const {
+    stageSize,
+    stagePos,
+    stageScale,
+    isViewportTransforming,
+    isMiddleMousePanning: _isMiddleMousePanning,
+    isAnyDragActive,
+    setStagePos,
+    setStageScale: _setStageScale,
+    setIsAnyDragActive,
+    setIsViewportTransforming,
+    handleWheel,
+    screenToCanvas,
+    scaleImageToViewport,
+  } = useCanvasViewport(containerRef, stageRef)
+
+  // 2. loadedImages state
   const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
+
+  // 3. Crop mode hook
+  const {
+    croppingImageId,
+    pendingCropRect,
+    setCroppingImageId,
+    setPendingCropRect,
+    applyCrop,
+    cancelCrop: _cancelCrop,
+  } = useCropMode({ items, loadedImages, onUpdateItem })
+
+  // 4. Prompt editing hooks (x3)
+  const promptEditing = usePromptEditing({ items, onUpdateItem }, 'prompt')
+  const imageGenPromptEditing = usePromptEditing({ items, onUpdateItem }, 'image-gen-prompt')
+  const htmlGenPromptEditing = usePromptEditing({ items, onUpdateItem }, 'html-gen-prompt')
+
+  // 5. Text editing state
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
-  const [editingPromptId, setEditingPromptId] = useState<string | null>(null)
-  const [editingPromptField, setEditingPromptField] = useState<'label' | 'text' | null>(null)
-  const [editingImageGenPromptId, setEditingImageGenPromptId] = useState<string | null>(null)
-  const [editingImageGenPromptField, setEditingImageGenPromptField] = useState<'label' | 'text' | null>(null)
-  const imageGenPromptTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const imageGenLabelInputRef = useRef<HTMLInputElement>(null)
-  const [imageGenModelMenuPromptId, setImageGenModelMenuPromptId] = useState<string | null>(null)
-  const [imageGenModelMenuPosition, setImageGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  const [editingHtmlGenPromptId, setEditingHtmlGenPromptId] = useState<string | null>(null)
-  const [editingHtmlGenPromptField, setEditingHtmlGenPromptField] = useState<'label' | 'text' | null>(null)
-  const htmlGenPromptTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const htmlGenLabelInputRef = useRef<HTMLInputElement>(null)
-  const [htmlGenModelMenuPromptId, setHtmlGenModelMenuPromptId] = useState<string | null>(null)
-  const [htmlGenModelMenuPosition, setHtmlGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const promptTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const labelInputRef = useRef<HTMLInputElement>(null)
-  const [pulsePhase, setPulsePhase] = useState(0)
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+
+  // 6. Derive isEditing
+  const isEditing = !!(editingTextId || promptEditing.editingId || imageGenPromptEditing.editingId || htmlGenPromptEditing.editingId)
+
+  // 7. Canvas selection hook
+  const {
+    selectionRect,
+    isSelecting: _isSelecting,
+    handleStageClick,
+    handleMouseDown,
+    handleMouseMove,
+    handleMouseUp,
+    handleItemClick,
+  } = useCanvasSelection({
+    items,
+    selectedIds,
+    stagePos,
+    stageScale,
+    stageRef,
+    onSelectItems,
+    croppingImageId,
+    applyCrop,
+  })
+
+  // 8. Clipboard hook
+  const clipboard = useClipboard({
+    items,
+    selectedIds,
+    isEditing,
+    croppingImageId,
+    screenToCanvas,
+    scaleImageToViewport,
+    onAddTextAt,
+    onAddImageAt,
+    onUpdateItem,
+    onDeleteSelected,
+  })
+
+  // 9. Remaining UI state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
   const [modelMenuPromptId, setModelMenuPromptId] = useState<string | null>(null)
   const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const [imageGenModelMenuPromptId, setImageGenModelMenuPromptId] = useState<string | null>(null)
+  const [imageGenModelMenuPosition, setImageGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
+  const [htmlGenModelMenuPromptId, setHtmlGenModelMenuPromptId] = useState<string | null>(null)
+  const [htmlGenModelMenuPosition, setHtmlGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
-  const [isViewportTransforming, setIsViewportTransforming] = useState(false)
-  const zoomTimeoutRef = useRef<number | null>(null)
-  // Track real-time transforms of HTML items during drag/transform
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
-  // Track when any drag/transform is in progress to disable iframe pointer events
-  const [isAnyDragActive, setIsAnyDragActive] = useState(false)
-  // Track which HTML item has its export menu open and its position
   const [exportMenuItemId, setExportMenuItemId] = useState<string | null>(null)
   const [exportMenuPosition, setExportMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  // Track editing state for HTML item labels
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
-  // Crop mode state
-  const [croppingImageId, setCroppingImageId] = useState<string | null>(null)
-  const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
-
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Handle container resize
-  useEffect(() => {
-    const updateSize = () => {
-      if (containerRef.current) {
-        const rect = containerRef.current.getBoundingClientRect()
-        setStageSize({ width: rect.width, height: rect.height })
-      }
-    }
-    updateSize()
-    window.addEventListener('resize', updateSize)
-
-    // Use ResizeObserver for more accurate container size tracking
-    const resizeObserver = new ResizeObserver(updateSize)
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
-    }
-
-    return () => {
-      window.removeEventListener('resize', updateSize)
-      resizeObserver.disconnect()
-    }
-  }, [])
+  const [pulsePhase, setPulsePhase] = useState(0)
 
   // Pulse animation for running prompts
   useEffect(() => {
@@ -191,304 +216,6 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     htmlTransformerRef.current?.nodes(selectedHtmlNodes)
   }, [items, selectedIds, croppingImageId])
 
-  // Convert screen coordinates to canvas coordinates
-  const screenToCanvas = (screenX: number, screenY: number) => {
-    return {
-      x: (screenX - stagePos.x) / stageScale,
-      y: (screenY - stagePos.y) / stageScale,
-    }
-  }
-
-  // Scale image dimensions to fit within 20% of viewport
-  const scaleImageToViewport = (imgWidth: number, imgHeight: number) => {
-    const maxWidth = stageSize.width * 0.2
-    const maxHeight = stageSize.height * 0.2
-
-    const widthRatio = maxWidth / imgWidth
-    const heightRatio = maxHeight / imgHeight
-    const scale = Math.min(widthRatio, heightRatio, 1) // Don't scale up, only down
-
-    return {
-      width: Math.round(imgWidth * scale),
-      height: Math.round(imgHeight * scale),
-    }
-  }
-
-  // Handle paste from clipboard
-  const handlePaste = async (e: ClipboardEvent, pasteX?: number, pasteY?: number) => {
-    // Don't paste if we're editing text in an overlay
-    if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
-    // Don't paste if focus is in an input/textarea
-    if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
-
-    const clipboardItems = e.clipboardData?.items
-    if (!clipboardItems) return
-
-    // Check if we have a single selected text-based item to paste into
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-    const selectedTextItem = selectedItems.length === 1 &&
-      (selectedItems[0].type === 'text' ||
-       selectedItems[0].type === 'prompt' ||
-       selectedItems[0].type === 'image-gen-prompt' ||
-       selectedItems[0].type === 'html-gen-prompt')
-      ? selectedItems[0] : null
-
-    // Check for text first if we have a selected text-based item
-    const text = e.clipboardData?.getData('text/plain')
-    if (text && selectedTextItem) {
-      e.preventDefault()
-      onUpdateItem(selectedTextItem.id, { text })
-      return
-    }
-
-    // Determine paste position
-    const x = pasteX ?? mousePos.x
-    const y = pasteY ?? mousePos.y
-    const canvasPos = screenToCanvas(x, y)
-
-    // Check for images first
-    for (const item of clipboardItems) {
-      if (item.type.startsWith('image/')) {
-        e.preventDefault()
-        const blob = item.getAsFile()
-        if (!blob) continue
-
-        const reader = new FileReader()
-        reader.onload = async (event) => {
-          const dataUrl = event.target?.result as string
-          const img = new window.Image()
-          img.onload = async () => {
-            const scaled = scaleImageToViewport(img.width, img.height)
-            try {
-              // Upload to S3 immediately to avoid storing large data URLs in memory
-              const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
-              onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height)
-            } catch (err) {
-              console.error('Failed to upload image, using data URL:', err)
-              // Fallback to data URL if upload fails
-              onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
-            }
-          }
-          img.src = dataUrl
-        }
-        reader.readAsDataURL(blob)
-        return
-      }
-    }
-
-    // Check for text - create new text item
-    if (text) {
-      e.preventDefault()
-      onAddTextAt(canvasPos.x, canvasPos.y, text)
-    }
-  }
-
-  // Global paste event listener
-  useEffect(() => {
-    const listener = (e: ClipboardEvent) => handlePaste(e)
-    document.addEventListener('paste', listener)
-    return () => document.removeEventListener('paste', listener)
-  }, [editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId, mousePos, stagePos, stageScale, onAddTextAt, onAddImageAt, items, onUpdateItem])
-
-  // Handle Ctrl+C to copy text from selected items (synchronous copy event)
-  useEffect(() => {
-    const handleCopy = (e: ClipboardEvent) => {
-      // Don't interfere if focus is in an input/textarea
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
-      // Don't interfere if editing
-      if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
-
-      const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-      if (selectedItems.length !== 1) return
-
-      const item = selectedItems[0]
-
-      if (item.type === 'text') {
-        e.preventDefault()
-        e.clipboardData?.setData('text/plain', item.text)
-      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
-        e.preventDefault()
-        e.clipboardData?.setData('text/plain', item.text)
-      }
-      // Images are handled by keydown handler below
-    }
-
-    document.addEventListener('copy', handleCopy)
-    return () => document.removeEventListener('copy', handleCopy)
-  }, [items, selectedIds, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
-
-  // Handle Ctrl+C for images (needs async clipboard API)
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      if (!((e.ctrlKey || e.metaKey) && e.key === 'c')) return
-      // Don't interfere if focus is in an input/textarea
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
-      // Don't interfere if editing
-      if (editingTextId || editingPromptId || editingImageGenPromptId || editingHtmlGenPromptId) return
-
-      const selectedItems = items.filter((item) => selectedIds.includes(item.id))
-      if (selectedItems.length !== 1) return
-
-      const item = selectedItems[0]
-      if (item.type !== 'image') return
-
-      e.preventDefault()
-      try {
-        // Check if it's a data URL (no CORS issues) or S3 URL (needs proxy)
-        const isDataUrl = item.src.startsWith('data:')
-
-        if (isDataUrl) {
-          // For data URLs, we can load directly
-          const img = new window.Image()
-
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve()
-            img.onerror = () => reject(new Error('Failed to load image'))
-            img.src = item.src
-          })
-
-          const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth
-          canvas.height = img.naturalHeight
-          const ctx = canvas.getContext('2d')
-          if (!ctx) throw new Error('Failed to get canvas context')
-          ctx.drawImage(img, 0, 0)
-
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob((b) => {
-              if (b) resolve(b)
-              else reject(new Error('Failed to create blob'))
-            }, 'image/png')
-          })
-
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'image/png': blob
-            })
-          ])
-        } else {
-          // For S3 URLs, fetch through backend proxy to avoid CORS
-          const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(item.src)}`)
-          if (!response.ok) throw new Error('Failed to fetch image through proxy')
-          const blob = await response.blob()
-
-          // Convert to PNG if needed
-          const pngBlob = await new Promise<Blob>((resolve, reject) => {
-            const img = new window.Image()
-            img.onload = () => {
-              const canvas = document.createElement('canvas')
-              canvas.width = img.naturalWidth
-              canvas.height = img.naturalHeight
-              const ctx = canvas.getContext('2d')
-              if (!ctx) {
-                reject(new Error('Failed to get canvas context'))
-                return
-              }
-              ctx.drawImage(img, 0, 0)
-              canvas.toBlob((b) => {
-                if (b) resolve(b)
-                else reject(new Error('Failed to create blob'))
-              }, 'image/png')
-            }
-            img.onerror = () => reject(new Error('Failed to load image'))
-            img.src = URL.createObjectURL(blob)
-          })
-
-          await navigator.clipboard.write([
-            new ClipboardItem({
-              'image/png': pngBlob
-            })
-          ])
-        }
-      } catch (err) {
-        console.error('Failed to copy image to clipboard:', err)
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [items, selectedIds, editingTextId, editingPromptId, editingImageGenPromptId, editingHtmlGenPromptId])
-
-  // Track mouse position globally
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({ x: e.clientX, y: e.clientY })
-    }
-    document.addEventListener('mousemove', handleMouseMove)
-    return () => document.removeEventListener('mousemove', handleMouseMove)
-  }, [])
-
-  // Middle-mouse panning - use native events on container to intercept before Konva
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-
-    const handleMiddleMouseDown = (e: MouseEvent) => {
-      if (e.button !== 1) return // Only middle mouse
-      e.preventDefault()
-      e.stopPropagation()
-      setIsMiddleMousePanning(true)
-      setIsAnyDragActive(true)
-      middleMouseStartRef.current = {
-        x: e.clientX,
-        y: e.clientY,
-        stageX: stagePos.x,
-        stageY: stagePos.y,
-      }
-      if (config.features.hideHtmlDuringTransform) {
-        setIsViewportTransforming(true)
-      }
-    }
-
-    const handleMiddleMouseMove = (e: MouseEvent) => {
-      if (!isMiddleMousePanning) return
-      const dx = e.clientX - middleMouseStartRef.current.x
-      const dy = e.clientY - middleMouseStartRef.current.y
-      setStagePos({
-        x: middleMouseStartRef.current.stageX + dx,
-        y: middleMouseStartRef.current.stageY + dy,
-      })
-    }
-
-    const handleMiddleMouseUp = (e: MouseEvent) => {
-      if (e.button !== 1) return // Only middle mouse
-      if (!isMiddleMousePanning) return
-      setIsMiddleMousePanning(false)
-      setIsAnyDragActive(false)
-      if (config.features.hideHtmlDuringTransform) {
-        setIsViewportTransforming(false)
-      }
-    }
-
-    // Use capture phase to intercept before Konva handles the events
-    container.addEventListener('mousedown', handleMiddleMouseDown, { capture: true })
-    document.addEventListener('mousemove', handleMiddleMouseMove)
-    document.addEventListener('mouseup', handleMiddleMouseUp)
-
-    return () => {
-      container.removeEventListener('mousedown', handleMiddleMouseDown, { capture: true })
-      document.removeEventListener('mousemove', handleMiddleMouseMove)
-      document.removeEventListener('mouseup', handleMiddleMouseUp)
-    }
-  }, [isMiddleMousePanning, stagePos.x, stagePos.y])
-
-  // Handle Delete/Backspace keys
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't delete if editing text or in crop mode
-      if (editingTextId || croppingImageId) return
-      // Don't delete if focus is in an input/textarea
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
-
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault()
-        onDeleteSelected()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [editingTextId, croppingImageId, onDeleteSelected])
-
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -555,53 +282,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   // Handle paste from context menu
   const handleContextMenuPaste = async () => {
     if (!contextMenu) return
-
-    try {
-      const clipboardItems = await navigator.clipboard.read()
-      for (const item of clipboardItems) {
-        // Check for images
-        const imageType = item.types.find((type) => type.startsWith('image/'))
-        if (imageType) {
-          const blob = await item.getType(imageType)
-          const reader = new FileReader()
-          reader.onload = async (event) => {
-            const dataUrl = event.target?.result as string
-            const img = new window.Image()
-            img.onload = async () => {
-              const scaled = scaleImageToViewport(img.width, img.height)
-              try {
-                // Upload to S3 immediately to avoid storing large data URLs in memory
-                const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
-                onAddImageAt(contextMenu.canvasX, contextMenu.canvasY, s3Url, scaled.width, scaled.height)
-              } catch (err) {
-                console.error('Failed to upload image, using data URL:', err)
-                // Fallback to data URL if upload fails
-                onAddImageAt(contextMenu.canvasX, contextMenu.canvasY, dataUrl, scaled.width, scaled.height)
-              }
-            }
-            img.src = dataUrl
-          }
-          reader.readAsDataURL(blob)
-          setContextMenu(null)
-          return
-        }
-
-        // Check for text
-        if (item.types.includes('text/plain')) {
-          const blob = await item.getType('text/plain')
-          const text = await blob.text()
-          onAddTextAt(contextMenu.canvasX, contextMenu.canvasY, text)
-          setContextMenu(null)
-          return
-        }
-      }
-    } catch {
-      // Fallback for browsers that don't support clipboard.read()
-      const text = await navigator.clipboard.readText()
-      if (text) {
-        onAddTextAt(contextMenu.canvasX, contextMenu.canvasY, text)
-      }
-    }
+    await clipboard.handleContextMenuPaste(contextMenu.canvasX, contextMenu.canvasY)
     setContextMenu(null)
   }
 
@@ -711,150 +392,6 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     }
   }, [exportMenuItemId])
 
-  // Wheel zoom
-  const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
-    e.evt.preventDefault()
-    const stage = stageRef.current
-    if (!stage) return
-
-    const oldScale = stageScale
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
-
-    const mousePointTo = {
-      x: (pointer.x - stagePos.x) / oldScale,
-      y: (pointer.y - stagePos.y) / oldScale,
-    }
-
-    const direction = e.evt.deltaY > 0 ? -1 : 1
-    const newScale = direction > 0 ? oldScale * 1.1 : oldScale / 1.1
-    const clampedScale = Math.max(0.1, Math.min(5, newScale))
-
-    // Hide HTML overlays while zooming
-    if (config.features.hideHtmlDuringTransform) {
-      setIsViewportTransforming(true)
-      if (zoomTimeoutRef.current) {
-        clearTimeout(zoomTimeoutRef.current)
-      }
-      zoomTimeoutRef.current = window.setTimeout(() => {
-        setIsViewportTransforming(false)
-      }, config.timing.zoomEndDelay)
-    }
-
-    setStageScale(clampedScale)
-    setStagePos({
-      x: pointer.x - mousePointTo.x * clampedScale,
-      y: pointer.y - mousePointTo.y * clampedScale,
-    })
-  }
-
-  // Handle click on empty canvas to clear selection
-  // Using onClick instead of mouseDown so dragging (panning) doesn't clear selection
-  const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // If in crop mode and clicking on empty canvas, apply crop
-    if (croppingImageId) {
-      if (e.target === stageRef.current) {
-        applyCrop()
-      }
-      return
-    }
-    if (e.target !== stageRef.current) return
-    // Don't clear if Ctrl is held (user might be doing marquee)
-    if (e.evt.ctrlKey || e.evt.metaKey) return
-    // Clicking on empty canvas clears selection
-    onSelectItems([])
-  }
-
-  // Selection rectangle (Ctrl + drag)
-  const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Middle mouse is handled by native event listener at container level
-    if (e.evt.button === 1) return
-
-    if (e.target !== stageRef.current) return
-
-    // Only start marquee selection if Ctrl is held
-    if (!e.evt.ctrlKey && !e.evt.metaKey) {
-      return
-    }
-
-    const stage = stageRef.current
-    if (!stage) return
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
-
-    const pos = {
-      x: (pointer.x - stagePos.x) / stageScale,
-      y: (pointer.y - stagePos.y) / stageScale,
-    }
-
-    selectionStartRef.current = pos
-    setSelectionRect({ x: pos.x, y: pos.y, width: 0, height: 0 })
-    setIsSelecting(true)
-  }
-
-  const handleMouseMove = (_e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Middle-mouse panning is handled by native event listener
-    if (!isSelecting) return
-
-    const stage = stageRef.current
-    if (!stage) return
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
-
-    const pos = {
-      x: (pointer.x - stagePos.x) / stageScale,
-      y: (pointer.y - stagePos.y) / stageScale,
-    }
-
-    setSelectionRect({
-      x: Math.min(selectionStartRef.current.x, pos.x),
-      y: Math.min(selectionStartRef.current.y, pos.y),
-      width: Math.abs(pos.x - selectionStartRef.current.x),
-      height: Math.abs(pos.y - selectionStartRef.current.y),
-    })
-  }
-
-  const handleMouseUp = () => {
-    // Middle-mouse panning is handled by native event listener
-    if (!isSelecting || !selectionRect) {
-      setIsSelecting(false)
-      setSelectionRect(null)
-      return
-    }
-
-    // Find items within selection rectangle
-    const selectedIds = items
-      .filter((item) => {
-        const itemRight = item.x + item.width
-        const itemBottom = item.y + (item.type === 'text' ? item.height : item.height)
-        return (
-          item.x < selectionRect.x + selectionRect.width &&
-          itemRight > selectionRect.x &&
-          item.y < selectionRect.y + selectionRect.height &&
-          itemBottom > selectionRect.y
-        )
-      })
-      .map((item) => item.id)
-
-    onSelectItems(selectedIds)
-    setIsSelecting(false)
-    setSelectionRect(null)
-  }
-
-  const handleItemClick = (e: Konva.KonvaEventObject<MouseEvent>, id: string) => {
-    e.cancelBubble = true
-    const metaPressed = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey
-    const isSelected = selectedIds.includes(id)
-
-    if (metaPressed && isSelected) {
-      onSelectItems(selectedIds.filter((selectedId) => selectedId !== id))
-    } else if (metaPressed) {
-      onSelectItems([...selectedIds, id])
-    } else {
-      onSelectItems([id])
-    }
-  }
-
   const handleTextDblClick = (id: string) => {
     setEditingTextId(id)
     setTimeout(() => {
@@ -873,132 +410,6 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const handleTextareaKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       setEditingTextId(null)
-    }
-  }
-
-  // Prompt editing handlers
-  const handlePromptLabelDblClick = (id: string) => {
-    setEditingPromptId(id)
-    setEditingPromptField('label')
-    setTimeout(() => {
-      labelInputRef.current?.focus()
-      labelInputRef.current?.select()
-    }, 0)
-  }
-
-  const handlePromptTextDblClick = (id: string) => {
-    setEditingPromptId(id)
-    setEditingPromptField('text')
-    setTimeout(() => {
-      promptTextareaRef.current?.focus()
-      promptTextareaRef.current?.select()
-    }, 0)
-  }
-
-  const handlePromptLabelBlur = () => {
-    if (editingPromptId && labelInputRef.current) {
-      onUpdateItem(editingPromptId, { label: labelInputRef.current.value })
-    }
-    setEditingPromptId(null)
-    setEditingPromptField(null)
-  }
-
-  const handlePromptTextBlur = () => {
-    if (editingPromptId && promptTextareaRef.current) {
-      onUpdateItem(editingPromptId, { text: promptTextareaRef.current.value })
-    }
-    setEditingPromptId(null)
-    setEditingPromptField(null)
-  }
-
-  const handlePromptKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setEditingPromptId(null)
-      setEditingPromptField(null)
-    }
-  }
-
-  // Image Gen Prompt editing handlers
-  const handleImageGenPromptLabelDblClick = (id: string) => {
-    setEditingImageGenPromptId(id)
-    setEditingImageGenPromptField('label')
-    setTimeout(() => {
-      imageGenLabelInputRef.current?.focus()
-      imageGenLabelInputRef.current?.select()
-    }, 0)
-  }
-
-  const handleImageGenPromptTextDblClick = (id: string) => {
-    setEditingImageGenPromptId(id)
-    setEditingImageGenPromptField('text')
-    setTimeout(() => {
-      imageGenPromptTextareaRef.current?.focus()
-      imageGenPromptTextareaRef.current?.select()
-    }, 0)
-  }
-
-  const handleImageGenPromptLabelBlur = () => {
-    if (editingImageGenPromptId && imageGenLabelInputRef.current) {
-      onUpdateItem(editingImageGenPromptId, { label: imageGenLabelInputRef.current.value })
-    }
-    setEditingImageGenPromptId(null)
-    setEditingImageGenPromptField(null)
-  }
-
-  const handleImageGenPromptTextBlur = () => {
-    if (editingImageGenPromptId && imageGenPromptTextareaRef.current) {
-      onUpdateItem(editingImageGenPromptId, { text: imageGenPromptTextareaRef.current.value })
-    }
-    setEditingImageGenPromptId(null)
-    setEditingImageGenPromptField(null)
-  }
-
-  const handleImageGenPromptKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setEditingImageGenPromptId(null)
-      setEditingImageGenPromptField(null)
-    }
-  }
-
-  // HTML Gen Prompt editing handlers
-  const handleHtmlGenPromptLabelDblClick = (id: string) => {
-    setEditingHtmlGenPromptId(id)
-    setEditingHtmlGenPromptField('label')
-    setTimeout(() => {
-      htmlGenLabelInputRef.current?.focus()
-      htmlGenLabelInputRef.current?.select()
-    }, 0)
-  }
-
-  const handleHtmlGenPromptTextDblClick = (id: string) => {
-    setEditingHtmlGenPromptId(id)
-    setEditingHtmlGenPromptField('text')
-    setTimeout(() => {
-      htmlGenPromptTextareaRef.current?.focus()
-      htmlGenPromptTextareaRef.current?.select()
-    }, 0)
-  }
-
-  const handleHtmlGenPromptLabelBlur = () => {
-    if (editingHtmlGenPromptId && htmlGenLabelInputRef.current) {
-      onUpdateItem(editingHtmlGenPromptId, { label: htmlGenLabelInputRef.current.value })
-    }
-    setEditingHtmlGenPromptId(null)
-    setEditingHtmlGenPromptField(null)
-  }
-
-  const handleHtmlGenPromptTextBlur = () => {
-    if (editingHtmlGenPromptId && htmlGenPromptTextareaRef.current) {
-      onUpdateItem(editingHtmlGenPromptId, { text: htmlGenPromptTextareaRef.current.value })
-    }
-    setEditingHtmlGenPromptId(null)
-    setEditingHtmlGenPromptField(null)
-  }
-
-  const handleHtmlGenPromptKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
-      setEditingHtmlGenPromptId(null)
-      setEditingHtmlGenPromptField(null)
     }
   }
 
@@ -1041,110 +452,10 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     return item
   }
 
-  const getEditingPromptItem = () => {
-    if (!editingPromptId) return null
-    const item = items.find((i) => i.id === editingPromptId)
-    if (!item || item.type !== 'prompt') return null
-    return item
-  }
-
-  const getEditingImageGenPromptItem = () => {
-    if (!editingImageGenPromptId) return null
-    const item = items.find((i) => i.id === editingImageGenPromptId)
-    if (!item || item.type !== 'image-gen-prompt') return null
-    return item
-  }
-
-  const getEditingHtmlGenPromptItem = () => {
-    if (!editingHtmlGenPromptId) return null
-    const item = items.find((i) => i.id === editingHtmlGenPromptId)
-    if (!item || item.type !== 'html-gen-prompt') return null
-    return item
-  }
-
   const editingItem = getEditingTextItem()
-  const editingPrompt = getEditingPromptItem()
-  const editingImageGenPrompt = getEditingImageGenPromptItem()
-  const editingHtmlGenPrompt = getEditingHtmlGenPromptItem()
-
-  // Crop mode helpers
-  const applyCrop = () => {
-    if (!croppingImageId || !pendingCropRect) {
-      setCroppingImageId(null)
-      setPendingCropRect(null)
-      return
-    }
-    const item = items.find((i) => i.id === croppingImageId)
-    if (!item || item.type !== 'image') {
-      setCroppingImageId(null)
-      setPendingCropRect(null)
-      return
-    }
-    const img = loadedImages.get(item.src)
-    if (!img) {
-      setCroppingImageId(null)
-      setPendingCropRect(null)
-      return
-    }
-
-    const natW = img.naturalWidth
-    const currentSourceW = item.cropRect?.width ?? natW
-    const displayScale = item.width / currentSourceW
-
-    const newWidth = pendingCropRect.width * displayScale
-    const newHeight = pendingCropRect.height * displayScale
-
-    // Adjust x/y so the crop region stays at the same visual position
-    const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScale
-    const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScale
-    const newX = offsetX + pendingCropRect.x * displayScale
-    const newY = offsetY + pendingCropRect.y * displayScale
-
-    // Apply visual crop immediately (responsive)
-    const itemId = croppingImageId
-    const cropRect = pendingCropRect
-    onUpdateItem(itemId, {
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-      cropRect,
-    })
-
-    setCroppingImageId(null)
-    setPendingCropRect(null)
-
-    // Create server-side crop file asynchronously
-    cropImage(item.src, cropRect)
-      .then((cropUrl) => {
-        onUpdateItem(itemId, { cropSrc: cropUrl })
-      })
-      .catch((err) => {
-        console.error('Failed to create server-side crop, LLM canvas crop still works:', err)
-      })
-  }
-
-  const cancelCrop = () => {
-    setCroppingImageId(null)
-    setPendingCropRect(null)
-  }
-
-  // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
-  useEffect(() => {
-    if (!croppingImageId) return
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        applyCrop()
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        cancelCrop()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [croppingImageId, pendingCropRect, items, loadedImages])
+  const editingPrompt = promptEditing.getEditingItem() as PromptItem | null
+  const editingImageGenPrompt = imageGenPromptEditing.getEditingItem() as ImageGenPromptItem | null
+  const editingHtmlGenPrompt = htmlGenPromptEditing.getEditingItem() as HTMLGenPromptItem | null
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flex: 1 }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -1311,7 +622,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             )
           } else if (item.type === 'prompt') {
             const headerHeight = 28
-            const isEditingThis = editingPromptId === item.id
+            const isEditingThis = promptEditing.editingId === item.id
             const isRunning = runningPromptIds.has(item.id)
             const runButtonWidth = 40
             const modelButtonWidth = 20
@@ -1386,8 +697,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   fontSize={14}
                   fontStyle="bold"
                   fill="#5c4d1a"
-                  onDblClick={() => handlePromptLabelDblClick(item.id)}
-                  visible={!(isEditingThis && editingPromptField === 'label')}
+                  onDblClick={() => promptEditing.handleLabelDblClick(item.id)}
+                  visible={!(isEditingThis && promptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
@@ -1456,14 +767,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   height={item.height - headerHeight - 16}
                   fontSize={item.fontSize}
                   fill="#333"
-                  onDblClick={() => handlePromptTextDblClick(item.id)}
-                  visible={!(isEditingThis && editingPromptField === 'text')}
+                  onDblClick={() => promptEditing.handleTextDblClick(item.id)}
+                  visible={!(isEditingThis && promptEditing.editingField === 'text')}
                 />
               </Group>
             )
           } else if (item.type === 'image-gen-prompt') {
             const headerHeight = 28
-            const isEditingThis = editingImageGenPromptId === item.id
+            const isEditingThis = imageGenPromptEditing.editingId === item.id
             const isRunning = runningImageGenPromptIds.has(item.id)
             const runButtonWidth = 40
             const modelButtonWidth = 20
@@ -1538,8 +849,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   fontSize={14}
                   fontStyle="bold"
                   fill="#5b21b6"
-                  onDblClick={() => handleImageGenPromptLabelDblClick(item.id)}
-                  visible={!(isEditingThis && editingImageGenPromptField === 'label')}
+                  onDblClick={() => imageGenPromptEditing.handleLabelDblClick(item.id)}
+                  visible={!(isEditingThis && imageGenPromptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
@@ -1608,14 +919,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   height={item.height - headerHeight - 16}
                   fontSize={item.fontSize}
                   fill="#333"
-                  onDblClick={() => handleImageGenPromptTextDblClick(item.id)}
-                  visible={!(isEditingThis && editingImageGenPromptField === 'text')}
+                  onDblClick={() => imageGenPromptEditing.handleTextDblClick(item.id)}
+                  visible={!(isEditingThis && imageGenPromptEditing.editingField === 'text')}
                 />
               </Group>
             )
           } else if (item.type === 'html-gen-prompt') {
             const headerHeight = 28
-            const isEditingThis = editingHtmlGenPromptId === item.id
+            const isEditingThis = htmlGenPromptEditing.editingId === item.id
             const isRunning = runningHtmlGenPromptIds.has(item.id)
             const runButtonWidth = 40
             const modelButtonWidth = 20
@@ -1690,8 +1001,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   fontSize={14}
                   fontStyle="bold"
                   fill="#134e4a"
-                  onDblClick={() => handleHtmlGenPromptLabelDblClick(item.id)}
-                  visible={!(isEditingThis && editingHtmlGenPromptField === 'label')}
+                  onDblClick={() => htmlGenPromptEditing.handleLabelDblClick(item.id)}
+                  visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'label')}
                 />
                 {/* Model selector button */}
                 <Rect
@@ -1760,8 +1071,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   height={item.height - headerHeight - 16}
                   fontSize={item.fontSize}
                   fill="#333"
-                  onDblClick={() => handleHtmlGenPromptTextDblClick(item.id)}
-                  visible={!(isEditingThis && editingHtmlGenPromptField === 'text')}
+                  onDblClick={() => htmlGenPromptEditing.handleTextDblClick(item.id)}
+                  visible={!(isEditingThis && htmlGenPromptEditing.editingField === 'text')}
                 />
               </Group>
             )
@@ -2174,17 +1485,17 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       })()}
 
       {/* Input overlay for editing prompt label */}
-      {editingPrompt && editingPromptField === 'label' && (
+      {editingPrompt && promptEditing.editingField === 'label' && (
         <input
-          ref={labelInputRef}
+          ref={promptEditing.labelInputRef}
           type="text"
           defaultValue={editingPrompt.label}
-          onBlur={handlePromptLabelBlur}
+          onBlur={promptEditing.handleLabelBlur}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              handlePromptLabelBlur()
+              promptEditing.handleLabelBlur()
             }
-            handlePromptKeyDown(e)
+            promptEditing.handleKeyDown(e)
           }}
           style={{
             position: 'absolute',
@@ -2208,12 +1519,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Textarea overlay for editing prompt text */}
-      {editingPrompt && editingPromptField === 'text' && (
+      {editingPrompt && promptEditing.editingField === 'text' && (
         <textarea
-          ref={promptTextareaRef}
+          ref={promptEditing.textareaRef}
           defaultValue={editingPrompt.text}
-          onBlur={handlePromptTextBlur}
-          onKeyDown={handlePromptKeyDown}
+          onBlur={promptEditing.handleTextBlur}
+          onKeyDown={promptEditing.handleKeyDown}
           style={{
             position: 'absolute',
             top: (editingPrompt.y + 28 + 6) * stageScale + stagePos.y,
@@ -2237,17 +1548,17 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Input overlay for editing image gen prompt label */}
-      {editingImageGenPrompt && editingImageGenPromptField === 'label' && (
+      {editingImageGenPrompt && imageGenPromptEditing.editingField === 'label' && (
         <input
-          ref={imageGenLabelInputRef}
+          ref={imageGenPromptEditing.labelInputRef}
           type="text"
           defaultValue={editingImageGenPrompt.label}
-          onBlur={handleImageGenPromptLabelBlur}
+          onBlur={imageGenPromptEditing.handleLabelBlur}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              handleImageGenPromptLabelBlur()
+              imageGenPromptEditing.handleLabelBlur()
             }
-            handleImageGenPromptKeyDown(e)
+            imageGenPromptEditing.handleKeyDown(e)
           }}
           style={{
             position: 'absolute',
@@ -2271,12 +1582,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Textarea overlay for editing image gen prompt text */}
-      {editingImageGenPrompt && editingImageGenPromptField === 'text' && (
+      {editingImageGenPrompt && imageGenPromptEditing.editingField === 'text' && (
         <textarea
-          ref={imageGenPromptTextareaRef}
+          ref={imageGenPromptEditing.textareaRef}
           defaultValue={editingImageGenPrompt.text}
-          onBlur={handleImageGenPromptTextBlur}
-          onKeyDown={handleImageGenPromptKeyDown}
+          onBlur={imageGenPromptEditing.handleTextBlur}
+          onKeyDown={imageGenPromptEditing.handleKeyDown}
           style={{
             position: 'absolute',
             top: (editingImageGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
@@ -2300,17 +1611,17 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Input overlay for editing HTML gen prompt label */}
-      {editingHtmlGenPrompt && editingHtmlGenPromptField === 'label' && (
+      {editingHtmlGenPrompt && htmlGenPromptEditing.editingField === 'label' && (
         <input
-          ref={htmlGenLabelInputRef}
+          ref={htmlGenPromptEditing.labelInputRef}
           type="text"
           defaultValue={editingHtmlGenPrompt.label}
-          onBlur={handleHtmlGenPromptLabelBlur}
+          onBlur={htmlGenPromptEditing.handleLabelBlur}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              handleHtmlGenPromptLabelBlur()
+              htmlGenPromptEditing.handleLabelBlur()
             }
-            handleHtmlGenPromptKeyDown(e)
+            htmlGenPromptEditing.handleKeyDown(e)
           }}
           style={{
             position: 'absolute',
@@ -2334,12 +1645,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Textarea overlay for editing HTML gen prompt text */}
-      {editingHtmlGenPrompt && editingHtmlGenPromptField === 'text' && (
+      {editingHtmlGenPrompt && htmlGenPromptEditing.editingField === 'text' && (
         <textarea
-          ref={htmlGenPromptTextareaRef}
+          ref={htmlGenPromptEditing.textareaRef}
           defaultValue={editingHtmlGenPrompt.text}
-          onBlur={handleHtmlGenPromptTextBlur}
-          onKeyDown={handleHtmlGenPromptKeyDown}
+          onBlur={htmlGenPromptEditing.handleTextBlur}
+          onKeyDown={htmlGenPromptEditing.handleKeyDown}
           style={{
             position: 'absolute',
             top: (editingHtmlGenPrompt.y + 28 + 6) * stageScale + stagePos.y,
