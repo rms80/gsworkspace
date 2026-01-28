@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { Stage, Layer, Rect, Text, Image as KonvaImage, Transformer, Group } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, LLMModel, ImageGenModel, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
@@ -11,6 +11,10 @@ import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
 import { useCropMode } from '../hooks/useCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
+import { usePulseAnimation } from '../hooks/usePulseAnimation'
+import { useMenuState } from '../hooks/useMenuState'
+import { useImageLoader } from '../hooks/useImageLoader'
+import { useTransformerSync } from '../hooks/useTransformerSync'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -57,8 +61,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     scaleImageToViewport,
   } = useCanvasViewport(containerRef, stageRef)
 
-  // 2. loadedImages state
-  const [loadedImages, setLoadedImages] = useState<Map<string, HTMLImageElement>>(new Map())
+  // 2. Image loader hook
+  const { loadedImages } = useImageLoader(items)
 
   // 3. Crop mode hook
   const {
@@ -116,105 +120,41 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     onDeleteSelected,
   })
 
-  // 9. Remaining UI state
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null)
-  const [modelMenuPromptId, setModelMenuPromptId] = useState<string | null>(null)
-  const [modelMenuPosition, setModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  const [imageGenModelMenuPromptId, setImageGenModelMenuPromptId] = useState<string | null>(null)
-  const [imageGenModelMenuPosition, setImageGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  const [htmlGenModelMenuPromptId, setHtmlGenModelMenuPromptId] = useState<string | null>(null)
-  const [htmlGenModelMenuPosition, setHtmlGenModelMenuPosition] = useState<{ x: number; y: number } | null>(null)
-  const [imageContextMenu, setImageContextMenu] = useState<{ imageId: string; x: number; y: number } | null>(null)
+  // 9. Menu state hooks
+  const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
+  const modelMenu = useMenuState<string>()
+  const imageGenModelMenu = useMenuState<string>()
+  const htmlGenModelMenu = useMenuState<string>()
+  const imageContextMenuState = useMenuState<{ imageId: string }>()
+  const exportMenu = useMenuState<string>()
+
+  // 10. Remaining UI state
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
-  const [exportMenuItemId, setExportMenuItemId] = useState<string | null>(null)
-  const [exportMenuPosition, setExportMenuPosition] = useState<{ x: number; y: number } | null>(null)
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
-  const [pulsePhase, setPulsePhase] = useState(0)
 
-  // Pulse animation for running prompts
-  useEffect(() => {
-    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0) {
-      setPulsePhase(0)
-      return
-    }
+  // 11. Pulse animation hook
+  const { pulsePhase } = usePulseAnimation({
+    runningPromptIds,
+    runningImageGenPromptIds,
+    runningHtmlGenPromptIds,
+    layerRef,
+  })
 
-    let animationId: number
-    let lastTime = performance.now()
-
-    const animate = (currentTime: number) => {
-      const delta = (currentTime - lastTime) / 1000
-      lastTime = currentTime
-      setPulsePhase((prev) => (prev + delta * 3) % (Math.PI * 2)) // ~2 second full cycle
-      animationId = requestAnimationFrame(animate)
-    }
-
-    animationId = requestAnimationFrame(animate)
-
-    return () => cancelAnimationFrame(animationId)
-  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size])
-
-  // Force Konva layer redraw when pulse phase changes
-  useEffect(() => {
-    if (runningPromptIds.size > 0 && layerRef.current) {
-      layerRef.current.batchDraw()
-    }
-  }, [pulsePhase, runningPromptIds.size])
-
-  // Load images
-  useEffect(() => {
-    items.forEach((item) => {
-      if (item.type === 'image' && !loadedImages.has(item.src)) {
-        const img = new window.Image()
-        img.src = item.src
-        img.onload = () => {
-          setLoadedImages((prev) => new Map(prev).set(item.src, img))
-        }
-      }
-    })
-  }, [items, loadedImages])
-
-  // Update transformers when selection changes
-  useEffect(() => {
-    if (!stageRef.current) return
-
-    const selectedTextNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'text')
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    const selectedImageNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'image' && item.id !== croppingImageId)
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    const selectedPromptNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'prompt')
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    const selectedImageGenPromptNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'image-gen-prompt')
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    const selectedHtmlGenPromptNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'html-gen-prompt')
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    const selectedHtmlNodes = items
-      .filter((item) => selectedIds.includes(item.id) && item.type === 'html')
-      .map((item) => stageRef.current?.findOne(`#${item.id}`))
-      .filter(Boolean) as Konva.Node[]
-
-    textTransformerRef.current?.nodes(selectedTextNodes)
-    imageTransformerRef.current?.nodes(selectedImageNodes)
-    promptTransformerRef.current?.nodes(selectedPromptNodes)
-    imageGenPromptTransformerRef.current?.nodes(selectedImageGenPromptNodes)
-    htmlGenPromptTransformerRef.current?.nodes(selectedHtmlGenPromptNodes)
-    htmlTransformerRef.current?.nodes(selectedHtmlNodes)
-  }, [items, selectedIds, croppingImageId])
+  // 12. Transformer sync hook
+  useTransformerSync({
+    items,
+    selectedIds,
+    stageRef,
+    transformers: [
+      { type: 'text', ref: textTransformerRef },
+      { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId },
+      { type: 'prompt', ref: promptTransformerRef },
+      { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
+      { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
+      { type: 'html', ref: htmlTransformerRef },
+    ],
+  })
 
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
@@ -271,126 +211,18 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     if (!pointer) return
 
     const canvasPos = screenToCanvas(pointer.x, pointer.y)
-    setContextMenu({
-      x: e.evt.clientX,
-      y: e.evt.clientY,
-      canvasX: canvasPos.x,
-      canvasY: canvasPos.y,
-    })
+    contextMenuState.openMenu(
+      { x: e.evt.clientX, y: e.evt.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
+      { x: e.evt.clientX, y: e.evt.clientY },
+    )
   }
 
   // Handle paste from context menu
   const handleContextMenuPaste = async () => {
-    if (!contextMenu) return
-    await clipboard.handleContextMenuPaste(contextMenu.canvasX, contextMenu.canvasY)
-    setContextMenu(null)
+    if (!contextMenuState.menuData) return
+    await clipboard.handleContextMenuPaste(contextMenuState.menuData.canvasX, contextMenuState.menuData.canvasY)
+    contextMenuState.closeMenu()
   }
-
-  // Close context menu on click elsewhere
-  useEffect(() => {
-    const handleClick = () => setContextMenu(null)
-    if (contextMenu) {
-      document.addEventListener('click', handleClick)
-      return () => document.removeEventListener('click', handleClick)
-    }
-  }, [contextMenu])
-
-  // Close model menu on click elsewhere
-  useEffect(() => {
-    if (!modelMenuPromptId) return
-
-    const handleClick = () => {
-      setModelMenuPromptId(null)
-      setModelMenuPosition(null)
-    }
-
-    // Delay adding listener to avoid catching the click that opened the menu
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [modelMenuPromptId])
-
-  // Close image gen model menu on click elsewhere
-  useEffect(() => {
-    if (!imageGenModelMenuPromptId) return
-
-    const handleClick = () => {
-      setImageGenModelMenuPromptId(null)
-      setImageGenModelMenuPosition(null)
-    }
-
-    // Delay adding listener to avoid catching the click that opened the menu
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [imageGenModelMenuPromptId])
-
-  // Close HTML gen model menu on click elsewhere
-  useEffect(() => {
-    if (!htmlGenModelMenuPromptId) return
-
-    const handleClick = () => {
-      setHtmlGenModelMenuPromptId(null)
-      setHtmlGenModelMenuPosition(null)
-    }
-
-    // Delay adding listener to avoid catching the click that opened the menu
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [htmlGenModelMenuPromptId])
-
-  // Close image context menu on click elsewhere
-  useEffect(() => {
-    if (!imageContextMenu) return
-
-    const handleClick = () => {
-      setImageContextMenu(null)
-    }
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [imageContextMenu])
-
-  // Close export menu on click elsewhere
-  useEffect(() => {
-    if (!exportMenuItemId) return
-
-    const handleClick = () => {
-      setExportMenuItemId(null)
-      setExportMenuPosition(null)
-    }
-
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
-    }, 0)
-
-    return () => {
-      clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
-    }
-  }, [exportMenuItemId])
 
   const handleTextDblClick = (id: string) => {
     setEditingTextId(id)
@@ -597,11 +429,10 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onContextMenu={(e) => {
                   e.evt.preventDefault()
                   e.cancelBubble = true
-                  setImageContextMenu({
-                    imageId: item.id,
-                    x: e.evt.clientX,
-                    y: e.evt.clientY,
-                  })
+                  imageContextMenuState.openMenu(
+                    { imageId: item.id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
                 }}
                 onDragEnd={(e) => {
                   onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
@@ -710,8 +541,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   cornerRadius={3}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    setModelMenuPromptId(item.id)
-                    setModelMenuPosition({
+                    modelMenu.openMenu(item.id, {
                       x: e.evt.clientX,
                       y: e.evt.clientY,
                     })
@@ -862,8 +692,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   cornerRadius={3}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    setImageGenModelMenuPromptId(item.id)
-                    setImageGenModelMenuPosition({
+                    imageGenModelMenu.openMenu(item.id, {
                       x: e.evt.clientX,
                       y: e.evt.clientY,
                     })
@@ -1014,8 +843,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   cornerRadius={3}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    setHtmlGenModelMenuPromptId(item.id)
-                    setHtmlGenModelMenuPosition({
+                    htmlGenModelMenu.openMenu(item.id, {
                       x: e.evt.clientX,
                       y: e.evt.clientY,
                     })
@@ -1195,23 +1023,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   y={2}
                   onClick={(e) => {
                     e.cancelBubble = true
-                    if (exportMenuItemId === item.id) {
-                      setExportMenuItemId(null)
-                      setExportMenuPosition(null)
+                    if (exportMenu.menuData === item.id) {
+                      exportMenu.closeMenu()
                     } else {
                       // Position menu below the button using click coordinates
-                      setExportMenuPosition({
+                      exportMenu.openMenu(item.id, {
                         x: e.evt.clientX - 40, // Center under button
                         y: e.evt.clientY + 10, // Below the click
                       })
-                      setExportMenuItemId(item.id)
                     }
                   }}
                 >
                   <Rect
                     width={exportButtonWidth}
                     height={20}
-                    fill={exportMenuItemId === item.id ? '#3d6640' : '#4a7c4e'}
+                    fill={exportMenu.menuData === item.id ? '#3d6640' : '#4a7c4e'}
                     cornerRadius={3}
                   />
                   <Text
@@ -1702,12 +1528,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Context menu */}
-      {contextMenu && (
+      {contextMenuState.menuPosition && (
         <div
           style={{
             position: 'fixed',
-            top: contextMenu.y,
-            left: contextMenu.x,
+            top: contextMenuState.menuPosition.y,
+            left: contextMenuState.menuPosition.x,
             background: 'white',
             border: '1px solid #ccc',
             borderRadius: 4,
@@ -1737,12 +1563,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Model selector menu */}
-      {modelMenuPromptId && modelMenuPosition && (
+      {modelMenu.menuData && modelMenu.menuPosition && (
         <div
           style={{
             position: 'fixed',
-            top: modelMenuPosition.y,
-            left: modelMenuPosition.x,
+            top: modelMenu.menuPosition.y,
+            left: modelMenu.menuPosition.x,
             background: 'white',
             border: '1px solid #ccc',
             borderRadius: 4,
@@ -1753,15 +1579,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onClick={(e) => e.stopPropagation()}
         >
           {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
-            const promptItem = items.find((i) => i.id === modelMenuPromptId && i.type === 'prompt')
+            const promptItem = items.find((i) => i.id === modelMenu.menuData && i.type === 'prompt')
             const isSelected = promptItem?.type === 'prompt' && promptItem.model === model
             return (
               <button
                 key={model}
                 onClick={() => {
-                  onUpdateItem(modelMenuPromptId, { model })
-                  setModelMenuPromptId(null)
-                  setModelMenuPosition(null)
+                  onUpdateItem(modelMenu.menuData!, { model })
+                  modelMenu.closeMenu()
                 }}
                 style={{
                   display: 'block',
@@ -1791,12 +1616,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Image gen model selector menu */}
-      {imageGenModelMenuPromptId && imageGenModelMenuPosition && (
+      {imageGenModelMenu.menuData && imageGenModelMenu.menuPosition && (
         <div
           style={{
             position: 'fixed',
-            top: imageGenModelMenuPosition.y,
-            left: imageGenModelMenuPosition.x,
+            top: imageGenModelMenu.menuPosition.y,
+            left: imageGenModelMenu.menuPosition.x,
             background: 'white',
             border: '1px solid #ccc',
             borderRadius: 4,
@@ -1807,15 +1632,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onClick={(e) => e.stopPropagation()}
         >
           {(['gemini-imagen', 'gemini-flash-imagen'] as ImageGenModel[]).map((model) => {
-            const promptItem = items.find((i) => i.id === imageGenModelMenuPromptId && i.type === 'image-gen-prompt')
+            const promptItem = items.find((i) => i.id === imageGenModelMenu.menuData && i.type === 'image-gen-prompt')
             const isSelected = promptItem?.type === 'image-gen-prompt' && promptItem.model === model
             return (
               <button
                 key={model}
                 onClick={() => {
-                  onUpdateItem(imageGenModelMenuPromptId, { model })
-                  setImageGenModelMenuPromptId(null)
-                  setImageGenModelMenuPosition(null)
+                  onUpdateItem(imageGenModelMenu.menuData!, { model })
+                  imageGenModelMenu.closeMenu()
                 }}
                 style={{
                   display: 'block',
@@ -1842,12 +1666,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* HTML gen model selector menu */}
-      {htmlGenModelMenuPromptId && htmlGenModelMenuPosition && (
+      {htmlGenModelMenu.menuData && htmlGenModelMenu.menuPosition && (
         <div
           style={{
             position: 'fixed',
-            top: htmlGenModelMenuPosition.y,
-            left: htmlGenModelMenuPosition.x,
+            top: htmlGenModelMenu.menuPosition.y,
+            left: htmlGenModelMenu.menuPosition.x,
             background: 'white',
             border: '1px solid #ccc',
             borderRadius: 4,
@@ -1858,15 +1682,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           onClick={(e) => e.stopPropagation()}
         >
           {(['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro'] as LLMModel[]).map((model) => {
-            const promptItem = items.find((i) => i.id === htmlGenModelMenuPromptId && i.type === 'html-gen-prompt')
+            const promptItem = items.find((i) => i.id === htmlGenModelMenu.menuData && i.type === 'html-gen-prompt')
             const isSelected = promptItem?.type === 'html-gen-prompt' && promptItem.model === model
             return (
               <button
                 key={model}
                 onClick={() => {
-                  onUpdateItem(htmlGenModelMenuPromptId, { model })
-                  setHtmlGenModelMenuPromptId(null)
-                  setHtmlGenModelMenuPosition(null)
+                  onUpdateItem(htmlGenModelMenu.menuData!, { model })
+                  htmlGenModelMenu.closeMenu()
                 }}
                 style={{
                   display: 'block',
@@ -1896,14 +1719,14 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       )}
 
       {/* Image context menu */}
-      {imageContextMenu && (() => {
-        const contextImageItem = items.find((i) => i.id === imageContextMenu.imageId && i.type === 'image') as ImageItem | undefined
+      {imageContextMenuState.menuData && imageContextMenuState.menuPosition && (() => {
+        const contextImageItem = items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined
         return (
         <div
           style={{
             position: 'fixed',
-            top: imageContextMenu.y,
-            left: imageContextMenu.x,
+            top: imageContextMenuState.menuPosition.y,
+            left: imageContextMenuState.menuPosition.x,
             background: 'white',
             border: '1px solid #ccc',
             borderRadius: 4,
@@ -1915,12 +1738,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         >
           <button
             onClick={() => {
-              onUpdateItem(imageContextMenu.imageId, {
+              onUpdateItem(imageContextMenuState.menuData!.imageId, {
                 scaleX: 1,
                 scaleY: 1,
                 rotation: 0,
               })
-              setImageContextMenu(null)
+              imageContextMenuState.closeMenu()
             }}
             style={{
               display: 'block',
@@ -1940,9 +1763,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           <button
             onClick={() => {
               const imgItem = contextImageItem
-              if (!imgItem) { setImageContextMenu(null); return }
+              if (!imgItem) { imageContextMenuState.closeMenu(); return }
               const img = loadedImages.get(imgItem.src)
-              if (!img) { setImageContextMenu(null); return }
+              if (!img) { imageContextMenuState.closeMenu(); return }
               const natW = img.naturalWidth
               const natH = img.naturalHeight
               // Initialize pending crop rect from existing crop or full image
@@ -1951,7 +1774,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 : { x: 0, y: 0, width: natW, height: natH }
               setCroppingImageId(imgItem.id)
               setPendingCropRect(initialCrop)
-              setImageContextMenu(null)
+              imageContextMenuState.closeMenu()
             }}
             style={{
               display: 'block',
@@ -1972,9 +1795,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             <button
               onClick={() => {
                 const imgItem = contextImageItem
-                if (!imgItem) { setImageContextMenu(null); return }
+                if (!imgItem) { imageContextMenuState.closeMenu(); return }
                 const img = loadedImages.get(imgItem.src)
-                if (!img) { setImageContextMenu(null); return }
+                if (!img) { imageContextMenuState.closeMenu(); return }
                 const natW = img.naturalWidth
                 const natH = img.naturalHeight
                 // Restore full image dimensions using current display scale
@@ -1990,7 +1813,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   cropRect: undefined,
                   cropSrc: undefined,
                 })
-                setImageContextMenu(null)
+                imageContextMenuState.closeMenu()
               }}
               style={{
                 display: 'block',
@@ -2013,15 +1836,15 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       })()}
 
       {/* Export menu */}
-      {exportMenuItemId && exportMenuPosition && (() => {
-        const htmlItem = items.find((i) => i.id === exportMenuItemId && i.type === 'html')
+      {exportMenu.menuData && exportMenu.menuPosition && (() => {
+        const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
         if (!htmlItem || htmlItem.type !== 'html') return null
         return (
           <div
             style={{
               position: 'fixed',
-              top: exportMenuPosition.y,
-              left: exportMenuPosition.x,
+              top: exportMenu.menuPosition.y,
+              left: exportMenu.menuPosition.x,
               background: 'white',
               border: '1px solid #ccc',
               borderRadius: 4,
@@ -2033,8 +1856,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           >
             <button
               onClick={async () => {
-                setExportMenuItemId(null)
-                setExportMenuPosition(null)
+                exportMenu.closeMenu()
                 try {
                   await exportHtmlWithImages(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
@@ -2062,8 +1884,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             </button>
             <button
               onClick={async () => {
-                setExportMenuItemId(null)
-                setExportMenuPosition(null)
+                exportMenu.closeMenu()
                 try {
                   await exportMarkdownWithImages(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
@@ -2092,8 +1913,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             <hr style={{ margin: '2px 8px', border: 'none', borderTop: '1px solid #ddd' }} />
             <button
               onClick={async () => {
-                setExportMenuItemId(null)
-                setExportMenuPosition(null)
+                exportMenu.closeMenu()
                 try {
                   await exportHtmlZip(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
@@ -2121,8 +1941,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             </button>
             <button
               onClick={async () => {
-                setExportMenuItemId(null)
-                setExportMenuPosition(null)
+                exportMenu.closeMenu()
                 try {
                   await exportMarkdownZip(htmlItem.html, htmlItem.label || 'export')
                 } catch (error) {
