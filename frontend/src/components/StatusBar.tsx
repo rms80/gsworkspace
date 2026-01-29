@@ -11,6 +11,28 @@ interface StatusBarProps {
 export const STATUS_BAR_HEIGHT = 28
 
 function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode }: StatusBarProps) {
+  const handleSwitchToOnline = async () => {
+    try {
+      // Check if server is available before switching
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+      const response = await fetch('/api/scenes', {
+        method: 'GET',
+        signal: controller.signal
+      })
+      clearTimeout(timeoutId)
+
+      if (response.ok) {
+        onSetOfflineMode(false)
+      } else {
+        alert('Server is not responding correctly. Staying in offline mode.')
+      }
+    } catch {
+      alert('Cannot connect to server. Staying in offline mode.')
+    }
+  }
+
   const getSaveStatusDisplay = () => {
     switch (saveStatus) {
       case 'unsaved':
@@ -48,7 +70,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
       }}
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
-      {isOffline && (
+      {isOffline ? (
         <span
           style={{
             padding: '2px 8px',
@@ -59,10 +81,26 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
             fontWeight: 500,
             cursor: 'pointer',
           }}
-          onClick={() => onSetOfflineMode(false)}
+          onClick={handleSwitchToOnline}
           title="Click to switch to online mode"
         >
           Offline Mode
+        </span>
+      ) : (
+        <span
+          style={{
+            padding: '2px 8px',
+            backgroundColor: '#22c55e',
+            color: '#fff',
+            borderRadius: 3,
+            fontSize: 11,
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+          onClick={() => onSetOfflineMode(true)}
+          title="Click to go offline"
+        >
+          Connected
         </span>
       )}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
