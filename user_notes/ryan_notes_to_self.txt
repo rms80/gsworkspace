@@ -161,12 +161,12 @@ time I noticed that the main infinite-canvas typescript file was too big for a s
 
 Asked for suggestions for refactoring this file. It made a list of 5 steps and a suggestion for an order of refactors.
 I had it add to TODO file and then we did it step by step. After each step I did a bit of testing to make sure things
-did not seem to have been super broken.
+did not seem to have been super broken. Did not encounter any issues. InfiniteCanvas.tsx reduced from 2850 to 750 lines.
 
-this refactoring seemed to have burned through a lot of tokens...it was spawning lots of background agents
+[[ this refactoring seemed to have burned through a lot of tokens...it was spawning lots of background agents
 that presumably were all reading this large file. Seems like it might be a good idea to have something in
-the claude.md system prompt stuff to try to get it to make separate functions rather than just spamming
-functionality into the main canvas file...
+the claude.md system prompt stuff to try to get it to make separate functions rather than just dropping
+functionality into the main canvas file... ]]
 
 
 

@@ -20,7 +20,18 @@
       "Bash(git checkout:*)",
       "Bash(gh pr create --title \"Implement delta-based undo/redo system\" --body \"$\\(cat <<''EOF''\n## Summary\n- Adds a comprehensive undo/redo system using change records \\(deltas\\) instead of full state snapshots\n- Each change type \\(add, delete, transform, update text/prompt/model\\) has its own ChangeRecord implementation with reversible apply/reverse methods\n- History persists to S3 as a sidecar file \\(history.json\\) alongside each scene\n- Includes both toolbar buttons \\(Undo/Redo\\) and keyboard shortcuts \\(Ctrl+Z, Ctrl+Y\\)\n\n## Test plan\n- [ ] Create text, image, and prompt items - verify each action can be undone/redone\n- [ ] Transform items \\(move, resize, rotate\\) - verify transforms can be undone/redone\n- [ ] Edit text/prompt content - verify edits can be undone/redone\n- [ ] Delete items - verify deletions can be undone/redone\n- [ ] Verify Ctrl+Z and Ctrl+Y keyboard shortcuts work\n- [ ] Verify Undo/Redo buttons enable/disable appropriately\n- [ ] Reload page and verify history is restored from S3\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
       "Bash(git revert:*)",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(node:*)",
+      "Bash(git pull:*)",
+      "Bash(echo:*)",
+      "Bash(git merge:*)",
+      "WebSearch",
+      "Bash(npx tsc:*)",
+      "Bash(cd:*)",
+      "Bash(npx vite build)",
+      "Bash(npx eslint:*)",
+      "Bash(pkill:*)",
+      "Bash(git stash:*)"
     ]
   }
 }
