@@ -1,104 +1,217 @@
 # TODO
 
+## Offline Mode Implementation
 
-## InfiniteCanvas.tsx Refactoring Plan
+Enable the frontend to function as a standalone client-side app without a backend server. LLM execution will be disabled (Run button), but all canvas editing and scene persistence will work via localForage (IndexedDB).
 
-The file is currently **2,158 lines**. After the first round of hook extraction (viewport, selection, crop, clipboard, prompt editing), the remaining bulk is item renderers, editing overlays, and context menus — all inline JSX and handler functions. The goal is to extract these into focused components and hooks, bringing InfiniteCanvas down to ~400-500 lines as a thin orchestrator.
+**Design Decisions:**
+- **Storage:** localForage (simple API, IndexedDB backing, ~50MB+ capacity)
+- **Mode switching:** Feature flag for now (automatic detection later)
+- **LLM features:** Can create prompt items, but Run button disabled when offline
+- **Images:** Stored as-is (no compression)
 
-### Phase 1: Extract Item Renderers (~800 lines) ✅
+---
 
-Extracted into `components/canvas/items/`. The generic `PromptItemRenderer` replaced 3 duplicated prompt blocks.
+### 1. Create Pluggable Storage Provider Architecture
 
-- [x] **`TextItemRenderer.tsx`** — Group with Rect+Text, drag/transform handlers, double-click to edit
-- [x] **`ImageItemRenderer.tsx`** — KonvaImage with crop overlay branch, right-click context menu trigger, transform handlers
-- [x] **`PromptItemRenderer.tsx`** — Generic renderer used for all 3 prompt types (prompt, image-gen-prompt, html-gen-prompt) via theme config prop
-- [x] **`HtmlItemRenderer.tsx`** — Header bar with label, export/zoom buttons, content rect, drag/transform with real-time iframe sync
+Add a storage provider interface so different backends can be swapped easily. The existing S3/API storage becomes one provider, localForage becomes another. A delegating provider wraps both and routes calls based on current mode.
 
-### Phase 2: Extract Editing Overlays (~240 lines) ✅
+**New files:**
+- `frontend/src/api/storage/StorageProvider.ts` - interface definition
+- `frontend/src/api/storage/ApiStorageProvider.ts` - existing S3/backend (refactored)
+- `frontend/src/api/storage/LocalStorageProvider.ts` - new localForage implementation
+- `frontend/src/api/storage/DelegatingStorageProvider.ts` - routes to active provider based on mode
+- `frontend/src/api/storage/index.ts` - exports provider instance and mode controls
 
-Extracted into `components/canvas/overlays/`. The generic `PromptEditingOverlay` replaced 3 duplicated label+text overlay blocks (6 inline elements → 3 component calls).
+**Substeps:**
 
-- [x] **`TextEditingOverlay.tsx`** — Textarea overlay for text item editing, with Konva text measurement for min-height
-- [x] **`PromptEditingOverlay.tsx`** — Generic input (label) + textarea (text) overlay, parameterized by theme colors. One component used for all 3 prompt types
-- [x] **`HtmlLabelEditingOverlay.tsx`** — Input overlay for HTML item label editing
+1.1. **Define StorageProvider interface**
+   ```typescript
+   interface StorageProvider {
+     saveScene(scene: Scene): Promise<void>
+     loadScene(id: string): Promise<Scene>
+     listScenes(): Promise<SceneMetadata[]>
+     deleteScene(id: string): Promise<void>
+     saveHistory(sceneId: string, history: SerializedHistory): Promise<void>
+     loadHistory(sceneId: string): Promise<SerializedHistory>
+   }
+   ```
 
-### Phase 3: Extract Context Menus (~450 lines) ✅
+1.2. **Create ApiStorageProvider**
+   - Move existing fetch-based code from `scenes.ts` into a class implementing the interface
+   - No behavior change, just reorganization
 
-All menus extracted into `components/canvas/menus/`. Click-outside dismiss handled by `useMenuState` hook.
+1.3. **Install localForage**
+   - Run `npm install localforage` in the frontend directory
 
-- [x] **`CanvasContextMenu.tsx`** — Right-click paste menu
-- [x] **`ModelSelectorMenu.tsx`** — Generic model selector with type parameter, used for all 3 prompt types
-- [x] **`ImageContextMenu.tsx`** — Reset transform, crop, remove crop
-- [x] **`HtmlExportMenu.tsx`** — HTML/Markdown single-file and ZIP exports, with shared error handling
+1.4. **Create LocalStorageProvider**
+   - Implement the interface using localForage
+   - Key scheme: `workspaceapp:scene:{id}`, `workspaceapp:scenes-index`, `workspaceapp:history:{id}`
+   - Maintain a scenes index for `listScenes()` (localForage doesn't have key enumeration)
 
-### Phase 4: Extract Supporting Hooks (~120 lines) ✅
+1.5. **Create DelegatingStorageProvider**
+   - Holds instances of both ApiStorageProvider and LocalStorageProvider
+   - Checks current mode and delegates to appropriate provider
+   - Supports runtime mode switching
+   ```typescript
+   class DelegatingStorageProvider implements StorageProvider {
+     private apiProvider = new ApiStorageProvider()
+     private localProvider = new LocalStorageProvider()
 
-- [x] **`usePulseAnimation.ts`** — Pulse phase animation loop + layer redraw for running prompts. Returns `pulsePhase`
-- [x] **`useMenuState.ts`** — Generic hook for menu open/close with click-outside-to-dismiss. Replaced 12 state declarations and 6 useEffect blocks with 6 one-liner hook calls
-- [x] **`useImageLoader.ts`** — Load HTMLImageElements for image items into a Map cache
-- [x] **`useTransformerSync.ts`** — Attach/detach Konva Transformer nodes on selection change via a declarative config array
+     private get active(): StorageProvider {
+       return isOfflineMode() ? this.localProvider : this.apiProvider
+     }
 
-### Phase 5: Extract Constants ✅
+     saveScene(scene: Scene) { return this.active.saveScene(scene) }
+     // ... other methods delegate similarly
+   }
+   ```
 
-- [x] **`constants/canvas.ts`** — Extracted prompt theme colors (3 themes with pulse ranges), model lists with labels, button/header dimensions, zoom constraints, z-index values, selection colors, and a `getPulseColor()` helper
+1.6. **Create index.ts exports**
+   - Export singleton `storageProvider` (the DelegatingStorageProvider instance)
+   - Export `isOfflineMode()` function to check current mode
+   - Export `setOfflineMode(boolean)` function to change mode at runtime
+   - Mode state can be a simple module-level variable for now
 
-### Expected Result
+1.7. **Update scenes.ts**
+   - Keep as thin re-export from storage module for backwards compatibility
+   - Existing imports in App.tsx continue to work
 
-| Section | Current Lines | After Extraction |
-|---------|--------------|-----------------|
-| Item renderers | ~800 | 0 (in own files) |
-| Editing overlays | ~240 | 0 (in own files) |
-| Context menus | ~450 | 0 (in own files) |
-| Supporting hooks/effects | ~120 | 0 (in own files) |
-| Constants | ~30 | 0 (in own file) |
-| **Remaining in InfiniteCanvas.tsx** | — | **~400-500** |
+**Notes:**
+- Data is kept separate between modes (no sync/migration for now)
+- Supports runtime switching between online and offline
+- This pattern makes it easy to add future providers (e.g., Firebase, file-based export/import)
+- Each provider is self-contained and testable
+- localForage handles serialization automatically, no JSON.stringify needed
 
-InfiniteCanvas.tsx becomes: imports, props, hook calls, a few local handlers (drag-drop, HTML label editing), and the JSX skeleton (`<div>` → `<Stage>` → `<Layer>` → item renderers + transformers + overlays + menus).
+---
 
-### File Structure
+### 2. Add Offline Mode Feature Flag and Runtime Switching
 
-```
-frontend/src/
-  components/
-    InfiniteCanvas.tsx              (~400-500 lines, orchestrator)
-    canvas/
-      items/
-        TextItemRenderer.tsx
-        ImageItemRenderer.tsx
-        PromptItemRenderer.tsx      (generic, used for all 3 prompt types)
-        HtmlItemRenderer.tsx
-      overlays/
-        TextEditingOverlay.tsx
-        PromptEditingOverlay.tsx    (generic, used for all 3 prompt types)
-        HtmlLabelEditingOverlay.tsx
-      menus/
-        CanvasContextMenu.tsx
-        ModelSelectorMenu.tsx       (generic, used for all 3 model menus)
-        ImageContextMenu.tsx
-        HtmlExportMenu.tsx
-  hooks/
-    useCanvasViewport.ts            (already extracted)
-    useCanvasSelection.ts           (already extracted)
-    useCropMode.ts                  (already extracted)
-    useClipboard.ts                 (already extracted)
-    usePromptEditing.ts             (already extracted)
-    usePulseAnimation.ts            (already extracted)
-    useMenuState.ts                 (already extracted)
-    useImageLoader.ts               (already extracted)
-    useTransformerSync.ts           (already extracted)
-  constants/
-    canvas.ts                       (already extracted)
-```
+Use an environment variable for initial mode, with support for runtime switching.
 
-### Implementation Order
+**Files to modify:** `frontend/src/api/storage/index.ts`, `frontend/src/App.tsx`
 
-Phases can be done independently, but this order minimizes merge conflicts:
+**Substeps:**
 
-1. **Phase 4** (hooks) — No JSX changes, just extracting logic
-2. **Phase 5** (constants) — Small, no structural change
-3. **Phase 1** (item renderers) — Largest impact, removes bulk of JSX
-4. **Phase 2** (editing overlays) — Depends on item renderers being stable
-5. **Phase 3** (context menus) — Independent, can go in any order after hooks
+2.1. **Create initial mode from environment**
+   - Add environment variable: `VITE_OFFLINE_MODE=true/false` in `.env` or `.env.local`
+   - Initialize mode state from `import.meta.env.VITE_OFFLINE_MODE`
+   - Default to `false` (online mode) if not set
 
+2.2. **Export mode controls from storage module**
+   - `isOfflineMode()` - returns current mode
+   - `setOfflineMode(boolean)` - changes mode at runtime
+   - DelegatingStorageProvider automatically uses new mode on next call
 
+2.3. **Handle mode switch in App**
+   - When mode changes, App needs to reload scene list from new provider
+   - Could trigger via event, callback, or React state update
+   - Current scene may not exist in new provider - handle gracefully
 
+---
+
+### 3. Disable LLM Run Button in Offline Mode
+
+Users can still create prompt items and configure them, but execution is disabled.
+
+**Files to modify:** `frontend/src/components/Toolbar.tsx`, prompt-related components
+
+**Substeps:**
+
+3.1. **Keep prompt/LLM item creation enabled**
+   - Users can still add prompt items to canvas
+   - Users can still edit prompt text and settings
+
+3.2. **Disable the "Run" button when offline**
+   - Grey out the Run/Generate button
+   - Add tooltip: "Requires backend server"
+
+3.3. **Handle accidental submission**
+   - If somehow triggered, show user-friendly error
+   - Don't attempt network request
+
+---
+
+### 4. Handle Image Operations Without Backend
+
+Ensure image paste, crop, and display work without server. Images stored as-is (no compression).
+
+**Files to modify:** `frontend/src/hooks/useClipboard.ts`, `frontend/src/hooks/useCropMode.ts`
+
+**Substeps:**
+
+4.1. **Use data URLs directly in offline mode**
+   - Skip the S3 upload call when offline
+   - Store images as base64 data URLs in localForage
+   - localForage has plenty of capacity for this
+
+4.2. **Handle image crop client-side only**
+   - `useCropMode.ts` has server-side crop call
+   - In offline mode, apply crop visually only
+   - Skip the server upload silently
+
+4.3. **Handle image proxy gracefully**
+   - External image URLs need `/api/proxy-image` due to CORS
+   - In offline mode, skip proxy or warn user about external URLs
+
+---
+
+### 5. Add Offline Mode UI Indicator
+
+Show users they're in demo/offline mode.
+
+**Files to modify:** `frontend/src/components/Toolbar.tsx` or new component
+
+**Substeps:**
+
+5.1. **Add visual indicator**
+   - Small badge or banner: "Demo Mode" or "Offline"
+   - Non-intrusive but visible
+
+5.2. **Add info tooltip/popover**
+   - Explain what works and what doesn't
+   - Link to setup instructions if they want full features
+
+---
+
+### 6. Testing
+
+Verify offline demo works correctly end-to-end.
+
+**Substeps:**
+
+6.1. **Test with feature flag enabled**
+   - Set `OFFLINE_MODE = true`
+   - Start frontend only (no backend)
+
+6.2. **Test scene operations**
+   - Create scene, add items, refresh page - data persists
+   - Create multiple scenes, switch between them
+   - Delete a scene
+
+6.3. **Test canvas operations**
+   - Add text and images
+   - Move, scale, rotate items
+   - Undo/redo within session
+   - Undo/redo persists across refresh
+
+6.4. **Test image handling**
+   - Paste image from clipboard
+   - Paste image from file
+   - Crop an image
+
+6.5. **Test LLM features**
+   - Can create prompt items
+   - Run button is disabled
+   - No errors in console
+
+---
+
+## Implementation Notes
+
+- **Priority order:** Task 1 (storage provider architecture) is foundational; Tasks 2-5 depend on it
+- **New directory:** `frontend/src/api/storage/` contains the provider pattern
+- **No backend changes needed** - this is frontend-only
+- **Storage library:** Using localForage for simple API with IndexedDB backing (larger capacity than localStorage)
+- **Extensibility:** New providers can be added by implementing `StorageProvider` interface
