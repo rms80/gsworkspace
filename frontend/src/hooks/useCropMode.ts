@@ -5,6 +5,7 @@ import { cropImage } from '../api/images'
 interface UseCropModeParams {
   items: CanvasItem[]
   loadedImages: Map<string, HTMLImageElement>
+  isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
 }
 
@@ -20,6 +21,7 @@ export interface CropMode {
 export function useCropMode({
   items,
   loadedImages,
+  isOffline,
   onUpdateItem,
 }: UseCropModeParams): CropMode {
   const [croppingImageId, setCroppingImageId] = useState<string | null>(null)
@@ -68,6 +70,11 @@ export function useCropMode({
 
     setCroppingImageId(null)
     setPendingCropRect(null)
+
+    // Skip server-side crop in offline mode
+    if (isOffline) {
+      return
+    }
 
     cropImage(item.src, cropRect)
       .then((cropUrl) => {

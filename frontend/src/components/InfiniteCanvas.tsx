@@ -90,7 +90,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     setPendingCropRect,
     applyCrop,
     cancelCrop: _cancelCrop,
-  } = useCropMode({ items, loadedImages, onUpdateItem })
+  } = useCropMode({ items, loadedImages, isOffline, onUpdateItem })
 
   // 4. Prompt editing hooks (x3)
   const promptEditing = usePromptEditing({ items, onUpdateItem }, 'prompt')
@@ -129,6 +129,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     items,
     selectedIds,
     isEditing,
+    isOffline,
     croppingImageId,
     screenToCanvas,
     scaleImageToViewport,

@@ -6,6 +6,7 @@ interface UseClipboardParams {
   items: CanvasItem[]
   selectedIds: string[]
   isEditing: boolean
+  isOffline: boolean
   croppingImageId: string | null
   screenToCanvas: (x: number, y: number) => { x: number; y: number }
   scaleImageToViewport: (w: number, h: number) => { width: number; height: number }
@@ -24,6 +25,7 @@ export function useClipboard({
   items,
   selectedIds,
   isEditing,
+  isOffline,
   croppingImageId,
   screenToCanvas,
   scaleImageToViewport,
@@ -82,6 +84,11 @@ export function useClipboard({
             const img = new window.Image()
             img.onload = async () => {
               const scaled = scaleImageToViewport(img.width, img.height)
+              // In offline mode, skip S3 upload and use data URL directly
+              if (isOffline) {
+                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
+                return
+              }
               try {
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
                 onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height)
@@ -105,7 +112,7 @@ export function useClipboard({
 
     document.addEventListener('paste', handlePaste)
     return () => document.removeEventListener('paste', handlePaste)
-  }, [isEditing, mousePos, screenToCanvas, onAddTextAt, onAddImageAt, items, onUpdateItem, selectedIds, scaleImageToViewport])
+  }, [isEditing, isOffline, mousePos, screenToCanvas, onAddTextAt, onAddImageAt, items, onUpdateItem, selectedIds, scaleImageToViewport])
 
   // Handle Ctrl+C to copy text from selected items
   useEffect(() => {
@@ -241,6 +248,11 @@ export function useClipboard({
             const img = new window.Image()
             img.onload = async () => {
               const scaled = scaleImageToViewport(img.width, img.height)
+              // In offline mode, skip S3 upload and use data URL directly
+              if (isOffline) {
+                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height)
+                return
+              }
               try {
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
                 onAddImageAt(canvasX, canvasY, s3Url, scaled.width, scaled.height)
