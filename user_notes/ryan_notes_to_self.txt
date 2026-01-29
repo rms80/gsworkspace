@@ -170,6 +170,27 @@ functionality into the main canvas file... ]]
 
 
 
+Jan 29
+
+want to add 'offline' mode to the app so that I can have a functional demo version w/o the sever-side.
+CC suggests various options for browser-local storage, we go back and forth and settle on a an IdexedDB wrapper.
+It generates a plan. The plan seems kind of dumb, it's going to hardcode two paths when clearly at this point we
+should have a generic storage API w/ two implementations. So I explain that and it updates the plan
+(this is all via the TODO.md file). It wants to run all the ~5 major implementation tasks in parallel but this sounds
+fishy to me so we do them one at a time. As far as I can tell in light testing, it's fully functional.
+
+
+Next up - import and export of scenes. Here was my prompt:
+
+> ok lets design a new feature. I want to be able to export and import entire scenes. For export, it should export        a zip of the scene. The zip should include the scene.json, history, and all images. For the images, if there is a
+  crop rect I want it to export the original image and the cropped image. For import, it should give me the option
+  to either import a zip or import by selecting a directory. The export and import options should be in a File
+  menu. Please come up with a plan and put it in the TODO.md file.
+  
+refinement:
+  
+> instead of an import dialog, I would just like there to be "Import Scene from Zip..." and "Import Scene from            Folder..." options in the File menu. These can launch the appropriate picker directly, we don't need the
+  intermediate dialog. please update the plan.
 
 
 
