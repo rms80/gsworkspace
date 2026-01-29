@@ -47,9 +47,10 @@ interface InfiniteCanvasProps {
   runningImageGenPromptIds: Set<string>
   onRunHtmlGenPrompt: (promptId: string) => void
   runningHtmlGenPromptIds: Set<string>
+  isOffline: boolean
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline: _isOffline }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)

@@ -6,7 +6,7 @@ import TabBar from './components/TabBar'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { CanvasItem, Scene } from './types'
-import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
@@ -45,6 +45,7 @@ function App() {
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
+  const [isOffline, setIsOffline] = useState(isOfflineMode())
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
@@ -81,64 +82,79 @@ function App() {
     setHistoryVersion((v) => v + 1)
   }, [activeSceneId])
 
-  // Load all scenes from S3 on initial mount
-  useEffect(() => {
-    async function loadAllScenes() {
-      try {
-        const sceneList = await listScenes()
-        if (sceneList.length === 0) {
-          // No saved scenes, create a default one
-          const defaultScene = createScene('Scene 1')
-          setOpenScenes([defaultScene])
-          setActiveSceneId(defaultScene.id)
-          lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
-          // Initialize empty history and selection for new scene
-          setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
-          setSelectionMap(new Map([[defaultScene.id, []]]))
-        } else {
-          // Load all scenes and their histories
-          const scenesWithHistory = await Promise.all(
-            sceneList.map(async (meta) => {
-              const scene = await loadScene(meta.id)
-              let history: HistoryStack
-              try {
-                const serializedHistory = await loadHistory(meta.id)
-                history = HistoryStack.deserialize(serializedHistory)
-                lastSavedHistoryRef.current.set(meta.id, JSON.stringify(serializedHistory))
-              } catch {
-                history = new HistoryStack()
-              }
-              return { scene, history }
-            })
-          )
-          // Mark all loaded scenes as saved
-          const newHistoryMap = new Map<string, HistoryStack>()
-          const newSelectionMap = new Map<string, string[]>()
-          scenesWithHistory.forEach(({ scene, history }) => {
-            lastSavedRef.current.set(scene.id, JSON.stringify(scene))
-            newHistoryMap.set(scene.id, history)
-            newSelectionMap.set(scene.id, []) // Start with empty selection
-          })
-          setOpenScenes(scenesWithHistory.map(({ scene }) => scene))
-          setHistoryMap(newHistoryMap)
-          setSelectionMap(newSelectionMap)
-          setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
-        }
-      } catch (error) {
-        console.error('Failed to load scenes:', error)
-        // On error, create a default scene
+  // Function to load all scenes from current storage provider
+  const loadAllScenes = useCallback(async () => {
+    setIsLoading(true)
+    // Clear previous saved state tracking when reloading
+    lastSavedRef.current.clear()
+    lastSavedHistoryRef.current.clear()
+
+    try {
+      const sceneList = await listScenes()
+      if (sceneList.length === 0) {
+        // No saved scenes, create a default one
         const defaultScene = createScene('Scene 1')
         setOpenScenes([defaultScene])
         setActiveSceneId(defaultScene.id)
         lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
+        // Initialize empty history and selection for new scene
         setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
         setSelectionMap(new Map([[defaultScene.id, []]]))
-      } finally {
-        setIsLoading(false)
+      } else {
+        // Load all scenes and their histories
+        const scenesWithHistory = await Promise.all(
+          sceneList.map(async (meta) => {
+            const scene = await loadScene(meta.id)
+            let history: HistoryStack
+            try {
+              const serializedHistory = await loadHistory(meta.id)
+              history = HistoryStack.deserialize(serializedHistory)
+              lastSavedHistoryRef.current.set(meta.id, JSON.stringify(serializedHistory))
+            } catch {
+              history = new HistoryStack()
+            }
+            return { scene, history }
+          })
+        )
+        // Mark all loaded scenes as saved
+        const newHistoryMap = new Map<string, HistoryStack>()
+        const newSelectionMap = new Map<string, string[]>()
+        scenesWithHistory.forEach(({ scene, history }) => {
+          lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+          newHistoryMap.set(scene.id, history)
+          newSelectionMap.set(scene.id, []) // Start with empty selection
+        })
+        setOpenScenes(scenesWithHistory.map(({ scene }) => scene))
+        setHistoryMap(newHistoryMap)
+        setSelectionMap(newSelectionMap)
+        setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
       }
+    } catch (error) {
+      console.error('Failed to load scenes:', error)
+      // On error, create a default scene
+      const defaultScene = createScene('Scene 1')
+      setOpenScenes([defaultScene])
+      setActiveSceneId(defaultScene.id)
+      lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
+      setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
+      setSelectionMap(new Map([[defaultScene.id, []]]))
+    } finally {
+      setIsLoading(false)
     }
-    loadAllScenes()
   }, [])
+
+  // Load scenes on initial mount
+  useEffect(() => {
+    loadAllScenes()
+  }, [loadAllScenes])
+
+  // Handler to toggle offline mode
+  const handleSetOfflineMode = useCallback(async (offline: boolean) => {
+    setOfflineMode(offline)
+    setIsOffline(offline)
+    // Reload scenes from the new storage provider
+    await loadAllScenes()
+  }, [loadAllScenes])
 
   // Auto-save when active scene changes (debounced)
   useEffect(() => {
@@ -938,6 +954,7 @@ function App() {
           runningImageGenPromptIds={runningImageGenPromptIds}
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
+          isOffline={isOffline}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
@@ -954,6 +971,8 @@ function App() {
         onToggleDebug={() => setDebugPanelOpen((prev) => !prev)}
         debugOpen={debugPanelOpen}
         saveStatus={saveStatus}
+        isOffline={isOffline}
+        onSetOfflineMode={handleSetOfflineMode}
       />
     </div>
   )

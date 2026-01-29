@@ -4,11 +4,13 @@ interface StatusBarProps {
   onToggleDebug: () => void
   debugOpen: boolean
   saveStatus: SaveStatus
+  isOffline: boolean
+  onSetOfflineMode: (offline: boolean) => void
 }
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode }: StatusBarProps) {
   const getSaveStatusDisplay = () => {
     switch (saveStatus) {
       case 'unsaved':
@@ -46,6 +48,23 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus }: StatusBarProps) {
       }}
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
+      {isOffline && (
+        <span
+          style={{
+            padding: '2px 8px',
+            backgroundColor: '#6366f1',
+            color: '#fff',
+            borderRadius: 3,
+            fontSize: 11,
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+          onClick={() => onSetOfflineMode(false)}
+          title="Click to switch to online mode"
+        >
+          Offline Mode
+        </span>
+      )}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
         {statusDisplay && (
           <span
