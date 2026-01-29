@@ -50,7 +50,7 @@ interface InfiniteCanvasProps {
   isOffline: boolean
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline: _isOffline }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -400,6 +400,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 theme={PROMPT_THEME}
                 isSelected={selectedIds.includes(item.id)}
                 isRunning={runningPromptIds.has(item.id)}
+                isOffline={isOffline}
                 pulsePhase={pulsePhase}
                 editing={promptEditing}
                 onItemClick={handleItemClick}
@@ -416,6 +417,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 theme={IMAGE_GEN_PROMPT_THEME}
                 isSelected={selectedIds.includes(item.id)}
                 isRunning={runningImageGenPromptIds.has(item.id)}
+                isOffline={isOffline}
                 pulsePhase={pulsePhase}
                 editing={imageGenPromptEditing}
                 onItemClick={handleItemClick}
@@ -432,6 +434,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 theme={HTML_GEN_PROMPT_THEME}
                 isSelected={selectedIds.includes(item.id)}
                 isRunning={runningHtmlGenPromptIds.has(item.id)}
+                isOffline={isOffline}
                 pulsePhase={pulsePhase}
                 editing={htmlGenPromptEditing}
                 onItemClick={handleItemClick}

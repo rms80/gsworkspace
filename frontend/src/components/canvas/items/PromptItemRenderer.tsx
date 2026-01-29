@@ -14,6 +14,7 @@ interface PromptItemRendererProps {
   theme: PromptThemeColors
   isSelected: boolean
   isRunning: boolean
+  isOffline: boolean
   pulsePhase: number
   editing: PromptEditing
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
@@ -27,6 +28,7 @@ export default function PromptItemRenderer({
   theme,
   isSelected,
   isRunning,
+  isOffline,
   pulsePhase,
   editing,
   onItemClick,
@@ -36,6 +38,7 @@ export default function PromptItemRenderer({
 }: PromptItemRendererProps) {
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
+  const isRunDisabled = isOffline || isRunning
 
   const borderColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseBorder)
@@ -44,7 +47,9 @@ export default function PromptItemRenderer({
 
   const runButtonColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseRunButton)
-    : theme.runButton
+    : isOffline
+      ? '#666' // Greyed out when offline
+      : theme.runButton
 
   return (
     <Group
@@ -134,7 +139,7 @@ export default function PromptItemRenderer({
         y={4}
         onClick={(e) => {
           e.cancelBubble = true
-          if (!isRunning) {
+          if (!isRunDisabled) {
             onRun(item.id)
           }
         }}
@@ -151,7 +156,7 @@ export default function PromptItemRenderer({
           height={BUTTON_HEIGHT}
           fontSize={12}
           fontStyle="bold"
-          fill="#fff"
+          fill={isOffline && !isRunning ? '#999' : '#fff'}
           align="center"
           verticalAlign="middle"
         />

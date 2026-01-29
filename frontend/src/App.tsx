@@ -638,6 +638,12 @@ function App() {
   )
 
   const handleRunPrompt = useCallback(async (promptId: string) => {
+    // Block execution in offline mode
+    if (isOffline) {
+      alert('LLM features are not available in offline mode.')
+      return
+    }
+
     const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
     if (!promptItem || promptItem.type !== 'prompt') return
 
@@ -728,9 +734,15 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems, isOffline])
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
+    // Block execution in offline mode
+    if (isOffline) {
+      alert('LLM features are not available in offline mode.')
+      return
+    }
+
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
     if (!promptItem || promptItem.type !== 'image-gen-prompt') return
 
@@ -838,9 +850,15 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems, isOffline])
 
   const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
+    // Block execution in offline mode
+    if (isOffline) {
+      alert('LLM features are not available in offline mode.')
+      return
+    }
+
     const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')
     if (!promptItem || promptItem.type !== 'html-gen-prompt') return
 
@@ -907,7 +925,7 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems, isOffline])
 
   if (isLoading) {
     return (
