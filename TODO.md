@@ -9,12 +9,32 @@ Add inline video blocks to the canvas, similar to image blocks but with playback
 - **Add via**: File picker (Add menu) and drag-drop
 - **Playback**: Play/pause controls, seek slider
 - **Options**: Loop toggle, mute/unmute (muted by default)
-- **Storage**: Upload to S3 like images
+- **Storage**: Upload to S3 like images (online), IndexedDB (offline)
+- **Feature flag**: Can be disabled via config
 - **No support for**: Paste, URL input, autoplay
 
 ---
 
 ### Implementation Plan
+
+#### Phase 0: Feature Flag
+
+1. **Add feature flag** (`frontend/src/config.ts`)
+   ```typescript
+   export const FEATURES = {
+     VIDEO_SUPPORT: import.meta.env.VITE_FEATURE_VIDEO !== 'false', // enabled by default
+   }
+   ```
+
+2. **Add environment variable** (`frontend/.env.example`)
+   ```
+   VITE_FEATURE_VIDEO=true
+   ```
+
+3. **Gate UI elements behind flag**
+   - Hide "Video" option in Add menu when disabled
+   - Ignore video files on drag-drop when disabled
+   - Existing video items still render (for backwards compatibility)
 
 #### Phase 1: Types & Data Model
 
@@ -168,9 +188,11 @@ Add inline video blocks to the canvas, similar to image blocks but with playback
 - `frontend/src/components/canvas/overlays/VideoControlsOverlay.tsx`
 
 **Modified Files:**
+- `frontend/src/config.ts` - Add FEATURES.VIDEO_SUPPORT flag
+- `frontend/.env.example` - Add VITE_FEATURE_VIDEO
 - `frontend/src/types/index.ts` - Add VideoItem type
-- `frontend/src/components/MenuBar.tsx` - Add Video menu option
-- `frontend/src/components/InfiniteCanvas.tsx` - Render video items
+- `frontend/src/components/MenuBar.tsx` - Add Video menu option (gated by flag)
+- `frontend/src/components/InfiniteCanvas.tsx` - Render video items, gate drag-drop
 - `frontend/src/App.tsx` - Add video handling
 - `backend/src/routes/items.ts` - Video upload endpoint
 - `backend/src/routes/scenes.ts` - Video save/load
