@@ -181,6 +181,27 @@ function MenuBar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Close dialogs on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (aboutDialogOpen) {
+          setAboutDialogOpen(false)
+        }
+        if (jsonDialogOpen) {
+          setJsonDialogOpen(false)
+        }
+        if (hotkeyDialogOpen) {
+          setHotkeyDialogOpen(false)
+        }
+      }
+    }
+    if (aboutDialogOpen || jsonDialogOpen || hotkeyDialogOpen) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [aboutDialogOpen, jsonDialogOpen, hotkeyDialogOpen])
+
   const handleMenuClick = (menu: MenuDef) => {
     if (menu.onClick) {
       // Direct action menu - no submenu
