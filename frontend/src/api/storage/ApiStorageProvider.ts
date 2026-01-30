@@ -1,6 +1,6 @@
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
-import { StorageProvider, SceneMetadata } from './StorageProvider'
+import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 
 const API_BASE = '/api/scenes'
 
@@ -57,6 +57,22 @@ export class ApiStorageProvider implements StorageProvider {
     })
     if (!response.ok) {
       throw new Error(`Failed to save history: ${response.statusText}`)
+    }
+  }
+
+  async getSceneTimestamp(id: string): Promise<SceneTimestamp | null> {
+    try {
+      const response = await fetch(`${API_BASE}/${id}/timestamp`)
+      if (response.status === 404) {
+        return null
+      }
+      if (!response.ok) {
+        throw new Error(`Failed to get scene timestamp: ${response.statusText}`)
+      }
+      return response.json()
+    } catch {
+      // Network errors or other failures - return null to avoid disrupting the user
+      return null
     }
   }
 }

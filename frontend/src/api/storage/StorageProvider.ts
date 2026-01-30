@@ -9,6 +9,11 @@ export interface SceneMetadata {
   itemCount: number
 }
 
+export interface SceneTimestamp {
+  id: string
+  modifiedAt: string
+}
+
 export interface StorageProvider {
   saveScene(scene: Scene): Promise<void>
   loadScene(id: string): Promise<Scene>
@@ -16,4 +21,5 @@ export interface StorageProvider {
   deleteScene(id: string): Promise<void>
   saveHistory(sceneId: string, history: SerializedHistory): Promise<void>
   loadHistory(sceneId: string): Promise<SerializedHistory>
+  getSceneTimestamp(id: string): Promise<SceneTimestamp | null>
 }

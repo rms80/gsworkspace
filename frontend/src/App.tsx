@@ -4,10 +4,12 @@ import InfiniteCanvas from './components/InfiniteCanvas'
 import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
+import ConflictDialog from './components/ConflictDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
+import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { CanvasItem, Scene } from './types'
-import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
@@ -56,10 +58,12 @@ function App() {
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
+  const [isSaving, setIsSaving] = useState(false)
   const saveTimeoutRef = useRef<number | null>(null)
   const historySaveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
   const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
+  const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -71,6 +75,25 @@ function App() {
   const activeHistory = activeSceneId ? historyMap.get(activeSceneId) : null
   const canUndo = activeHistory?.canUndo() ?? false
   const canRedo = activeHistory?.canRedo() ?? false
+
+  // Get last known server modifiedAt for the active scene
+  const lastKnownServerModifiedAt = activeSceneId
+    ? lastKnownServerModifiedAtRef.current.get(activeSceneId) ?? null
+    : null
+
+  // Remote change detection
+  const {
+    hasConflict,
+    remoteModifiedAt,
+    checkNow: checkRemoteChanges,
+    clearConflict,
+    setConflict,
+  } = useRemoteChangeDetection({
+    sceneId: activeSceneId,
+    lastKnownServerModifiedAt,
+    isOffline,
+    isSaving,
+  })
 
   // Helper to push a change record to history
   const pushChange = useCallback((change: ChangeRecord) => {
@@ -98,6 +121,7 @@ function App() {
     // Clear previous saved state tracking when reloading
     lastSavedRef.current.clear()
     lastSavedHistoryRef.current.clear()
+    lastKnownServerModifiedAtRef.current.clear()
 
     try {
       const sceneList = await listScenes()
@@ -133,11 +157,12 @@ function App() {
           })
         )
 
-        // Mark all loaded scenes as saved
+        // Mark all loaded scenes as saved and track server timestamps
         const newHistoryMap = new Map<string, HistoryStack>()
         const newSelectionMap = new Map<string, string[]>()
         scenesWithHistory.forEach(({ scene, history }) => {
           lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+          lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
           newHistoryMap.set(scene.id, history)
           newSelectionMap.set(scene.id, []) // Start with empty selection
         })
@@ -198,14 +223,38 @@ function App() {
 
     // Debounce save by 1 second
     saveTimeoutRef.current = window.setTimeout(async () => {
+      // Check for remote changes before saving (unless offline)
+      if (!isOffline) {
+        const lastKnown = lastKnownServerModifiedAtRef.current.get(activeScene.id)
+        if (lastKnown) {
+          try {
+            const remoteTimestamp = await getSceneTimestamp(activeScene.id)
+            if (remoteTimestamp && remoteTimestamp.modifiedAt !== lastKnown) {
+              // Remote has changed - don't save, show conflict dialog
+              setConflict(remoteTimestamp.modifiedAt)
+              setSaveStatus('unsaved')
+              return
+            }
+          } catch (error) {
+            // If we can't check, proceed with save (fail-open for UX)
+            console.error('Failed to check remote timestamp before save:', error)
+          }
+        }
+      }
+
       setSaveStatus('saving')
+      setIsSaving(true)
       try {
         await saveScene(activeScene)
         lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
+        // Update the known server timestamp to match what we just saved
+        lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
         setSaveStatus('saved')
       } catch (error) {
         console.error('Failed to auto-save scene:', error)
         setSaveStatus('error')
+      } finally {
+        setIsSaving(false)
       }
     }, 1000)
 
@@ -214,7 +263,7 @@ function App() {
         clearTimeout(saveTimeoutRef.current)
       }
     }
-  }, [activeScene, isLoading])
+  }, [activeScene, isLoading, isOffline, setConflict])
 
   // Auto-save history when it changes (debounced)
   useEffect(() => {
@@ -1188,6 +1237,7 @@ function App() {
         // Add to open scenes
         setOpenScenes((prev) => [...prev, scene])
         lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+        lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
 
         // Initialize history
         setHistoryMap((prev) => {
@@ -1212,6 +1262,155 @@ function App() {
       setActiveSceneId(sceneIds[0])
     }
   }, [openScenes])
+
+  // Conflict resolution: Get remote version
+  const handleGetRemote = useCallback(async () => {
+    if (!activeSceneId) return
+
+    try {
+      // Load the remote scene
+      const remoteScene = await loadScene(activeSceneId)
+
+      // Load the remote history
+      let history: HistoryStack
+      try {
+        const serializedHistory = await loadHistory(activeSceneId)
+        history = HistoryStack.deserialize(serializedHistory)
+        lastSavedHistoryRef.current.set(activeSceneId, JSON.stringify(serializedHistory))
+      } catch {
+        history = new HistoryStack()
+      }
+
+      // Update the scene in state
+      setOpenScenes((prev) =>
+        prev.map((scene) => (scene.id === activeSceneId ? remoteScene : scene))
+      )
+      lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
+      lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+
+      // Update history
+      setHistoryMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(activeSceneId, history)
+        return newMap
+      })
+      setHistoryVersion((v) => v + 1)
+
+      // Clear selection
+      setSelectionMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(activeSceneId, [])
+        return newMap
+      })
+
+      // Clear conflict state
+      clearConflict()
+      setSaveStatus('saved')
+    } catch (error) {
+      console.error('Failed to load remote scene:', error)
+      alert('Failed to load the remote version. Please try again.')
+    }
+  }, [activeSceneId, clearConflict])
+
+  // Conflict resolution: Keep local version (force save)
+  const handleKeepLocal = useCallback(async () => {
+    if (!activeScene) return
+
+    try {
+      setSaveStatus('saving')
+      setIsSaving(true)
+
+      // Force save local version to server
+      await saveScene(activeScene)
+      lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
+      lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
+
+      // Clear conflict state
+      clearConflict()
+      setSaveStatus('saved')
+    } catch (error) {
+      console.error('Failed to save local scene:', error)
+      setSaveStatus('error')
+      alert('Failed to save your local version. Please try again.')
+    } finally {
+      setIsSaving(false)
+    }
+  }, [activeScene, clearConflict])
+
+  // Conflict resolution: Fork (create new scene with local content)
+  const handleFork = useCallback(async () => {
+    if (!activeScene || !activeSceneId) return
+
+    try {
+      // Create new scene with local content and new ID
+      const now = new Date().toISOString()
+      const forkedScene: Scene = {
+        ...activeScene,
+        id: uuidv4(),
+        name: `${activeScene.name} (copy)`,
+        createdAt: now,
+        modifiedAt: now,
+      }
+
+      // Get current history for the forked scene
+      const currentHistory = historyMap.get(activeSceneId)
+      const forkedHistory = currentHistory ? currentHistory.clone() : new HistoryStack()
+
+      // Load the remote version into the original scene (so it stays in sync)
+      const remoteScene = await loadScene(activeSceneId)
+      let remoteHistory: HistoryStack
+      try {
+        const serializedHistory = await loadHistory(activeSceneId)
+        remoteHistory = HistoryStack.deserialize(serializedHistory)
+        lastSavedHistoryRef.current.set(activeSceneId, JSON.stringify(serializedHistory))
+      } catch {
+        remoteHistory = new HistoryStack()
+      }
+
+      // Update the original scene with remote data and add the forked scene
+      setOpenScenes((prev) => [
+        ...prev.map((scene) => (scene.id === activeSceneId ? remoteScene : scene)),
+        forkedScene,
+      ])
+      lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
+      lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+      lastSavedRef.current.set(forkedScene.id, '') // Mark fork as needing save
+      // Forked scene has no server timestamp yet - it will be set on first save
+
+      // Update history for both scenes
+      setHistoryMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(activeSceneId, remoteHistory)
+        newMap.set(forkedScene.id, forkedHistory)
+        return newMap
+      })
+      setHistoryVersion((v) => v + 1)
+
+      // Initialize empty selection for forked scene, clear selection on original
+      setSelectionMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(activeSceneId, [])
+        newMap.set(forkedScene.id, [])
+        return newMap
+      })
+
+      // Switch to the forked scene
+      setActiveSceneId(forkedScene.id)
+
+      // Clear conflict state (no longer applies to the new scene)
+      clearConflict()
+    } catch (error) {
+      console.error('Failed to fork scene:', error)
+      alert('Failed to create a copy of the scene. Please try again.')
+    }
+  }, [activeScene, activeSceneId, historyMap, clearConflict])
+
+  // Trigger remote check when opening scenes
+  useEffect(() => {
+    if (activeSceneId && !isLoading) {
+      checkRemoteChanges()
+    }
+  }, [activeSceneId, isLoading, checkRemoteChanges])
 
   if (isLoading) {
     return (
@@ -1303,6 +1502,16 @@ function App() {
         openSceneIds={openScenes.map((s) => s.id)}
         onOpen={handleOpenScenes}
         onCancel={() => setOpenSceneDialogOpen(false)}
+      />
+      <ConflictDialog
+        isOpen={hasConflict}
+        sceneName={activeScene?.name ?? ''}
+        localModifiedAt={activeScene?.modifiedAt ?? ''}
+        remoteModifiedAt={remoteModifiedAt ?? ''}
+        onGetRemote={handleGetRemote}
+        onKeepLocal={handleKeepLocal}
+        onFork={handleFork}
+        onCancel={clearConflict}
       />
     </div>
   )

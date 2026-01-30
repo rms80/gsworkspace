@@ -1,7 +1,7 @@
 import localforage from 'localforage'
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
-import { StorageProvider, SceneMetadata } from './StorageProvider'
+import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 
 const SCENE_PREFIX = 'workspaceapp:scene:'
 const SCENES_INDEX_KEY = 'workspaceapp:scenes-index'
@@ -106,5 +106,10 @@ export class LocalStorageProvider implements StorageProvider {
   async saveHistory(sceneId: string, history: SerializedHistory): Promise<void> {
     const key = this.getHistoryKey(sceneId)
     await localforage.setItem(key, history)
+  }
+
+  async getSceneTimestamp(_id: string): Promise<SceneTimestamp | null> {
+    // Offline mode skips remote change detection
+    return null
   }
 }

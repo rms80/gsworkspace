@@ -81,6 +81,29 @@ interface StoredScene {
   items: StoredItem[]
 }
 
+// Get scene timestamp only (lightweight check for conflict detection)
+router.get('/:id/timestamp', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    // Load scene.json to get modifiedAt
+    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    if (!sceneJson) {
+      return res.status(404).json({ error: 'Scene not found' })
+    }
+
+    const storedScene: StoredScene = JSON.parse(sceneJson)
+    res.json({
+      id: storedScene.id,
+      modifiedAt: storedScene.modifiedAt,
+    })
+  } catch (error) {
+    console.error('Error getting scene timestamp:', error)
+    res.status(500).json({ error: 'Failed to get scene timestamp' })
+  }
+})
+
 // Save a scene
 router.post('/:id', async (req, res) => {
   try {

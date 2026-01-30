@@ -9,6 +9,7 @@ export {
   isOfflineMode,
   setOfflineMode,
   storageProvider,
+  getSceneTimestamp,
 } from './storage'
 
-export type { SceneMetadata } from './storage'
+export type { SceneMetadata, SceneTimestamp } from './storage'
