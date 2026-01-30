@@ -14,7 +14,7 @@ import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
-import { loadSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
+import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
   HistoryState,
@@ -90,7 +90,9 @@ function App() {
 
   // Function to load scenes from current storage provider
   // Respects settings for which scenes should be open
-  const loadAllScenes = useCallback(async () => {
+  // Pass currentOfflineMode to ensure we load settings for the correct mode
+  const loadAllScenes = useCallback(async (currentOfflineMode?: boolean) => {
+    const offlineMode = currentOfflineMode ?? isOffline
     setIsLoading(true)
     // Clear previous saved state tracking when reloading
     lastSavedRef.current.clear()
@@ -98,11 +100,11 @@ function App() {
 
     try {
       const sceneList = await listScenes()
-      const settings = loadSettings()
+      const modeSettings = loadModeSettings(offlineMode)
 
       // Determine which scenes to open based on settings
       const availableIds = new Set(sceneList.map((s) => s.id))
-      const validOpenIds = settings.openSceneIds.filter((id) => availableIds.has(id))
+      const validOpenIds = modeSettings.openSceneIds.filter((id) => availableIds.has(id))
 
       if (validOpenIds.length === 0) {
         // No scenes to open - show empty state
@@ -144,8 +146,8 @@ function App() {
 
         // Restore active scene from settings if it's in the loaded scenes
         const loadedIds = scenesWithHistory.map(({ scene }) => scene.id)
-        if (settings.activeSceneId && loadedIds.includes(settings.activeSceneId)) {
-          setActiveSceneId(settings.activeSceneId)
+        if (modeSettings.activeSceneId && loadedIds.includes(modeSettings.activeSceneId)) {
+          setActiveSceneId(modeSettings.activeSceneId)
         } else {
           setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
         }
@@ -160,7 +162,7 @@ function App() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [isOffline])
 
   // Load scenes on initial mount
   useEffect(() => {
@@ -171,8 +173,8 @@ function App() {
   const handleSetOfflineMode = useCallback(async (offline: boolean) => {
     setOfflineMode(offline)
     setIsOffline(offline)
-    // Reload scenes from the new storage provider
-    await loadAllScenes()
+    // Reload scenes from the new storage provider with the new mode
+    await loadAllScenes(offline)
   }, [loadAllScenes])
 
   // Auto-save when active scene changes (debounced)
@@ -253,8 +255,8 @@ function App() {
   useEffect(() => {
     if (isLoading) return
     const openIds = openScenes.map((s) => s.id)
-    saveOpenScenesToSettings(openIds, activeSceneId)
-  }, [openScenes, activeSceneId, isLoading])
+    saveOpenScenesToSettings(openIds, activeSceneId, isOffline)
+  }, [openScenes, activeSceneId, isLoading, isOffline])
 
   // Undo handler
   const handleUndo = useCallback(() => {
