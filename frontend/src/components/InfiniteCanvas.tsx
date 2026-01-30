@@ -41,6 +41,7 @@ import {
 interface InfiniteCanvasProps {
   items: CanvasItem[]
   selectedIds: string[]
+  assetBaseUrl?: string
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
@@ -56,7 +57,7 @@ interface InfiniteCanvasProps {
   isOffline: boolean
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, assetBaseUrl, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -87,7 +88,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   } = useCanvasViewport(containerRef, stageRef)
 
   // 2. Image loader hook
-  const { loadedImages } = useImageLoader(items)
+  const { loadedImages } = useImageLoader(items, assetBaseUrl)
 
   // 3. Crop mode hook
   const {
@@ -762,6 +763,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               isAnyDragActive={isAnyDragActive}
               onUpdateItem={onUpdateItem}
               transform={transform}
+              assetBaseUrl={assetBaseUrl}
             />
           )
         })}

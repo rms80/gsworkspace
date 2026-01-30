@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { VideoItem } from '../../../types'
+import { resolveAssetUrl } from '../../../utils/assetUrl'
 
 const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 10]
 
@@ -11,6 +12,7 @@ interface VideoOverlayProps {
   isAnyDragActive: boolean
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
   transform?: { x: number; y: number; width: number; height: number }
+  assetBaseUrl?: string
 }
 
 /**
@@ -25,6 +27,7 @@ export default function VideoOverlay({
   isAnyDragActive,
   onUpdateItem,
   transform,
+  assetBaseUrl,
 }: VideoOverlayProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -141,7 +144,7 @@ export default function VideoOverlay({
       {/* Video element - no pointer events, just displays video */}
       <video
         ref={videoRef}
-        src={item.src}
+        src={resolveAssetUrl(assetBaseUrl, item.src)}
         style={{
           width: '100%',
           height: '100%',
