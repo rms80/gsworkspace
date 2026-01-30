@@ -7,13 +7,14 @@
 The basic video support is now implemented. Below is the original plan with completed items marked.
 
 ### Requirements
-- [x] **Add via**: File picker (Add menu)
+- [x] **Add via**: File picker (Add menu) and drag-drop
 - [x] **Playback**: Play/pause controls, seek slider
 - [x] **Options**: Loop toggle, mute/unmute (muted by default)
 - [x] **Storage**: Upload to S3 (online mode)
 - [x] **Feature flag**: Can be disabled via config
+- [x] **Drag-drop**: Add video via drag-drop
+- [x] **Context menu**: Right-click menu with Reset Transform
 - [ ] **Storage**: IndexedDB persistence for offline mode (videos use temporary blob URLs currently)
-- [ ] **Drag-drop**: Add video via drag-drop
 
 ---
 
@@ -54,10 +55,10 @@ The basic video support is now implemented. Below is the original plan with comp
 - [x] Mute/unmute toggle
 - [x] Loop toggle
 
-#### Phase 6: Drag-Drop Support - NOT DONE
+#### Phase 6: Drag-Drop Support - DONE
 
-- [ ] Handle video files on drag-drop
-- [ ] Show loading indicator during upload
+- [x] Handle video files on drag-drop
+- [ ] Show loading indicator during upload (future enhancement)
 
 #### Phase 7: Integration - DONE
 
@@ -76,10 +77,8 @@ The basic video support is now implemented. Below is the original plan with comp
 
 ### Remaining Work
 
-1. **Drag-drop support** - Add video files via drag-drop onto canvas
-2. **Offline persistence** - Store video blobs in IndexedDB so they persist across page reloads
-3. **Upload progress** - Show progress indicator for large video uploads
-4. **Video proxy endpoint** - For CORS issues when exporting external videos
+1. **Offline persistence** - Store video blobs in IndexedDB so they persist across page reloads
+2. **Upload progress** - Show progress indicator for large video uploads
 
 ---
 

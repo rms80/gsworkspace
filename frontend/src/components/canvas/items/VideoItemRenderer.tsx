@@ -7,6 +7,7 @@ interface VideoItemRendererProps {
   item: VideoItem
   isSelected: boolean
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
+  onContextMenu: (e: Konva.KonvaEventObject<PointerEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
   setVideoItemTransforms: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
 }
@@ -19,6 +20,7 @@ export default function VideoItemRenderer({
   item,
   isSelected,
   onItemClick,
+  onContextMenu,
   onUpdateItem,
   setVideoItemTransforms,
 }: VideoItemRendererProps) {
@@ -43,6 +45,7 @@ export default function VideoItemRenderer({
       cornerRadius={4}
       draggable
       onClick={(e) => onItemClick(e, item.id)}
+      onContextMenu={(e) => onContextMenu(e, item.id)}
       onDragStart={() => {
         setVideoItemTransforms((prev) => {
           const newMap = new Map(prev)

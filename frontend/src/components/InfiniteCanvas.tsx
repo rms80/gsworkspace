@@ -4,9 +4,11 @@ import Konva from 'konva'
 import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
+import { uploadVideo, getVideoDimensions } from '../api/videos'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
+import VideoContextMenu from './canvas/menus/VideoContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
@@ -42,6 +44,7 @@ interface InfiniteCanvasProps {
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
+  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
@@ -52,7 +55,7 @@ interface InfiniteCanvasProps {
   isOffline: boolean
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -200,6 +203,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const imageGenModelMenu = useMenuState<string>()
   const htmlGenModelMenu = useMenuState<string>()
   const imageContextMenuState = useMenuState<{ imageId: string }>()
+  const videoContextMenuState = useMenuState<{ videoId: string }>()
   const exportMenu = useMenuState<string>()
 
   // 10. Remaining UI state
@@ -238,7 +242,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     e.dataTransfer.dropEffect = 'copy'
   }
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
 
     const files = e.dataTransfer.files
@@ -251,30 +255,44 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     const canvasPos = screenToCanvas(dropX, dropY)
 
     // Process each dropped file
-    Array.from(files).forEach((file, index) => {
-      if (!file.type.startsWith('image/')) return
-
-      const reader = new FileReader()
-      reader.onload = async (event) => {
-        const dataUrl = event.target?.result as string
-        const img = new window.Image()
-        img.onload = async () => {
-          const scaled = scaleImageToViewport(img.width, img.height)
-          try {
-            // Upload to S3 immediately to avoid storing large data URLs in memory
-            const s3Url = await uploadImage(dataUrl, file.name || `dropped-${Date.now()}.png`)
-            // Offset multiple images so they don't stack exactly
-            onAddImageAt(canvasPos.x + index * 20, canvasPos.y + index * 20, s3Url, scaled.width, scaled.height)
-          } catch (err) {
-            console.error('Failed to upload image, using data URL:', err)
-            // Fallback to data URL if upload fails
-            onAddImageAt(canvasPos.x + index * 20, canvasPos.y + index * 20, dataUrl, scaled.width, scaled.height)
+    let offsetIndex = 0
+    for (const file of Array.from(files)) {
+      // Handle image files
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader()
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result as string
+          const img = new window.Image()
+          img.onload = async () => {
+            const scaled = scaleImageToViewport(img.width, img.height)
+            try {
+              // Upload to S3 immediately to avoid storing large data URLs in memory
+              const s3Url = await uploadImage(dataUrl, file.name || `dropped-${Date.now()}.png`)
+              // Offset multiple files so they don't stack exactly
+              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height)
+            } catch (err) {
+              console.error('Failed to upload image, using data URL:', err)
+              // Fallback to data URL if upload fails
+              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height)
+            }
           }
+          img.src = dataUrl
         }
-        img.src = dataUrl
+        reader.readAsDataURL(file)
+        offsetIndex++
       }
-      reader.readAsDataURL(file)
-    })
+      // Handle video files (if video support is enabled)
+      else if (file.type.startsWith('video/') && config.features.videoSupport) {
+        try {
+          const dimensions = await getVideoDimensions(file)
+          const url = await uploadVideo(file, isOffline)
+          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height)
+          offsetIndex++
+        } catch (err) {
+          console.error('Failed to add dropped video:', err)
+        }
+      }
+    }
   }
 
   // Handle right-click context menu
@@ -469,6 +487,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 item={item}
                 isSelected={selectedIds.includes(item.id)}
                 onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  videoContextMenuState.openMenu(
+                    { videoId: id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
+                }}
                 onUpdateItem={onUpdateItem}
                 setVideoItemTransforms={setVideoItemTransforms}
               />
@@ -829,6 +853,16 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             setPendingCropRect(initialCrop)
           }}
           onClose={imageContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* Video context menu */}
+      {videoContextMenuState.menuData && videoContextMenuState.menuPosition && (
+        <VideoContextMenu
+          position={videoContextMenuState.menuPosition}
+          videoItem={items.find((i) => i.id === videoContextMenuState.menuData!.videoId && i.type === 'video') as import('../types').VideoItem | undefined}
+          onUpdateItem={onUpdateItem}
+          onClose={videoContextMenuState.closeMenu}
         />
       )}
 

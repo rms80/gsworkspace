@@ -615,6 +615,34 @@ function App() {
     [updateActiveSceneItems, pushChange]
   )
 
+  const addVideoAt = useCallback(
+    (x: number, y: number, src: string, width: number, height: number) => {
+      // Scale down large videos to reasonable canvas size
+      const maxDim = 640
+      let w = width
+      let h = height
+      if (w > maxDim || h > maxDim) {
+        const scale = maxDim / Math.max(w, h)
+        w = Math.round(w * scale)
+        h = Math.round(h * scale)
+      }
+      const newItem: CanvasItem = {
+        id: uuidv4(),
+        type: 'video',
+        x: x - w / 2,
+        y: y - h / 2,
+        src,
+        width: w,
+        height: h,
+        muted: true,
+        loop: false,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange]
+  )
+
   const updateItem = useCallback(
     (id: string, changes: Partial<CanvasItem>) => {
       const item = items.find((i) => i.id === id)
@@ -1219,6 +1247,7 @@ function App() {
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}
           onAddImageAt={addImageAt}
+          onAddVideoAt={addVideoAt}
           onDeleteSelected={deleteSelected}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
