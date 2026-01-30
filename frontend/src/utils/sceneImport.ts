@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import { v4 as uuidv4 } from 'uuid'
-import { Scene, ImageItem } from '../types'
+import { Scene, ImageItem, VideoItem } from '../types'
 import { SerializedHistory } from '../history'
 
 /**
@@ -70,6 +70,21 @@ export async function importSceneFromZip(file: File): Promise<ImportResult> {
     }
   }
 
+  // Process videos - convert from ZIP to data URLs
+  const videoItems = scene.items.filter(
+    (item): item is VideoItem => item.type === 'video'
+  )
+
+  for (const item of videoItems) {
+    if (item.src.startsWith('videos/')) {
+      const videoFile = zip.file(item.src)
+      if (videoFile) {
+        const blob = await videoFile.async('blob')
+        item.src = await fileToDataUrl(blob)
+      }
+    }
+  }
+
   // Generate new scene ID to avoid conflicts
   const now = new Date().toISOString()
   scene.id = uuidv4()
@@ -112,11 +127,17 @@ export async function importSceneFromDirectory(
 
   // Build a map of image paths to files
   const imageFiles = new Map<string, File>()
+  const videoFiles = new Map<string, File>()
   for (const file of fileArray) {
     // Match files in the images folder
-    const pathMatch = file.webkitRelativePath.match(/images\/(.+)$/)
-    if (pathMatch) {
-      imageFiles.set(`images/${pathMatch[1]}`, file)
+    const imagePathMatch = file.webkitRelativePath.match(/images\/(.+)$/)
+    if (imagePathMatch) {
+      imageFiles.set(`images/${imagePathMatch[1]}`, file)
+    }
+    // Match files in the videos folder
+    const videoPathMatch = file.webkitRelativePath.match(/videos\/(.+)$/)
+    if (videoPathMatch) {
+      videoFiles.set(`videos/${videoPathMatch[1]}`, file)
     }
   }
 
@@ -139,6 +160,20 @@ export async function importSceneFromDirectory(
       const cropFile = imageFiles.get(item.cropSrc)
       if (cropFile) {
         item.cropSrc = await fileToDataUrl(cropFile)
+      }
+    }
+  }
+
+  // Process videos - convert from files to data URLs
+  const videoItems = scene.items.filter(
+    (item): item is VideoItem => item.type === 'video'
+  )
+
+  for (const item of videoItems) {
+    if (item.src.startsWith('videos/')) {
+      const videoFile = videoFiles.get(item.src)
+      if (videoFile) {
+        item.src = await fileToDataUrl(videoFile)
       }
     }
   }

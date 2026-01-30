@@ -66,6 +66,40 @@ router.post('/upload-image', async (req, res) => {
   }
 })
 
+// Upload video
+router.post('/upload-video', async (req, res) => {
+  try {
+    const { videoData, filename, contentType } = req.body
+    const id = uuidv4()
+
+    // Determine file extension from content type or filename
+    let ext = 'mp4'
+    if (contentType) {
+      const match = contentType.match(/video\/(\w+)/)
+      if (match) ext = match[1]
+    } else if (filename) {
+      const dotIndex = filename.lastIndexOf('.')
+      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1)
+    }
+
+    const key = `videos/${id}-${filename || `video.${ext}`}`
+
+    // videoData is base64 data URL, convert to buffer
+    const base64Data = videoData.replace(/^data:video\/\w+;base64,/, '')
+    await saveToS3(key, Buffer.from(base64Data, 'base64'), contentType || 'video/mp4')
+
+    // Return the S3 URL (for public bucket)
+    const bucketName = process.env.S3_BUCKET_NAME
+    const region = process.env.AWS_REGION || 'us-east-1'
+    const url = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`
+
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading video:', error)
+    res.status(500).json({ error: 'Failed to upload video' })
+  }
+})
+
 // Crop an image and save the cropped version to S3
 router.post('/crop-image', async (req, res) => {
   try {

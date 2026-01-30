@@ -36,6 +36,18 @@ export interface ImageItem extends BaseItem {
   cropSrc?: string
 }
 
+export interface VideoItem extends BaseItem {
+  type: 'video'
+  src: string
+  width: number
+  height: number
+  scaleX?: number
+  scaleY?: number
+  rotation?: number
+  loop?: boolean    // default false
+  muted?: boolean   // default true
+}
+
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'
 
 export type ImageGenModel = 'gemini-imagen' | 'gemini-flash-imagen'
@@ -79,7 +91,7 @@ export interface HTMLGenPromptItem extends BaseItem {
   model: LLMModel
 }
 
-export type CanvasItem = TextItem | ImageItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem
 
 export interface SelectionRect {
   x: number

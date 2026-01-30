@@ -13,6 +13,12 @@ export const config = {
      * which improves performance and avoids visual desync.
      */
     hideHtmlDuringTransform: false,
+
+    /**
+     * Enable video block support.
+     * Set VITE_FEATURE_VIDEO=false to disable.
+     */
+    videoSupport: import.meta.env.VITE_FEATURE_VIDEO !== 'false',
   },
 
   /**

@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { Scene, ImageItem } from '../types'
+import { Scene, ImageItem, VideoItem } from '../types'
 import { SerializedHistory } from '../history'
 
 // File System Access API types (not yet in standard TypeScript lib)
@@ -46,6 +46,62 @@ async function fetchImageAsBlob(src: string): Promise<Blob> {
     }
     return response.blob()
   }
+}
+
+/**
+ * Fetches a video and returns it as a Blob
+ * Handles both blob URLs, data URLs, and external URLs
+ */
+async function fetchVideoAsBlob(src: string): Promise<Blob> {
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    const response = await fetch(src)
+    return response.blob()
+  } else {
+    // External URL - use proxy to avoid CORS issues
+    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(src)}`
+    const response = await fetch(proxyUrl)
+    if (!response.ok) {
+      // If proxy fails, try direct fetch (might work for same-origin URLs)
+      const directResponse = await fetch(src)
+      if (!directResponse.ok) {
+        throw new Error(`Failed to fetch video: ${directResponse.statusText}`)
+      }
+      return directResponse.blob()
+    }
+    return response.blob()
+  }
+}
+
+/**
+ * Gets the file extension from a video src or blob type
+ */
+function getVideoExtension(src: string, blob: Blob): string {
+  // Try to get from MIME type
+  if (blob.type) {
+    const mimeMatch = blob.type.match(/video\/(\w+)/)
+    if (mimeMatch) {
+      return mimeMatch[1]
+    }
+  }
+
+  // Try to get from data URL
+  if (src.startsWith('data:')) {
+    const mimeMatch = src.match(/data:video\/(\w+)/)
+    if (mimeMatch) {
+      return mimeMatch[1]
+    }
+  }
+
+  // Try to get from URL path
+  if (src.includes('.')) {
+    const ext = src.split('.').pop()?.split('?')[0]
+    if (ext && ['mp4', 'webm', 'ogg', 'mov'].includes(ext)) {
+      return ext
+    }
+  }
+
+  // Default to mp4
+  return 'mp4'
 }
 
 /**
@@ -113,6 +169,26 @@ export async function exportScene(
       }
     } catch (error) {
       console.error(`Failed to export image ${item.id}:`, error)
+      // Keep the original src if we fail to fetch
+    }
+  }
+
+  // Process videos and add to ZIP
+  const videoItems = exportScene.items.filter(
+    (item): item is VideoItem => item.type === 'video'
+  )
+
+  for (const item of videoItems) {
+    try {
+      const blob = await fetchVideoAsBlob(item.src)
+      const ext = getVideoExtension(item.src, blob)
+      const filename = `${item.id}.${ext}`
+      zip.file(`videos/${filename}`, blob)
+
+      // Update the item's src to use relative path
+      item.src = `videos/${filename}`
+    } catch (error) {
+      console.error(`Failed to export video ${item.id}:`, error)
       // Keep the original src if we fail to fetch
     }
   }

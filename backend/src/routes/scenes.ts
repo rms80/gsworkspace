@@ -31,6 +31,16 @@ interface StoredImageItem extends StoredItemBase {
   cropSrc?: string
 }
 
+interface StoredVideoItem extends StoredItemBase {
+  type: 'video'
+  file: string // reference to video file
+  scaleX?: number
+  scaleY?: number
+  rotation?: number
+  loop?: boolean
+  muted?: boolean
+}
+
 interface StoredPromptItem extends StoredItemBase {
   type: 'prompt'
   fontSize: number
@@ -56,7 +66,7 @@ interface StoredHtmlGenPromptItem extends StoredItemBase {
   file: string // reference to .json file containing label, text, and model
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
 
 interface StoredScene {
   id: string
@@ -144,6 +154,72 @@ router.post('/:id', async (req, res) => {
           })
         } else {
           console.error(`Failed to save image ${item.id}, skipping from scene`)
+        }
+      } else if (item.type === 'video') {
+        // Determine file extension from source URL or default to mp4
+        let ext = 'mp4'
+        if (item.src.startsWith('data:video/')) {
+          const match = item.src.match(/^data:video\/(\w+);/)
+          if (match) ext = match[1]
+        } else if (item.src.includes('.')) {
+          const urlExt = item.src.split('.').pop()?.split('?')[0]
+          if (urlExt && ['mp4', 'webm', 'ogg', 'mov'].includes(urlExt)) {
+            ext = urlExt
+          }
+        }
+        const videoFile = `${item.id}.${ext}`
+        let videoSaved = false
+
+        // If src is a data URL, extract and save the video
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await saveToS3(
+              `${sceneFolder}/${videoFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+            videoSaved = true
+          }
+        } else if (item.src.startsWith('http')) {
+          // If src is a URL, fetch and save the video to the scene folder
+          try {
+            const response = await fetch(item.src)
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer()
+              const contentType = response.headers.get('content-type') || 'video/mp4'
+              await saveToS3(
+                `${sceneFolder}/${videoFile}`,
+                Buffer.from(arrayBuffer),
+                contentType
+              )
+              videoSaved = true
+            }
+          } catch (err) {
+            console.error(`Failed to fetch video from ${item.src}:`, err)
+          }
+        }
+
+        // Only add to stored items if the video was successfully saved
+        if (videoSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'video',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: videoFile,
+            scaleX: item.scaleX,
+            scaleY: item.scaleY,
+            rotation: item.rotation,
+            loop: item.loop,
+            muted: item.muted,
+          })
+        } else {
+          console.error(`Failed to save video ${item.id}, skipping from scene`)
         }
       } else if (item.type === 'prompt') {
         const promptFile = `${item.id}.prompt.json`
@@ -266,6 +342,23 @@ router.get('/:id', async (req, res) => {
             rotation: item.rotation,
             cropRect: item.cropRect,
             cropSrc: item.cropSrc,
+          }
+        } else if (item.type === 'video') {
+          // For videos, return the public URL
+          const videoUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'video' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: videoUrl,
+            scaleX: item.scaleX,
+            scaleY: item.scaleY,
+            rotation: item.rotation,
+            loop: item.loop,
+            muted: item.muted,
           }
         } else if (item.type === 'prompt') {
           // For prompts, load the JSON file

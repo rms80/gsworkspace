@@ -14,6 +14,7 @@ import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
+import { uploadVideo, getVideoDimensions } from './api/videos'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
@@ -484,6 +485,45 @@ function App() {
     },
     [updateActiveSceneItems, pushChange]
   )
+
+  const addVideoItem = useCallback(
+    (src: string, width: number, height: number) => {
+      // Scale down large videos to reasonable canvas size
+      const maxDim = 640
+      let w = width
+      let h = height
+      if (w > maxDim || h > maxDim) {
+        const scale = maxDim / Math.max(w, h)
+        w = Math.round(w * scale)
+        h = Math.round(h * scale)
+      }
+      const newItem: CanvasItem = {
+        id: uuidv4(),
+        type: 'video',
+        x: 100 + Math.random() * 200,
+        y: 100 + Math.random() * 200,
+        src,
+        width: w,
+        height: h,
+        muted: true,
+        loop: false,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange]
+  )
+
+  const handleAddVideo = useCallback(async (file: File) => {
+    try {
+      const dimensions = await getVideoDimensions(file)
+      const url = await uploadVideo(file, isOffline)
+      addVideoItem(url, dimensions.width, dimensions.height)
+    } catch (error) {
+      console.error('Failed to add video:', error)
+      alert('Failed to add video. Please try again.')
+    }
+  }, [isOffline, addVideoItem])
 
   const addPromptItem = useCallback(() => {
     const newItem: CanvasItem = {
@@ -1148,6 +1188,7 @@ function App() {
       <MenuBar
         onAddText={addTextItem}
         onAddImage={addImageItem}
+        onAddVideo={handleAddVideo}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}

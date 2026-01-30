@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react'
+import { config } from '../config'
 
 interface MenuBarProps {
   onAddText: () => void
   onAddImage: (src: string, width: number, height: number) => void
+  onAddVideo: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
@@ -37,6 +39,7 @@ interface MenuDef {
 function MenuBar({
   onAddText,
   onAddImage,
+  onAddVideo,
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
@@ -56,6 +59,7 @@ function MenuBar({
   const [aboutContent, setAboutContent] = useState('')
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
 
@@ -87,6 +91,7 @@ function MenuBar({
       items: [
         { label: 'Text Block', onClick: onAddText },
         { label: 'Image', type: 'file-input', accept: 'image/*', onFileSelect: handleImageUpload },
+        ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },
@@ -154,6 +159,8 @@ function MenuBar({
       setOpenMenu(null)
       if (item.accept === '.zip') {
         zipInputRef.current?.click()
+      } else if (item.accept === 'video/*') {
+        videoInputRef.current?.click()
       } else {
         fileInputRef.current?.click()
       }
@@ -287,6 +294,15 @@ function MenuBar({
         type="file"
         accept="image/*"
         onChange={(e) => handleFileChange(e, handleImageUpload)}
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden file input for video upload */}
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        onChange={(e) => handleFileChange(e, onAddVideo)}
         style={{ display: 'none' }}
       />
 

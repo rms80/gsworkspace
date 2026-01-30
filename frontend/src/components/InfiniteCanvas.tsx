@@ -10,11 +10,13 @@ import ImageContextMenu from './canvas/menus/ImageContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
+import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
+import VideoOverlay from './canvas/overlays/VideoOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
@@ -61,6 +63,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
+  const videoTransformerRef = useRef<Konva.Transformer>(null)
 
   // 1. Viewport hook
   const {
@@ -220,6 +223,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     transformers: [
       { type: 'text', ref: textTransformerRef },
       { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId },
+      { type: 'video', ref: videoTransformerRef },
       { type: 'prompt', ref: promptTransformerRef },
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
@@ -457,6 +461,16 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 onCropChange={setPendingCropRect}
               />
             )
+          } else if (item.type === 'video') {
+            return (
+              <VideoItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+              />
+            )
           } else if (item.type === 'prompt') {
             return (
               <PromptItemRenderer
@@ -613,6 +627,13 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             return newBox
           }}
         />
+        {/* Transformer for videos - corner handles only, keep aspect ratio */}
+        <Transformer
+          ref={videoTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+        />
       </Layer>
     </Stage>
 
@@ -657,6 +678,24 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 }}
               />
             </div>
+          )
+        })}
+
+      {/* Video overlays */}
+      {items
+        .filter((item) => item.type === 'video')
+        .map((item) => {
+          if (item.type !== 'video') return null
+          return (
+            <VideoOverlay
+              key={`video-${item.id}`}
+              item={item}
+              stageScale={stageScale}
+              stagePos={stagePos}
+              isSelected={selectedIds.includes(item.id)}
+              isAnyDragActive={isAnyDragActive}
+              onUpdateItem={onUpdateItem}
+            />
           )
         })}
 
