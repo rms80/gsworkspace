@@ -161,15 +161,14 @@ export default function VideoItemRenderer({
         </>
       )}
 
-      {/* Video content area */}
+      {/* Video content area - transparent but clickable */}
       <Rect
         y={headerHeight}
         width={displayWidth}
         height={displayHeight}
-        fill="#1a1a2e"
-        stroke={isSelected ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
-        strokeWidth={isSelected ? 2 : 1}
-        cornerRadius={isSelected ? [0, 0, 4, 4] : 4}
+        fill="transparent"
+        stroke={isSelected ? COLOR_SELECTED : 'transparent'}
+        strokeWidth={isSelected ? 2 : 0}
       />
     </Group>
   )
