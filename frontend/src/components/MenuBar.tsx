@@ -50,6 +50,7 @@ function MenuBar({
   onImportSceneFromFolder,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
@@ -93,6 +94,12 @@ function MenuBar({
       items: [
         { label: 'Undo', onClick: onUndo, disabled: !canUndo, shortcut: 'Ctrl+Z' },
         { label: 'Redo', onClick: onRedo, disabled: !canRedo, shortcut: 'Ctrl+Y' },
+      ],
+    },
+    {
+      label: 'Help',
+      items: [
+        { label: 'Hotkey Reference', onClick: () => setHotkeyDialogOpen(true) },
       ],
     },
   ]
@@ -272,6 +279,81 @@ function MenuBar({
         onChange={handleFolderChange}
         style={{ display: 'none' }}
       />
+
+      {/* Hotkey Reference Dialog */}
+      {hotkeyDialogOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setHotkeyDialogOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              padding: '24px',
+              minWidth: '400px',
+              maxWidth: '500px',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '18px' }}>Hotkey Reference</h2>
+              <button
+                onClick={() => setHotkeyDialogOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '4px 8px',
+                }}
+              >
+                x
+              </button>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid #ddd' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600 }}>Shortcut</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600 }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { shortcut: 'Ctrl+Z', action: 'Undo' },
+                  { shortcut: 'Ctrl+Y', action: 'Redo' },
+                  { shortcut: 'Ctrl+Shift+Z', action: 'Redo' },
+                  { shortcut: 'Ctrl+O', action: 'Open Scene' },
+                  { shortcut: 'Ctrl+Shift+E', action: 'Export Scene' },
+                  { shortcut: 'Ctrl+C', action: 'Copy selected item' },
+                  { shortcut: 'Ctrl+V', action: 'Paste at cursor' },
+                  { shortcut: 'T', action: 'New text block at cursor (when nothing selected)' },
+                  { shortcut: 'Delete / Backspace', action: 'Delete selected items' },
+                  { shortcut: 'Escape', action: 'Deselect all / Cancel crop' },
+                ].map((row, index) => (
+                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '13px' }}>{row.shortcut}</td>
+                    <td style={{ padding: '8px 12px' }}>{row.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

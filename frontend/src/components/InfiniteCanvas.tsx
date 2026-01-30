@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
@@ -38,7 +38,7 @@ interface InfiniteCanvasProps {
   selectedIds: string[]
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
-  onAddTextAt: (x: number, y: number, text: string) => void
+  onAddTextAt: (x: number, y: number, text: string) => string
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
@@ -138,6 +138,58 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     onUpdateItem,
     onDeleteSelected,
   })
+
+  // 8b. 'T' hotkey to create and edit text block at cursor, or edit selected text
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if typing in an input/textarea
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+      // Don't trigger if already editing
+      if (isEditing) {
+        return
+      }
+      // Only trigger on 't' key without modifiers
+      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+
+        // If a single text item is selected, edit it
+        if (selectedIds.length === 1) {
+          const selectedItem = items.find(item => item.id === selectedIds[0])
+          if (selectedItem && selectedItem.type === 'text') {
+            setEditingTextId(selectedItem.id)
+            setTimeout(() => {
+              textareaRef.current?.focus()
+              textareaRef.current?.select()
+            }, 0)
+            return
+          }
+        }
+
+        // If nothing selected, create new text block at cursor
+        if (selectedIds.length === 0) {
+          const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+          const newId = onAddTextAt(canvasPos.x, canvasPos.y, '')
+          // Select the new text block and start editing after it's rendered
+          setTimeout(() => {
+            onSelectItems([newId])
+            setEditingTextId(newId)
+            setTimeout(() => {
+              textareaRef.current?.focus()
+              textareaRef.current?.select()
+            }, 0)
+          }, 20)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems])
 
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
@@ -259,9 +311,21 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   }
 
   const handleTextareaKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
+      // Enter commits text
+      e.preventDefault()
+      if (editingTextId && textareaRef.current) {
+        onUpdateItem(editingTextId, { text: textareaRef.current.value })
+      }
+      setEditingTextId(null)
+    } else if (e.key === 'Escape') {
+      // Escape also commits text
+      if (editingTextId && textareaRef.current) {
+        onUpdateItem(editingTextId, { text: textareaRef.current.value })
+      }
       setEditingTextId(null)
     }
+    // Shift+Enter and Ctrl+Enter allow default behavior (newline)
   }
 
   // HTML item label editing handlers

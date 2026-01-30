@@ -19,6 +19,7 @@ export default function TextEditingOverlay({
   onBlur,
   onKeyDown,
 }: TextEditingOverlayProps) {
+  const padding = 8
   const textNode = new Konva.Text({
     text: item.text,
     fontSize: item.fontSize,
@@ -39,13 +40,13 @@ export default function TextEditingOverlay({
       }}
       style={{
         position: 'absolute',
-        top: (item.y + 8) * stageScale + stagePos.y,
-        left: (item.x + 8) * stageScale + stagePos.x,
-        width: item.width * stageScale,
-        minHeight: textHeight * stageScale,
+        top: item.y * stageScale + stagePos.y,
+        left: item.x * stageScale + stagePos.x,
+        width: (item.width + padding * 2) * stageScale,
+        minHeight: (textHeight + padding * 2) * stageScale,
         fontSize: item.fontSize * stageScale,
         fontFamily: 'sans-serif',
-        padding: 0,
+        padding: padding * stageScale,
         margin: 0,
         border: '1px solid #ccc',
         borderRadius: 4,
@@ -54,6 +55,7 @@ export default function TextEditingOverlay({
         overflow: 'hidden',
         background: 'white',
         transformOrigin: 'top left',
+        boxSizing: 'border-box',
       }}
     />
   )

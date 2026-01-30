@@ -10,7 +10,7 @@ interface UseClipboardParams {
   croppingImageId: string | null
   screenToCanvas: (x: number, y: number) => { x: number; y: number }
   scaleImageToViewport: (w: number, h: number) => { width: number; height: number }
-  onAddTextAt: (x: number, y: number, text: string) => void
+  onAddTextAt: (x: number, y: number, text: string) => string | void
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onDeleteSelected: () => void

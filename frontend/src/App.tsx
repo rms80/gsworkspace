@@ -535,11 +535,12 @@ function App() {
   }, [updateActiveSceneItems, pushChange])
 
   const addTextAt = useCallback(
-    (x: number, y: number, text: string) => {
+    (x: number, y: number, text: string): string => {
       const width = 400
       const height = 100
+      const id = uuidv4()
       const newItem: CanvasItem = {
-        id: uuidv4(),
+        id,
         type: 'text',
         x: x - width / 2,
         y: y - height / 2,
@@ -550,6 +551,7 @@ function App() {
       }
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
+      return id
     },
     [updateActiveSceneItems, pushChange]
   )
@@ -1058,6 +1060,29 @@ function App() {
       alert('Failed to load scene list.')
     }
   }, [])
+
+  // Keyboard shortcuts for scene management
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault()
+        handleOpenSceneDialog()
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
+        e.preventDefault()
+        handleExportScene()
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [handleOpenSceneDialog, handleExportScene])
 
   // Handle opening selected scenes from the dialog
   const handleOpenScenes = useCallback(async (sceneIds: string[]) => {
