@@ -13,6 +13,7 @@ import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
+import { loadSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
   HistoryState,
@@ -84,7 +85,8 @@ function App() {
     setHistoryVersion((v) => v + 1)
   }, [activeSceneId])
 
-  // Function to load all scenes from current storage provider
+  // Function to load scenes from current storage provider
+  // Respects settings for which scenes should be open
   const loadAllScenes = useCallback(async () => {
     setIsLoading(true)
     // Clear previous saved state tracking when reloading
@@ -93,6 +95,8 @@ function App() {
 
     try {
       const sceneList = await listScenes()
+      const settings = loadSettings()
+
       if (sceneList.length === 0) {
         // No saved scenes, create a default one
         const defaultScene = createScene('Scene 1')
@@ -103,9 +107,24 @@ function App() {
         setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
         setSelectionMap(new Map([[defaultScene.id, []]]))
       } else {
-        // Load all scenes and their histories
+        // Determine which scenes to open
+        // If settings has open scene IDs, only load those (that still exist)
+        // Otherwise, load all scenes (first-time or reset behavior)
+        const availableIds = new Set(sceneList.map((s) => s.id))
+        let scenesToLoad = sceneList
+
+        if (settings.openSceneIds.length > 0) {
+          // Filter to only scenes that are in settings AND still exist
+          const validOpenIds = settings.openSceneIds.filter((id) => availableIds.has(id))
+          if (validOpenIds.length > 0) {
+            scenesToLoad = sceneList.filter((s) => validOpenIds.includes(s.id))
+          }
+          // If none of the saved open scenes exist anymore, fall back to loading all
+        }
+
+        // Load selected scenes and their histories
         const scenesWithHistory = await Promise.all(
-          sceneList.map(async (meta) => {
+          scenesToLoad.map(async (meta) => {
             const scene = await loadScene(meta.id)
             let history: HistoryStack
             try {
@@ -118,6 +137,7 @@ function App() {
             return { scene, history }
           })
         )
+
         // Mark all loaded scenes as saved
         const newHistoryMap = new Map<string, HistoryStack>()
         const newSelectionMap = new Map<string, string[]>()
@@ -129,7 +149,14 @@ function App() {
         setOpenScenes(scenesWithHistory.map(({ scene }) => scene))
         setHistoryMap(newHistoryMap)
         setSelectionMap(newSelectionMap)
-        setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
+
+        // Restore active scene from settings if it's in the loaded scenes
+        const loadedIds = scenesWithHistory.map(({ scene }) => scene.id)
+        if (settings.activeSceneId && loadedIds.includes(settings.activeSceneId)) {
+          setActiveSceneId(settings.activeSceneId)
+        } else {
+          setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
+        }
       }
     } catch (error) {
       console.error('Failed to load scenes:', error)
@@ -231,6 +258,13 @@ function App() {
       }
     }
   }, [historyMap, historyVersion, activeSceneId, isLoading])
+
+  // Save open scene IDs and active scene to settings when they change
+  useEffect(() => {
+    if (isLoading) return
+    const openIds = openScenes.map((s) => s.id)
+    saveOpenScenesToSettings(openIds, activeSceneId)
+  }, [openScenes, activeSceneId, isLoading])
 
   // Undo handler
   const handleUndo = useCallback(() => {
