@@ -30,7 +30,8 @@ interface MenuItemDef {
 
 interface MenuDef {
   label: string
-  items: MenuItemDef[]
+  items?: MenuItemDef[]
+  onClick?: () => void  // For menus that directly trigger an action (no submenu)
 }
 
 function MenuBar({
@@ -51,6 +52,8 @@ function MenuBar({
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false)
+  const [aboutContent, setAboutContent] = useState('')
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
@@ -102,7 +105,26 @@ function MenuBar({
         { label: 'Hotkey Reference', onClick: () => setHotkeyDialogOpen(true) },
       ],
     },
+    {
+      label: 'About',
+      onClick: handleOpenAbout,
+    },
   ]
+
+  async function handleOpenAbout() {
+    try {
+      const response = await fetch('/about.html')
+      if (response.ok) {
+        const html = await response.text()
+        setAboutContent(html)
+      } else {
+        setAboutContent('<p>About content not found.</p>')
+      }
+    } catch {
+      setAboutContent('<p>Failed to load about content.</p>')
+    }
+    setAboutDialogOpen(true)
+  }
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -115,8 +137,15 @@ function MenuBar({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const handleMenuClick = (menuLabel: string) => {
-    setOpenMenu(openMenu === menuLabel ? null : menuLabel)
+  const handleMenuClick = (menu: MenuDef) => {
+    if (menu.onClick) {
+      // Direct action menu - no submenu
+      menu.onClick()
+      setOpenMenu(null)
+    } else {
+      // Toggle submenu
+      setOpenMenu(openMenu === menu.label ? null : menu.label)
+    }
   }
 
   const handleItemClick = (item: MenuItemDef) => {
@@ -183,7 +212,7 @@ function MenuBar({
       {menus.map((menu) => (
         <div key={menu.label} style={{ position: 'relative' }}>
           <button
-            onClick={() => handleMenuClick(menu.label)}
+            onClick={() => handleMenuClick(menu)}
             style={{
               padding: '4px 12px',
               backgroundColor: openMenu === menu.label ? '#e0e0e0' : 'transparent',
@@ -197,7 +226,7 @@ function MenuBar({
             {menu.label}
           </button>
 
-          {openMenu === menu.label && (
+          {openMenu === menu.label && menu.items && (
             <div
               style={{
                 position: 'absolute',
@@ -351,6 +380,57 @@ function MenuBar({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* About Dialog */}
+      {aboutDialogOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setAboutDialogOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              padding: '24px',
+              minWidth: '400px',
+              maxWidth: '600px',
+              maxHeight: '80vh',
+              overflow: 'auto',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '18px' }}>About</h2>
+              <button
+                onClick={() => setAboutDialogOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '4px 8px',
+                }}
+              >
+                x
+              </button>
+            </div>
+            <div dangerouslySetInnerHTML={{ __html: aboutContent }} />
           </div>
         </div>
       )}
