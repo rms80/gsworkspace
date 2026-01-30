@@ -123,21 +123,26 @@ router.post('/:id', async (req, res) => {
             imageSaved = true
           }
         } else if (item.src.startsWith('http')) {
-          // If src is a URL, fetch and save the image to the scene folder
-          try {
-            const response = await fetch(item.src)
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer()
-              const contentType = response.headers.get('content-type') || 'image/png'
-              await saveToS3(
-                `${sceneFolder}/${imageFile}`,
-                Buffer.from(arrayBuffer),
-                contentType
-              )
-              imageSaved = true
+          // Check if the image is already in this scene folder (skip re-upload)
+          if (item.src.includes(`/${sceneFolder}/`)) {
+            imageSaved = true
+          } else {
+            // If src is a URL, fetch and save the image to the scene folder
+            try {
+              const response = await fetch(item.src)
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer()
+                const contentType = response.headers.get('content-type') || 'image/png'
+                await saveToS3(
+                  `${sceneFolder}/${imageFile}`,
+                  Buffer.from(arrayBuffer),
+                  contentType
+                )
+                imageSaved = true
+              }
+            } catch (err) {
+              console.error(`Failed to fetch image from ${item.src}:`, err)
             }
-          } catch (err) {
-            console.error(`Failed to fetch image from ${item.src}:`, err)
           }
         }
 
@@ -189,21 +194,26 @@ router.post('/:id', async (req, res) => {
             videoSaved = true
           }
         } else if (item.src.startsWith('http')) {
-          // If src is a URL, fetch and save the video to the scene folder
-          try {
-            const response = await fetch(item.src)
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer()
-              const contentType = response.headers.get('content-type') || 'video/mp4'
-              await saveToS3(
-                `${sceneFolder}/${videoFile}`,
-                Buffer.from(arrayBuffer),
-                contentType
-              )
-              videoSaved = true
+          // Check if the video is already in this scene folder (skip re-upload)
+          if (item.src.includes(`/${sceneFolder}/`)) {
+            videoSaved = true
+          } else {
+            // If src is a URL, fetch and save the video to the scene folder
+            try {
+              const response = await fetch(item.src)
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer()
+                const contentType = response.headers.get('content-type') || 'video/mp4'
+                await saveToS3(
+                  `${sceneFolder}/${videoFile}`,
+                  Buffer.from(arrayBuffer),
+                  contentType
+                )
+                videoSaved = true
+              }
+            } catch (err) {
+              console.error(`Failed to fetch video from ${item.src}:`, err)
             }
-          } catch (err) {
-            console.error(`Failed to fetch video from ${item.src}:`, err)
           }
         }
 
