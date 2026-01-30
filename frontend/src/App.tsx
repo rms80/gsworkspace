@@ -1239,6 +1239,18 @@ function App() {
         onExportScene={handleExportScene}
         onImportSceneFromZip={handleImportFromZip}
         onImportSceneFromFolder={handleImportFromFolder}
+        onGetSceneJson={() => activeScene ? JSON.stringify(activeScene, null, 2) : '{}'}
+        onGetHistoryJson={() => activeHistory ? JSON.stringify(activeHistory.serialize(), null, 2) : '{}'}
+        onClearHistory={() => {
+          if (activeSceneId) {
+            setHistoryMap((prev) => {
+              const newMap = new Map(prev)
+              newMap.set(activeSceneId, new HistoryStack())
+              return newMap
+            })
+            setHistoryVersion((v) => v + 1)
+          }
+        }}
       />
       <TabBar
         scenes={openScenes}

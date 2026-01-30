@@ -19,6 +19,12 @@ export const config = {
      * Set VITE_FEATURE_VIDEO=false to disable.
      */
     videoSupport: import.meta.env.VITE_FEATURE_VIDEO !== 'false',
+
+    /**
+     * Enable debug menu.
+     * Set VITE_FEATURE_DEBUG_MENU=true to enable.
+     */
+    debugMenu: import.meta.env.VITE_FEATURE_DEBUG_MENU === 'true',
   },
 
   /**

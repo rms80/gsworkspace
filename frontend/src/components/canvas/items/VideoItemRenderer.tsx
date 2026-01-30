@@ -4,7 +4,6 @@ import { VideoItem } from '../../../types'
 import {
   VIDEO_HEADER_HEIGHT,
   COLOR_SELECTED,
-  COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
 
 interface VideoItemRendererProps {

@@ -17,6 +17,9 @@ interface MenuBarProps {
   onExportScene: () => void
   onImportSceneFromZip: (file: File) => void
   onImportSceneFromFolder: (files: FileList) => void
+  onGetSceneJson?: () => string
+  onGetHistoryJson?: () => string
+  onClearHistory?: () => void
 }
 
 interface MenuItemDef {
@@ -52,11 +55,17 @@ function MenuBar({
   onExportScene,
   onImportSceneFromZip,
   onImportSceneFromFolder,
+  onGetSceneJson,
+  onGetHistoryJson,
+  onClearHistory,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false)
   const [aboutContent, setAboutContent] = useState('')
+  const [jsonDialogOpen, setJsonDialogOpen] = useState(false)
+  const [jsonDialogTitle, setJsonDialogTitle] = useState('')
+  const [jsonDialogContent, setJsonDialogContent] = useState('')
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -114,7 +123,37 @@ function MenuBar({
       label: 'About',
       onClick: handleOpenAbout,
     },
+    ...(config.features.debugMenu ? [{
+      label: 'Debug',
+      items: [
+        { label: 'Show Scene JSON', onClick: handleShowSceneJson },
+        { label: 'Show History JSON', onClick: handleShowHistoryJson },
+        { label: 'Clear History', onClick: handleClearHistory },
+      ],
+    }] : []),
   ]
+
+  function handleShowSceneJson() {
+    if (onGetSceneJson) {
+      setJsonDialogTitle('Scene JSON')
+      setJsonDialogContent(onGetSceneJson())
+      setJsonDialogOpen(true)
+    }
+  }
+
+  function handleShowHistoryJson() {
+    if (onGetHistoryJson) {
+      setJsonDialogTitle('History JSON')
+      setJsonDialogContent(onGetHistoryJson())
+      setJsonDialogOpen(true)
+    }
+  }
+
+  function handleClearHistory() {
+    if (onClearHistory) {
+      onClearHistory()
+    }
+  }
 
   async function handleOpenAbout() {
     try {
@@ -447,6 +486,74 @@ function MenuBar({
               </button>
             </div>
             <div dangerouslySetInnerHTML={{ __html: aboutContent }} />
+          </div>
+        </div>
+      )}
+
+      {/* JSON Viewer Dialog */}
+      {jsonDialogOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+          onClick={() => setJsonDialogOpen(false)}
+        >
+          <div
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '8px',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              padding: '24px',
+              width: '80vw',
+              maxWidth: '900px',
+              maxHeight: '80vh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h2 style={{ margin: 0, fontSize: '18px' }}>{jsonDialogTitle}</h2>
+              <button
+                onClick={() => setJsonDialogOpen(false)}
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  fontSize: '20px',
+                  cursor: 'pointer',
+                  color: '#666',
+                  padding: '4px 8px',
+                }}
+              >
+                x
+              </button>
+            </div>
+            <pre
+              style={{
+                flex: 1,
+                overflow: 'auto',
+                backgroundColor: '#1e1e1e',
+                color: '#d4d4d4',
+                padding: '16px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                margin: 0,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {jsonDialogContent}
+            </pre>
           </div>
         </div>
       )}
