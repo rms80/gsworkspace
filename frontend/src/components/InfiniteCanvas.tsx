@@ -204,6 +204,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
 
   // 10. Remaining UI state
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [videoItemTransforms, setVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
 
@@ -469,6 +470,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 isSelected={selectedIds.includes(item.id)}
                 onItemClick={handleItemClick}
                 onUpdateItem={onUpdateItem}
+                setVideoItemTransforms={setVideoItemTransforms}
               />
             )
           } else if (item.type === 'prompt') {
@@ -686,6 +688,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         .filter((item) => item.type === 'video')
         .map((item) => {
           if (item.type !== 'video') return null
+          const transform = videoItemTransforms.get(item.id)
           return (
             <VideoOverlay
               key={`video-${item.id}`}
@@ -695,6 +698,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               isSelected={selectedIds.includes(item.id)}
               isAnyDragActive={isAnyDragActive}
               onUpdateItem={onUpdateItem}
+              transform={transform}
             />
           )
         })}

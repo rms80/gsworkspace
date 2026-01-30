@@ -8,6 +8,7 @@ interface VideoItemRendererProps {
   isSelected: boolean
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
+  setVideoItemTransforms: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
 }
 
 /**
@@ -19,6 +20,7 @@ export default function VideoItemRenderer({
   isSelected,
   onItemClick,
   onUpdateItem,
+  setVideoItemTransforms,
 }: VideoItemRendererProps) {
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
@@ -41,7 +43,26 @@ export default function VideoItemRenderer({
       cornerRadius={4}
       draggable
       onClick={(e) => onItemClick(e, item.id)}
+      onDragStart={() => {
+        setVideoItemTransforms((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(item.id, { x: item.x, y: item.y, width: displayWidth, height: displayHeight })
+          return newMap
+        })
+      }}
+      onDragMove={(e) => {
+        setVideoItemTransforms((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(item.id, { x: e.target.x(), y: e.target.y(), width: displayWidth, height: displayHeight })
+          return newMap
+        })
+      }}
       onDragEnd={(e) => {
+        setVideoItemTransforms((prev) => {
+          const newMap = new Map(prev)
+          newMap.delete(item.id)
+          return newMap
+        })
         onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
       }}
       onTransformEnd={(e) => {

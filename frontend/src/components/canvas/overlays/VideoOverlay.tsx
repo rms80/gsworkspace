@@ -8,6 +8,7 @@ interface VideoOverlayProps {
   isSelected: boolean
   isAnyDragActive: boolean
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
+  transform?: { x: number; y: number; width: number; height: number }
 }
 
 /**
@@ -21,19 +22,26 @@ export default function VideoOverlay({
   isSelected,
   isAnyDragActive,
   onUpdateItem,
+  transform,
 }: VideoOverlayProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
 
+  // Use real-time transform if available (during drag), otherwise use item state
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
-  const displayWidth = item.width * scaleX * stageScale
-  const displayHeight = item.height * scaleY * stageScale
+  const x = transform?.x ?? item.x
+  const y = transform?.y ?? item.y
+  const width = transform?.width ?? item.width * scaleX
+  const height = transform?.height ?? item.height * scaleY
 
-  const left = item.x * stageScale + stagePos.x
-  const top = item.y * stageScale + stagePos.y
+  const displayWidth = width * stageScale
+  const displayHeight = height * stageScale
+
+  const left = x * stageScale + stagePos.x
+  const top = y * stageScale + stagePos.y
 
   // Sync video properties with item state
   useEffect(() => {
