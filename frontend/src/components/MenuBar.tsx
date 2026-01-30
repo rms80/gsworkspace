@@ -10,6 +10,9 @@ interface MenuBarProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
+  onExportScene: () => void
+  onImportSceneFromZip: (file: File) => void
+  onImportSceneFromFolder: (files: FileList) => void
 }
 
 interface MenuItemDef {
@@ -17,9 +20,10 @@ interface MenuItemDef {
   onClick?: () => void
   disabled?: boolean
   shortcut?: string
-  type?: 'file-input'
+  type?: 'file-input' | 'folder-input'
   accept?: string
   onFileSelect?: (file: File) => void
+  onFolderSelect?: (files: FileList) => void
 }
 
 interface MenuDef {
@@ -37,10 +41,15 @@ function MenuBar({
   onRedo,
   canUndo,
   canRedo,
+  onExportScene,
+  onImportSceneFromZip,
+  onImportSceneFromFolder,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const zipInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
 
   const handleImageUpload = (file: File) => {
     const reader = new FileReader()
@@ -55,6 +64,14 @@ function MenuBar({
   }
 
   const menus: MenuDef[] = [
+    {
+      label: 'File',
+      items: [
+        { label: 'Export Scene...', onClick: onExportScene },
+        { label: 'Import Scene from Zip...', type: 'file-input', accept: '.zip', onFileSelect: onImportSceneFromZip },
+        { label: 'Import Scene from Folder...', type: 'folder-input', onFolderSelect: onImportSceneFromFolder },
+      ],
+    },
     {
       label: 'Add',
       items: [
@@ -92,7 +109,17 @@ function MenuBar({
   const handleItemClick = (item: MenuItemDef) => {
     if (item.disabled) return
     if (item.type === 'file-input') {
-      fileInputRef.current?.click()
+      setOpenMenu(null)
+      if (item.accept === '.zip') {
+        zipInputRef.current?.click()
+      } else {
+        fileInputRef.current?.click()
+      }
+      return
+    }
+    if (item.type === 'folder-input') {
+      setOpenMenu(null)
+      folderInputRef.current?.click()
       return
     }
     item.onClick?.()
@@ -108,10 +135,23 @@ function MenuBar({
     setOpenMenu(null)
   }
 
-  // Find the file input item for the accept attribute
-  const fileInputItem = menus
-    .flatMap(m => m.items)
-    .find(item => item.type === 'file-input')
+  const handleZipChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      onImportSceneFromZip(file)
+    }
+    e.target.value = ''
+    setOpenMenu(null)
+  }
+
+  const handleFolderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (files && files.length > 0) {
+      onImportSceneFromFolder(files)
+    }
+    e.target.value = ''
+    setOpenMenu(null)
+  }
 
   return (
     <div
@@ -203,8 +243,27 @@ function MenuBar({
       <input
         ref={fileInputRef}
         type="file"
-        accept={fileInputItem?.accept}
-        onChange={(e) => handleFileChange(e, fileInputItem?.onFileSelect)}
+        accept="image/*"
+        onChange={(e) => handleFileChange(e, handleImageUpload)}
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden file input for ZIP import */}
+      <input
+        ref={zipInputRef}
+        type="file"
+        accept=".zip"
+        onChange={handleZipChange}
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden folder input for directory import */}
+      <input
+        ref={folderInputRef}
+        type="file"
+        // @ts-expect-error webkitdirectory is not in the type definitions
+        webkitdirectory=""
+        onChange={handleFolderChange}
         style={{ display: 'none' }}
       />
     </div>

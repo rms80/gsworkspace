@@ -11,6 +11,8 @@ import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, Con
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
+import { exportSceneToZip } from './utils/sceneExport'
+import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import {
   HistoryStack,
   HistoryState,
@@ -927,6 +929,88 @@ function App() {
     }
   }, [items, selectedIds, updateActiveSceneItems, isOffline])
 
+  // Export current scene to ZIP
+  const handleExportScene = useCallback(async () => {
+    if (!activeScene || !activeSceneId) {
+      alert('No scene to export')
+      return
+    }
+
+    const history = historyMap.get(activeSceneId)
+    const serializedHistory = history?.serialize() ?? { records: [], currentIndex: -1 }
+
+    try {
+      await exportSceneToZip(activeScene, serializedHistory)
+    } catch (error) {
+      console.error('Failed to export scene:', error)
+      alert('Failed to export scene. Check the console for details.')
+    }
+  }, [activeScene, activeSceneId, historyMap])
+
+  // Import scene from ZIP file
+  const handleImportFromZip = useCallback(async (file: File) => {
+    try {
+      const { scene, history } = await importSceneFromZip(file)
+
+      // Add the imported scene
+      setOpenScenes((prev) => [...prev, scene])
+      setActiveSceneId(scene.id)
+
+      // Initialize history from imported data
+      const historyStack = HistoryStack.deserialize(history)
+      setHistoryMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(scene.id, historyStack)
+        return newMap
+      })
+
+      // Initialize empty selection
+      setSelectionMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(scene.id, [])
+        return newMap
+      })
+
+      // Mark as needing save
+      lastSavedRef.current.set(scene.id, '')
+    } catch (error) {
+      console.error('Failed to import scene from ZIP:', error)
+      alert('Failed to import scene. Make sure the file is a valid scene archive.')
+    }
+  }, [])
+
+  // Import scene from folder
+  const handleImportFromFolder = useCallback(async (files: FileList) => {
+    try {
+      const { scene, history } = await importSceneFromDirectory(files)
+
+      // Add the imported scene
+      setOpenScenes((prev) => [...prev, scene])
+      setActiveSceneId(scene.id)
+
+      // Initialize history from imported data
+      const historyStack = HistoryStack.deserialize(history)
+      setHistoryMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(scene.id, historyStack)
+        return newMap
+      })
+
+      // Initialize empty selection
+      setSelectionMap((prev) => {
+        const newMap = new Map(prev)
+        newMap.set(scene.id, [])
+        return newMap
+      })
+
+      // Mark as needing save
+      lastSavedRef.current.set(scene.id, '')
+    } catch (error) {
+      console.error('Failed to import scene from folder:', error)
+      alert('Failed to import scene. Make sure the folder contains a valid scene.json file.')
+    }
+  }, [])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -947,6 +1031,9 @@ function App() {
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        onExportScene={handleExportScene}
+        onImportSceneFromZip={handleImportFromZip}
+        onImportSceneFromFolder={handleImportFromFolder}
       />
       <TabBar
         scenes={openScenes}

@@ -148,35 +148,7 @@ Connect export/import to App.tsx state management.
    - `onImportSceneFromZip` prop
    - `onImportSceneFromFolder` prop
 
----
 
-### 5. Testing
-
-**Substeps:**
-
-5.1. **Test export**
-   - Export scene with text items
-   - Export scene with images (data URLs)
-   - Export scene with images (S3 URLs) - online mode
-   - Export scene with cropped images
-   - Verify ZIP structure is correct
-
-5.2. **Test import from ZIP**
-   - Import previously exported scene
-   - Verify all items restored correctly
-   - Verify images load correctly
-   - Verify history works
-
-5.3. **Test import from directory**
-   - Unzip an export and import via directory
-   - Verify same results as ZIP import
-
-5.4. **Test edge cases**
-   - Import scene with same name as existing
-   - Import in offline vs online mode
-   - Large scenes with many images
-
----
 
 ## Implementation Notes
 
