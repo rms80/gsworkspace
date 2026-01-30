@@ -45,7 +45,7 @@ interface InfiniteCanvasProps {
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
-  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number, name?: string) => void
+  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
@@ -291,7 +291,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           const url = await uploadVideo(file, isOffline)
           // Extract filename without extension for the label
           const name = file.name.replace(/\.[^/.]+$/, '')
-          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height, name)
+          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height, name, dimensions.fileSize)
           offsetIndex++
         } catch (err) {
           console.error('Failed to add dropped video:', err)

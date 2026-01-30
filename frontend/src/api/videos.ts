@@ -53,9 +53,9 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 /**
- * Get video dimensions from a file
+ * Get video dimensions and file size from a file
  */
-export function getVideoDimensions(file: File): Promise<{ width: number; height: number }> {
+export function getVideoDimensions(file: File): Promise<{ width: number; height: number; fileSize: number }> {
   return new Promise((resolve, reject) => {
     const video = document.createElement('video')
     video.preload = 'metadata'
@@ -65,6 +65,7 @@ export function getVideoDimensions(file: File): Promise<{ width: number; height:
       resolve({
         width: video.videoWidth,
         height: video.videoHeight,
+        fileSize: file.size,
       })
     }
 

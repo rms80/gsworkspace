@@ -35,6 +35,9 @@ interface StoredVideoItem extends StoredItemBase {
   type: 'video'
   file: string // reference to video file
   name?: string // editable label
+  originalWidth?: number
+  originalHeight?: number
+  fileSize?: number
   scaleX?: number
   scaleY?: number
   rotation?: number
@@ -215,6 +218,9 @@ router.post('/:id', async (req, res) => {
             height: item.height,
             file: videoFile,
             name: item.name,
+            originalWidth: item.originalWidth,
+            originalHeight: item.originalHeight,
+            fileSize: item.fileSize,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
@@ -359,6 +365,9 @@ router.get('/:id', async (req, res) => {
             height: item.height,
             src: videoUrl,
             name: item.name,
+            originalWidth: item.originalWidth,
+            originalHeight: item.originalHeight,
+            fileSize: item.fileSize,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,

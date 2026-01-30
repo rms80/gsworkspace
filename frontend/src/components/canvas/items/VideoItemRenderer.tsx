@@ -19,6 +19,16 @@ interface VideoItemRendererProps {
 }
 
 /**
+ * Format file size in bytes to human-readable string
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+/**
  * Renders a placeholder rectangle for a video item on the Konva canvas.
  * The actual video is rendered as an HTML overlay (see VideoOverlay component).
  * When selected, shows a header bar with an editable name label.
@@ -41,6 +51,16 @@ export default function VideoItemRenderer({
   // Header is only visible when selected
   const headerHeight = isSelected ? VIDEO_HEADER_HEIGHT : 0
   const totalHeight = displayHeight + headerHeight
+
+  // Build metadata string (dimensions and file size)
+  const metadataParts: string[] = []
+  if (item.originalWidth && item.originalHeight) {
+    metadataParts.push(`${item.originalWidth}×${item.originalHeight}`)
+  }
+  if (item.fileSize) {
+    metadataParts.push(formatFileSize(item.fileSize))
+  }
+  const metadataText = metadataParts.join(' • ')
 
   return (
     <Group
@@ -112,7 +132,7 @@ export default function VideoItemRenderer({
             strokeWidth={2}
             cornerRadius={[4, 4, 0, 0]}
           />
-          {/* Label text */}
+          {/* Label text (left-aligned) */}
           <Text
             x={8}
             y={4}
@@ -120,11 +140,24 @@ export default function VideoItemRenderer({
             fontSize={14}
             fontStyle="bold"
             fill="#e0e0e0"
-            width={displayWidth - 16}
+            width={displayWidth - 16 - (metadataText ? 150 : 0)}
             ellipsis={true}
             onDblClick={() => onLabelDblClick(item.id)}
             visible={editingVideoLabelId !== item.id}
           />
+          {/* Metadata text (right-aligned) */}
+          {metadataText && (
+            <Text
+              x={displayWidth - 158}
+              y={5}
+              text={metadataText}
+              fontSize={11}
+              fill="#a0a0a0"
+              align="right"
+              width={150}
+              listening={false}
+            />
+          )}
         </>
       )}
 

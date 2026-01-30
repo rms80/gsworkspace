@@ -487,7 +487,7 @@ function App() {
   )
 
   const addVideoItem = useCallback(
-    (src: string, width: number, height: number, name?: string) => {
+    (src: string, width: number, height: number, name?: string, fileSize?: number) => {
       // Scale down large videos to reasonable canvas size
       const maxDim = 640
       let w = width
@@ -506,6 +506,9 @@ function App() {
         name,
         width: w,
         height: h,
+        originalWidth: width,
+        originalHeight: height,
+        fileSize,
         muted: true,
         loop: false,
       }
@@ -521,7 +524,7 @@ function App() {
       const url = await uploadVideo(file, isOffline)
       // Extract filename without extension for the label
       const name = file.name.replace(/\.[^/.]+$/, '')
-      addVideoItem(url, dimensions.width, dimensions.height, name)
+      addVideoItem(url, dimensions.width, dimensions.height, name, dimensions.fileSize)
     } catch (error) {
       console.error('Failed to add video:', error)
       alert('Failed to add video. Please try again.')
@@ -619,7 +622,7 @@ function App() {
   )
 
   const addVideoAt = useCallback(
-    (x: number, y: number, src: string, width: number, height: number, name?: string) => {
+    (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
       // Scale down large videos to reasonable canvas size
       const maxDim = 640
       let w = width
@@ -638,6 +641,9 @@ function App() {
         name,
         width: w,
         height: h,
+        originalWidth: width,
+        originalHeight: height,
+        fileSize,
         muted: true,
         loop: false,
       }
