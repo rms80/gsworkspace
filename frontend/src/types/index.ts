@@ -111,5 +111,4 @@ export interface Scene {
   items: CanvasItem[]
   createdAt: string
   modifiedAt: string
-  assetBaseUrl?: string  // Base URL for resolving relative asset paths (images, videos)
 }

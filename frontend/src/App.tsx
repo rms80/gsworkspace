@@ -64,6 +64,7 @@ function App() {
   const lastSavedRef = useRef<Map<string, string>>(new Map())
   const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
+  const assetBaseUrlRef = useRef<Map<string, string>>(new Map())
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -144,7 +145,7 @@ function App() {
         // Load selected scenes and their histories
         const scenesWithHistory = await Promise.all(
           scenesToLoad.map(async (meta) => {
-            const scene = await loadScene(meta.id)
+            const { scene, assetBaseUrl } = await loadScene(meta.id)
             let history: HistoryStack
             try {
               const serializedHistory = await loadHistory(meta.id)
@@ -153,16 +154,19 @@ function App() {
             } catch {
               history = new HistoryStack()
             }
-            return { scene, history }
+            return { scene, assetBaseUrl, history }
           })
         )
 
         // Mark all loaded scenes as saved and track server timestamps
         const newHistoryMap = new Map<string, HistoryStack>()
         const newSelectionMap = new Map<string, string[]>()
-        scenesWithHistory.forEach(({ scene, history }) => {
+        scenesWithHistory.forEach(({ scene, assetBaseUrl, history }) => {
           lastSavedRef.current.set(scene.id, JSON.stringify(scene))
           lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
+          if (assetBaseUrl) {
+            assetBaseUrlRef.current.set(scene.id, assetBaseUrl)
+          }
           newHistoryMap.set(scene.id, history)
           newSelectionMap.set(scene.id, []) // Start with empty selection
         })
@@ -1224,7 +1228,7 @@ function App() {
       }
 
       try {
-        const scene = await loadScene(sceneId)
+        const { scene, assetBaseUrl } = await loadScene(sceneId)
         let history: HistoryStack
         try {
           const serializedHistory = await loadHistory(sceneId)
@@ -1238,6 +1242,9 @@ function App() {
         setOpenScenes((prev) => [...prev, scene])
         lastSavedRef.current.set(scene.id, JSON.stringify(scene))
         lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
+        if (assetBaseUrl) {
+          assetBaseUrlRef.current.set(scene.id, assetBaseUrl)
+        }
 
         // Initialize history
         setHistoryMap((prev) => {
@@ -1269,7 +1276,7 @@ function App() {
 
     try {
       // Load the remote scene
-      const remoteScene = await loadScene(activeSceneId)
+      const { scene: remoteScene, assetBaseUrl } = await loadScene(activeSceneId)
 
       // Load the remote history
       let history: HistoryStack
@@ -1287,6 +1294,9 @@ function App() {
       )
       lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
       lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+      if (assetBaseUrl) {
+        assetBaseUrlRef.current.set(activeSceneId, assetBaseUrl)
+      }
 
       // Update history
       setHistoryMap((prev) => {
@@ -1357,7 +1367,7 @@ function App() {
       const forkedHistory = currentHistory ? currentHistory.clone() : new HistoryStack()
 
       // Load the remote version into the original scene (so it stays in sync)
-      const remoteScene = await loadScene(activeSceneId)
+      const { scene: remoteScene, assetBaseUrl } = await loadScene(activeSceneId)
       let remoteHistory: HistoryStack
       try {
         const serializedHistory = await loadHistory(activeSceneId)
@@ -1374,8 +1384,11 @@ function App() {
       ])
       lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
       lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+      if (assetBaseUrl) {
+        assetBaseUrlRef.current.set(activeSceneId, assetBaseUrl)
+      }
       lastSavedRef.current.set(forkedScene.id, '') // Mark fork as needing save
-      // Forked scene has no server timestamp yet - it will be set on first save
+      // Forked scene has no server timestamp or assetBaseUrl yet - they will be set on first save
 
       // Update history for both scenes
       setHistoryMap((prev) => {
@@ -1464,7 +1477,7 @@ function App() {
         <InfiniteCanvas
           items={items}
           selectedIds={selectedIds}
-          assetBaseUrl={activeScene?.assetBaseUrl}
+          assetBaseUrl={activeSceneId ? assetBaseUrlRef.current.get(activeSceneId) : undefined}
           onUpdateItem={updateItem}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}

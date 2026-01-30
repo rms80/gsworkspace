@@ -31,7 +31,16 @@
       "Bash(npx vite build)",
       "Bash(npx eslint:*)",
       "Bash(pkill:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(cmd //c \"taskkill /PID 48704 /F\")",
+      "Bash(cmd //c \"taskkill /PID 41256 /F\")",
+      "Bash(cmd //c \"taskkill /PID 33828 /F\")",
+      "Bash(git branch:*)",
+      "Bash(node_modules\\\\.bin\\\\tsc:*)",
+      "Bash(pushd:*)",
+      "Bash(node_modules.bintsc:*)",
+      "Bash(popd)",
+      "Bash(./node_modules/.bin/tsc:*)"
     ]
   }
 }

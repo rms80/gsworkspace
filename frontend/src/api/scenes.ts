@@ -12,4 +12,4 @@ export {
   getSceneTimestamp,
 } from './storage'
 
-export type { SceneMetadata, SceneTimestamp } from './storage'
+export type { SceneMetadata, SceneTimestamp, LoadedScene } from './storage'

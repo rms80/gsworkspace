@@ -1,6 +1,6 @@
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
-import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
+import { StorageProvider, SceneMetadata, SceneTimestamp, LoadedScene } from './StorageProvider'
 import { ApiStorageProvider } from './ApiStorageProvider'
 import { LocalStorageProvider } from './LocalStorageProvider'
 
@@ -21,7 +21,7 @@ export class DelegatingStorageProvider implements StorageProvider {
     return this.active.saveScene(scene)
   }
 
-  async loadScene(id: string): Promise<Scene> {
+  async loadScene(id: string): Promise<LoadedScene> {
     return this.active.loadScene(id)
   }
 

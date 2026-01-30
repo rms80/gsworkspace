@@ -1,7 +1,7 @@
 import localforage from 'localforage'
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
-import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
+import { StorageProvider, SceneMetadata, SceneTimestamp, LoadedScene } from './StorageProvider'
 
 const SCENE_PREFIX = 'workspaceapp:scene:'
 const SCENES_INDEX_KEY = 'workspaceapp:scenes-index'
@@ -47,13 +47,14 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async loadScene(id: string): Promise<Scene> {
+  async loadScene(id: string): Promise<LoadedScene> {
     const key = this.getSceneKey(id)
     const scene = await localforage.getItem<Scene>(key)
     if (!scene) {
       throw new Error(`Scene not found: ${id}`)
     }
-    return scene
+    // Local storage doesn't have asset base URLs - assets are stored as data URLs
+    return { scene, assetBaseUrl: undefined }
   }
 
   async listScenes(): Promise<SceneMetadata[]> {
@@ -62,7 +63,7 @@ export class LocalStorageProvider implements StorageProvider {
 
     for (const sceneId of index.sceneIds) {
       try {
-        const scene = await this.loadScene(sceneId)
+        const { scene } = await this.loadScene(sceneId)
         metadataList.push({
           id: scene.id,
           name: scene.name,

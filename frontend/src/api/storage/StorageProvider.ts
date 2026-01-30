@@ -14,9 +14,14 @@ export interface SceneTimestamp {
   modifiedAt: string
 }
 
+export interface LoadedScene {
+  scene: Scene
+  assetBaseUrl?: string  // Base URL for resolving relative asset paths (server-provided)
+}
+
 export interface StorageProvider {
   saveScene(scene: Scene): Promise<void>
-  loadScene(id: string): Promise<Scene>
+  loadScene(id: string): Promise<LoadedScene>
   listScenes(): Promise<SceneMetadata[]>
   deleteScene(id: string): Promise<void>
   saveHistory(sceneId: string, history: SerializedHistory): Promise<void>
