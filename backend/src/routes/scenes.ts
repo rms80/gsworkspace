@@ -92,6 +92,8 @@ router.post('/:id', async (req, res) => {
         })
       } else if (item.type === 'image') {
         const imageFile = `${item.id}.png`
+        let imageSaved = false
+
         // If src is a data URL, extract and save the image
         if (item.src.startsWith('data:')) {
           const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
@@ -103,22 +105,46 @@ router.post('/:id', async (req, res) => {
               Buffer.from(base64Data, 'base64'),
               contentType
             )
+            imageSaved = true
+          }
+        } else if (item.src.startsWith('http')) {
+          // If src is a URL, fetch and save the image to the scene folder
+          try {
+            const response = await fetch(item.src)
+            if (response.ok) {
+              const arrayBuffer = await response.arrayBuffer()
+              const contentType = response.headers.get('content-type') || 'image/png'
+              await saveToS3(
+                `${sceneFolder}/${imageFile}`,
+                Buffer.from(arrayBuffer),
+                contentType
+              )
+              imageSaved = true
+            }
+          } catch (err) {
+            console.error(`Failed to fetch image from ${item.src}:`, err)
           }
         }
-        storedItems.push({
-          id: item.id,
-          type: 'image',
-          x: item.x,
-          y: item.y,
-          width: item.width,
-          height: item.height,
-          file: imageFile,
-          scaleX: item.scaleX,
-          scaleY: item.scaleY,
-          rotation: item.rotation,
-          cropRect: item.cropRect,
-          cropSrc: item.cropSrc,
-        })
+
+        // Only add to stored items if the image was successfully saved
+        if (imageSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'image',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: imageFile,
+            scaleX: item.scaleX,
+            scaleY: item.scaleY,
+            rotation: item.rotation,
+            cropRect: item.cropRect,
+            cropSrc: item.cropSrc,
+          })
+        } else {
+          console.error(`Failed to save image ${item.id}, skipping from scene`)
+        }
       } else if (item.type === 'prompt') {
         const promptFile = `${item.id}.prompt.json`
         const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'claude-sonnet' })
