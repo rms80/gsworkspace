@@ -90,6 +90,7 @@ function TabBar({
           padding: '4px 8px 0 8px',
           gap: '4px',
           overflowX: 'auto',
+          overflowY: 'hidden',
           minHeight: '28px',
           fontSize: '14px',
           position: 'relative',

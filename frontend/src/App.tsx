@@ -536,15 +536,17 @@ function App() {
 
   const addTextAt = useCallback(
     (x: number, y: number, text: string) => {
+      const width = 400
+      const height = 100
       const newItem: CanvasItem = {
         id: uuidv4(),
         type: 'text',
-        x,
-        y,
+        x: x - width / 2,
+        y: y - height / 2,
         text,
         fontSize: 14,
-        width: 200,
-        height: 100,
+        width,
+        height,
       }
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
@@ -557,8 +559,8 @@ function App() {
       const newItem: CanvasItem = {
         id: uuidv4(),
         type: 'image',
-        x,
-        y,
+        x: x - width / 2,
+        y: y - height / 2,
         src,
         width,
         height,
