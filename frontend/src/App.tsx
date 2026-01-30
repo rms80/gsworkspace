@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas from './components/InfiniteCanvas'
 import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
+import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { CanvasItem, Scene } from './types'
@@ -52,6 +53,8 @@ function App() {
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
+  const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
+  const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const saveTimeoutRef = useRef<number | null>(null)
   const historySaveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
@@ -97,30 +100,19 @@ function App() {
       const sceneList = await listScenes()
       const settings = loadSettings()
 
-      if (sceneList.length === 0) {
-        // No saved scenes, create a default one
-        const defaultScene = createScene('Scene 1')
-        setOpenScenes([defaultScene])
-        setActiveSceneId(defaultScene.id)
-        lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
-        // Initialize empty history and selection for new scene
-        setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
-        setSelectionMap(new Map([[defaultScene.id, []]]))
-      } else {
-        // Determine which scenes to open
-        // If settings has open scene IDs, only load those (that still exist)
-        // Otherwise, load all scenes (first-time or reset behavior)
-        const availableIds = new Set(sceneList.map((s) => s.id))
-        let scenesToLoad = sceneList
+      // Determine which scenes to open based on settings
+      const availableIds = new Set(sceneList.map((s) => s.id))
+      const validOpenIds = settings.openSceneIds.filter((id) => availableIds.has(id))
 
-        if (settings.openSceneIds.length > 0) {
-          // Filter to only scenes that are in settings AND still exist
-          const validOpenIds = settings.openSceneIds.filter((id) => availableIds.has(id))
-          if (validOpenIds.length > 0) {
-            scenesToLoad = sceneList.filter((s) => validOpenIds.includes(s.id))
-          }
-          // If none of the saved open scenes exist anymore, fall back to loading all
-        }
+      if (validOpenIds.length === 0) {
+        // No scenes to open - show empty state
+        setOpenScenes([])
+        setActiveSceneId(null)
+        setHistoryMap(new Map())
+        setSelectionMap(new Map())
+      } else {
+        // Load only the scenes that were previously open
+        const scenesToLoad = sceneList.filter((s) => validOpenIds.includes(s.id))
 
         // Load selected scenes and their histories
         const scenesWithHistory = await Promise.all(
@@ -160,13 +152,11 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load scenes:', error)
-      // On error, create a default scene
-      const defaultScene = createScene('Scene 1')
-      setOpenScenes([defaultScene])
-      setActiveSceneId(defaultScene.id)
-      lastSavedRef.current.set(defaultScene.id, JSON.stringify(defaultScene))
-      setHistoryMap(new Map([[defaultScene.id, new HistoryStack()]]))
-      setSelectionMap(new Map([[defaultScene.id, []]]))
+      // On error, show empty state
+      setOpenScenes([])
+      setActiveSceneId(null)
+      setHistoryMap(new Map())
+      setSelectionMap(new Map())
     } finally {
       setIsLoading(false)
     }
@@ -365,8 +355,18 @@ function App() {
   )
 
   // Scene management
-  const addScene = useCallback(() => {
-    const newScene = createScene(`Scene ${openScenes.length + 1}`)
+  const addScene = useCallback(async () => {
+    // Find next available scene name by checking all scenes (saved and currently open)
+    const savedScenes = await listScenes()
+    const existingNames = new Set([
+      ...savedScenes.map((s) => s.name),
+      ...openScenes.map((s) => s.name),
+    ])
+    let n = 1
+    while (existingNames.has(`Scene ${n}`)) {
+      n++
+    }
+    const newScene = createScene(`Scene ${n}`)
     lastSavedRef.current.set(newScene.id, JSON.stringify(newScene))
     setOpenScenes((prev) => [...prev, newScene])
     setActiveSceneId(newScene.id)
@@ -381,7 +381,7 @@ function App() {
       newMap.set(newScene.id, [])
       return newMap
     })
-  }, [openScenes.length])
+  }, [openScenes])
 
   const selectScene = useCallback((id: string) => {
     setActiveSceneId(id)
@@ -1045,6 +1045,67 @@ function App() {
     }
   }, [])
 
+  // Open the "Open Scene" dialog
+  const handleOpenSceneDialog = useCallback(async () => {
+    try {
+      const sceneList = await listScenes()
+      setAvailableScenes(sceneList)
+      setOpenSceneDialogOpen(true)
+    } catch (error) {
+      console.error('Failed to list scenes:', error)
+      alert('Failed to load scene list.')
+    }
+  }, [])
+
+  // Handle opening selected scenes from the dialog
+  const handleOpenScenes = useCallback(async (sceneIds: string[]) => {
+    setOpenSceneDialogOpen(false)
+
+    for (const sceneId of sceneIds) {
+      // Skip if already open
+      if (openScenes.some((s) => s.id === sceneId)) {
+        continue
+      }
+
+      try {
+        const scene = await loadScene(sceneId)
+        let history: HistoryStack
+        try {
+          const serializedHistory = await loadHistory(sceneId)
+          history = HistoryStack.deserialize(serializedHistory)
+          lastSavedHistoryRef.current.set(sceneId, JSON.stringify(serializedHistory))
+        } catch {
+          history = new HistoryStack()
+        }
+
+        // Add to open scenes
+        setOpenScenes((prev) => [...prev, scene])
+        lastSavedRef.current.set(scene.id, JSON.stringify(scene))
+
+        // Initialize history
+        setHistoryMap((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(scene.id, history)
+          return newMap
+        })
+
+        // Initialize empty selection
+        setSelectionMap((prev) => {
+          const newMap = new Map(prev)
+          newMap.set(scene.id, [])
+          return newMap
+        })
+      } catch (error) {
+        console.error(`Failed to open scene ${sceneId}:`, error)
+      }
+    }
+
+    // Activate the first opened scene
+    if (sceneIds.length > 0) {
+      setActiveSceneId(sceneIds[0])
+    }
+  }, [openScenes])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1065,6 +1126,8 @@ function App() {
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        onNewScene={addScene}
+        onOpenScene={handleOpenSceneDialog}
         onExportScene={handleExportScene}
         onImportSceneFromZip={handleImportFromZip}
         onImportSceneFromFolder={handleImportFromFolder}
@@ -1097,7 +1160,7 @@ function App() {
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-          No scene open. Click + to create a new scene.
+          No scene open. Use File &gt; Open Scene... to open a scene, or click + to create a new one.
         </div>
       )}
       {debugPanelOpen && (
@@ -1112,6 +1175,13 @@ function App() {
         saveStatus={saveStatus}
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
+      />
+      <OpenSceneDialog
+        isOpen={openSceneDialogOpen}
+        scenes={availableScenes}
+        openSceneIds={openScenes.map((s) => s.id)}
+        onOpen={handleOpenScenes}
+        onCancel={() => setOpenSceneDialogOpen(false)}
       />
     </div>
   )

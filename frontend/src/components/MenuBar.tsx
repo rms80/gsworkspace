@@ -10,6 +10,8 @@ interface MenuBarProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
+  onNewScene: () => void
+  onOpenScene: () => void
   onExportScene: () => void
   onImportSceneFromZip: (file: File) => void
   onImportSceneFromFolder: (files: FileList) => void
@@ -41,6 +43,8 @@ function MenuBar({
   onRedo,
   canUndo,
   canRedo,
+  onNewScene,
+  onOpenScene,
   onExportScene,
   onImportSceneFromZip,
   onImportSceneFromFolder,
@@ -67,6 +71,8 @@ function MenuBar({
     {
       label: 'File',
       items: [
+        { label: 'New Scene', onClick: onNewScene },
+        { label: 'Open Scene...', onClick: onOpenScene },
         { label: 'Export Scene...', onClick: onExportScene },
         { label: 'Import Scene from Zip...', type: 'file-input', accept: '.zip', onFileSelect: onImportSceneFromZip },
         { label: 'Import Scene from Folder...', type: 'folder-input', onFolderSelect: onImportSceneFromFolder },
