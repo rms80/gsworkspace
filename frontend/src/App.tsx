@@ -14,6 +14,7 @@ import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, Con
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
+import { resolveAssetUrl } from './utils/assetUrl'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensions } from './api/videos'
@@ -831,10 +832,12 @@ function App() {
       if (item.type === 'text') {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
-        let src = item.src
+        // Resolve relative paths to full URLs
+        const currentAssetBaseUrl = activeSceneId ? assetBaseUrlRef.current.get(activeSceneId) : undefined
+        let src = resolveAssetUrl(currentAssetBaseUrl, item.src)
         if (item.cropRect) {
           try {
-            src = await getCroppedImageDataUrl(item.src, item.cropRect)
+            src = await getCroppedImageDataUrl(src, item.cropRect)
           } catch (err) {
             console.error('Failed to crop image for LLM, using original:', err)
           }
@@ -930,10 +933,12 @@ function App() {
       if (item.type === 'text') {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
-        let src = item.src
+        // Resolve relative paths to full URLs
+        const currentAssetBaseUrl = activeSceneId ? assetBaseUrlRef.current.get(activeSceneId) : undefined
+        let src = resolveAssetUrl(currentAssetBaseUrl, item.src)
         if (item.cropRect) {
           try {
-            src = await getCroppedImageDataUrl(item.src, item.cropRect)
+            src = await getCroppedImageDataUrl(src, item.cropRect)
           } catch (err) {
             console.error('Failed to crop image for LLM, using original:', err)
           }
@@ -1057,7 +1062,8 @@ function App() {
       let html = await generateHtml(spatialItems, promptItem.text, promptItem.model)
 
       // Replace image placeholder IDs with actual source URLs
-      html = replaceImagePlaceholders(html, imageMap)
+      const currentAssetBaseUrl = activeSceneId ? assetBaseUrlRef.current.get(activeSceneId) : undefined
+      html = replaceImagePlaceholders(html, imageMap, currentAssetBaseUrl)
 
       // Position output to the right of the prompt, aligned with top
       // Find existing outputs to stack vertically
