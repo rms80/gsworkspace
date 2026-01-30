@@ -676,3 +676,229 @@ Connect export/import to App.tsx state management.
 - **Compatibility:** Exported ZIPs should be version-agnostic when possible
 - **Offline mode:** Import should work in offline mode (images as data URLs)
 
+
+
+
+
+## Video Block Support
+
+### Status: Core Implementation Complete
+
+The basic video support is now implemented. Below is the original plan with completed items marked.
+
+### Requirements
+- [x] **Add via**: File picker (Add menu) and drag-drop
+- [x] **Playback**: Play/pause controls, seek slider
+- [x] **Options**: Loop toggle, mute/unmute (muted by default)
+- [x] **Storage**: Upload to S3 (online mode)
+- [x] **Feature flag**: Can be disabled via config
+- [x] **Drag-drop**: Add video via drag-drop
+- [x] **Context menu**: Right-click menu with Reset Transform
+- [ ] **Storage**: IndexedDB persistence for offline mode (videos use temporary blob URLs currently)
+
+---
+
+### Implementation Plan
+
+#### Phase 0: Feature Flag - DONE
+
+- [x] Add feature flag in `frontend/src/config.ts`
+- [x] Gate "Video" option in Add menu behind flag
+
+#### Phase 1: Types & Data Model - DONE
+
+- [x] Add VideoItem type in `frontend/src/types/index.ts`
+- [x] Update CanvasItem union type
+- [x] Update scene save/load in `backend/src/routes/scenes.ts`
+
+#### Phase 2: Backend - Video Upload - DONE
+
+- [x] Add video upload endpoint `/api/items/upload-video`
+
+#### Phase 3: Frontend - Video Upload API - DONE
+
+- [x] Add uploadVideo function in `frontend/src/api/videos.ts`
+- [x] Handle online mode (S3 upload)
+- [x] Basic offline mode support (blob URLs - not persisted across reloads)
+- [x] Update MenuBar with Video option
+
+#### Phase 4: Video Item Renderer - DONE
+
+- [x] Create VideoItemRenderer (Konva Rect placeholder)
+- [x] Create VideoOverlay (HTML5 video element)
+
+#### Phase 5: Playback Controls - DONE
+
+- [x] Play/pause button
+- [x] Seek slider
+- [x] Time display
+- [x] Mute/unmute toggle
+- [x] Loop toggle
+
+#### Phase 6: Drag-Drop Support - DONE
+
+- [x] Handle video files on drag-drop
+- [ ] Show loading indicator during upload (future enhancement)
+
+#### Phase 7: Integration - DONE
+
+- [x] Render VideoItemRenderer for video items
+- [x] Add video transformer for resize
+- [x] Handle video item selection
+- [x] Add handleAddVideo in App.tsx
+
+#### Phase 8: Scene Persistence - DONE
+
+- [x] Update scene export to include videos
+- [x] Update scene import to handle videos
+- [x] Backend scene save/load for videos
+
+---
+
+### Remaining Work
+
+1. **Offline persistence** - Store video blobs in IndexedDB so they persist across page reloads
+2. **Upload progress** - Show progress indicator for large video uploads
+
+---
+
+### Files Changed
+
+**New Files:**
+- `frontend/src/api/videos.ts`
+- `frontend/src/components/canvas/items/VideoItemRenderer.tsx`
+- `frontend/src/components/canvas/overlays/VideoOverlay.tsx`
+
+**Modified Files:**
+- `frontend/src/config.ts` - Added videoSupport feature flag
+- `frontend/src/types/index.ts` - Added VideoItem type
+- `frontend/src/components/MenuBar.tsx` - Added Video menu option
+- `frontend/src/components/InfiniteCanvas.tsx` - Render video items and overlay
+- `frontend/src/App.tsx` - Added video handling
+- `backend/src/routes/items.ts` - Video upload endpoint
+- `backend/src/routes/scenes.ts` - Video save/load
+- `frontend/src/utils/sceneExport.ts` - Export videos
+- `frontend/src/utils/sceneImport.ts` - Import videos
+
+
+
+
+
+## Remote Change Detection Feature
+
+### Overview
+
+Detect when a scene has been modified on the server and present a conflict resolution dialog with three options: get remote, keep local, or fork.
+
+### Requirements (from user)
+
+- Every 30 seconds, poll the server for the current `modifiedAt` timestamp of the active scene
+- Also check when a scene is first opened, and when the user switches to the scene's tab
+- If remote `modifiedAt` is newer than local, show a conflict dialog with 3 options:
+  - Get Remote - Discard local, reload from server
+  - Keep Local - Overwrite server with local version
+  - Fork - Save local version as a new scene copy
+
+---
+
+### Implementation Steps
+
+#### 1. Backend - Add Timestamp Endpoint
+
+**File:** `backend/src/routes/scenes.ts`
+
+Add `GET /api/scenes/:id/timestamp` endpoint that returns only `{ id, modifiedAt }` without loading full scene data. Place before the `/:id` route.
+
+#### 2. Frontend API - Add Timestamp Fetch
+
+**Files to modify:**
+- `frontend/src/api/storage/StorageProvider.ts` - Add `getSceneTimestamp(id)` to interface
+- `frontend/src/api/storage/ApiStorageProvider.ts` - Implement fetch to `/api/scenes/:id/timestamp`
+- `frontend/src/api/storage/LocalStorageProvider.ts` - Return `null` (offline mode skips checks)
+- `frontend/src/api/storage/DelegatingStorageProvider.ts` - Delegate to active provider
+- `frontend/src/api/storage/index.ts` - Export the function
+
+#### 3. Create Conflict Dialog Component
+
+**New file:** `frontend/src/components/ConflictDialog.tsx`
+
+Modal dialog showing:
+- Scene name
+- Local vs remote timestamps
+- Three buttons: "Get Remote", "Keep Local", "Fork"
+
+Style to match existing `OpenSceneDialog.tsx`.
+
+#### 4. Create Remote Change Detection Hook
+
+**New file:** `frontend/src/hooks/useRemoteChangeDetection.ts`
+
+Custom hook that:
+- Polls every 30 seconds for active scene's remote timestamp
+- Skips checks in offline mode, during save, or with unsaved changes
+- Tracks `hasConflict` and `remoteModifiedAt` state
+- Provides `checkNow()` for on-demand checks (tab switch, scene open)
+- Provides `clearConflict()` to dismiss after resolution
+
+#### 5. Integrate into App.tsx
+
+**File:** `frontend/src/App.tsx`
+
+- Import and use the hook with active scene info
+- Add conflict resolution handlers:
+  - `handleGetRemote`: Load remote scene, replace local state
+  - `handleKeepLocal`: Force save local version to server
+  - `handleFork`: Create new scene with local content and new ID/name
+- Trigger `checkNow()` on tab switch and scene open
+- Render `ConflictDialog` component
+
+---
+
+### Conflict Resolution Logic
+
+| Action | Result |
+|--------|--------|
+| Get Remote | Discard local, reload scene from server, reload history |
+| Keep Local | Save local scene to server (overwrite remote) |
+| Fork | Create new scene "{name} (copy)" with local content, switch to it |
+
+---
+
+### Edge Cases
+
+- **Unsaved changes**: Skip remote checks to avoid confusion during editing
+- **During save**: Pause checks to prevent race conditions
+- **Offline mode**: All checks disabled
+- **Network errors**: Fail silently, don't disrupt user
+
+---
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `backend/src/routes/scenes.ts` | Add `/timestamp` endpoint |
+| `frontend/src/api/storage/StorageProvider.ts` | Add interface method |
+| `frontend/src/api/storage/ApiStorageProvider.ts` | Implement timestamp fetch |
+| `frontend/src/api/storage/LocalStorageProvider.ts` | Stub returning null |
+| `frontend/src/api/storage/DelegatingStorageProvider.ts` | Delegate method |
+| `frontend/src/api/storage/index.ts` | Export function |
+| `frontend/src/components/ConflictDialog.tsx` | New dialog component |
+| `frontend/src/hooks/useRemoteChangeDetection.ts` | New hook |
+| `frontend/src/App.tsx` | Integration and handlers |
+
+---
+
+### Verification
+
+1. Start backend and frontend dev servers
+2. Open a scene in browser tab A
+3. Open same scene in browser tab B
+4. Make changes in tab B and let it auto-save
+5. Wait up to 30 seconds in tab A - conflict dialog should appear
+6. Test each resolution option:
+   - "Get Remote" - tab A shows tab B's changes
+   - "Keep Local" - tab A's version overwrites server
+   - "Fork" - new scene created with tab A's content
+7. Verify dialog appears on tab switch if conflict exists
+8. Verify no polling in offline mode

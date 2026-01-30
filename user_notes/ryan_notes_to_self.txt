@@ -196,6 +196,24 @@ told it to do everything. It did it. Did some manual testing, it worked. Made so
 
 
 
+Jan 30
+
+Did some UX cleanup, added hotkeys. App is very solid now! Does way more than I set out to do.
+
+So, why not go crazy? Asked it to add support for videos. It came up with a plan, quite a lot of
+steps but mainly this was just to add bits of support in all the difference places. I told it to
+go and do it. It did, although it seems to have skipped a few steps in the plan. Worked out a few
+UX kinks with incremental edits. Works great!
+
+discovered saving had become quite slow. turns out it was downloading and re-uploading all images and videos 
+every save. Dumb! easily fixed it though.
+
+Added basic conflict-resolution, ie detecting if remote scene had changed on server. Show popup dialog
+with options to stomp, fetch, or fork. Seems to work. 
+
+
+
+
 ----------------------
 rms80 website migration
 ----------------------
