@@ -42,19 +42,27 @@ export default function ImageCropOverlay({ item, image, cropRect, stageScale, on
   const natW = image.naturalWidth
   const natH = image.naturalHeight
 
-  // Display scale: how big is one source pixel on screen
-  const currentSourceW = item.cropRect?.width ?? natW
-  const displayScale = item.width / currentSourceW
+  // Get scale factors (default to 1)
+  const scaleX = item.scaleX ?? 1
+  const scaleY = item.scaleY ?? 1
 
-  // Full image display dimensions
-  const fullDisplayW = natW * displayScale
-  const fullDisplayH = natH * displayScale
+  // Display scale: how big is one source pixel on screen (including scaleX/scaleY)
+  const currentSourceW = item.cropRect?.width ?? natW
+  const currentSourceH = item.cropRect?.height ?? natH
+  const baseDisplayScaleX = item.width / currentSourceW
+  const baseDisplayScaleY = item.height / currentSourceH
+  const displayScaleX = baseDisplayScaleX * scaleX
+  const displayScaleY = baseDisplayScaleY * scaleY
+
+  // Full image display dimensions (scaled)
+  const fullDisplayW = natW * displayScaleX
+  const fullDisplayH = natH * displayScaleY
 
   // Crop rect in display coordinates
-  const cx = cropRect.x * displayScale
-  const cy = cropRect.y * displayScale
-  const cw = cropRect.width * displayScale
-  const ch = cropRect.height * displayScale
+  const cx = cropRect.x * displayScaleX
+  const cy = cropRect.y * displayScaleY
+  const cw = cropRect.width * displayScaleX
+  const ch = cropRect.height * displayScaleY
 
   // Handle visual size adjusted for stage zoom
   const hs = HANDLE_SIZE / stageScale
@@ -72,15 +80,17 @@ export default function ImageCropOverlay({ item, image, cropRect, stageScale, on
 
   // Offset for the group: position the full image so that the current crop region
   // is aligned to where the item originally sits
-  const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScale
-  const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScale
+  const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
+  const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScaleY
 
   // Use a ref to always have the latest cropRect in the mousemove handler
   const cropRectRef = useRef(cropRect)
   cropRectRef.current = cropRect
 
-  const displayScaleRef = useRef(displayScale)
-  displayScaleRef.current = displayScale
+  const displayScaleXRef = useRef(displayScaleX)
+  displayScaleXRef.current = displayScaleX
+  const displayScaleYRef = useRef(displayScaleY)
+  displayScaleYRef.current = displayScaleY
 
   const onCropChangeRef = useRef(onCropChange)
   onCropChangeRef.current = onCropChange
@@ -90,8 +100,8 @@ export default function ImageCropOverlay({ item, image, cropRect, stageScale, on
     if (!ds) return
     e.preventDefault()
 
-    const dx = (e.clientX - ds.startMouseX) / stageScale / displayScaleRef.current
-    const dy = (e.clientY - ds.startMouseY) / stageScale / displayScaleRef.current
+    const dx = (e.clientX - ds.startMouseX) / stageScale / displayScaleXRef.current
+    const dy = (e.clientY - ds.startMouseY) / stageScale / displayScaleYRef.current
 
     if (ds.type === 'body') {
       let nx = ds.startCrop.x + dx

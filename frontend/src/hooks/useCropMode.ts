@@ -47,16 +47,24 @@ export function useCropMode({
     }
 
     const natW = img.naturalWidth
+    const natH = img.naturalHeight
+    const scaleX = item.scaleX ?? 1
+    const scaleY = item.scaleY ?? 1
+
     const currentSourceW = item.cropRect?.width ?? natW
-    const displayScale = item.width / currentSourceW
+    const currentSourceH = item.cropRect?.height ?? natH
+    const baseDisplayScaleX = item.width / currentSourceW
+    const baseDisplayScaleY = item.height / currentSourceH
+    const displayScaleX = baseDisplayScaleX * scaleX
+    const displayScaleY = baseDisplayScaleY * scaleY
 
-    const newWidth = pendingCropRect.width * displayScale
-    const newHeight = pendingCropRect.height * displayScale
+    const newWidth = pendingCropRect.width * baseDisplayScaleX
+    const newHeight = pendingCropRect.height * baseDisplayScaleY
 
-    const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScale
-    const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScale
-    const newX = offsetX + pendingCropRect.x * displayScale
-    const newY = offsetY + pendingCropRect.y * displayScale
+    const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
+    const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScaleY
+    const newX = offsetX + pendingCropRect.x * displayScaleX
+    const newY = offsetY + pendingCropRect.y * displayScaleY
 
     const itemId = croppingImageId
     const cropRect = pendingCropRect
