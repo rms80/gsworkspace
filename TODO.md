@@ -39,7 +39,7 @@ Add inline video blocks to the canvas, similar to image blocks but with playback
    - Handle video items in save (copy video file to scene folder)
    - Handle video items in load (reconstruct URL)
 
-#### Phase 2: Backend - Video Upload
+#### Phase 2: Backend - Video Upload (Online Mode)
 
 1. **Add video upload endpoint** (`backend/src/routes/items.ts`)
    - POST `/api/items/upload-video`
@@ -54,13 +54,20 @@ Add inline video blocks to the canvas, similar to image blocks but with playback
 
 1. **Add uploadVideo function** (`frontend/src/api/videos.ts`)
    ```typescript
-   export async function uploadVideo(file: File): Promise<string>
+   export async function uploadVideo(file: File, isOffline: boolean): Promise<string>
    ```
+   - **Online mode**: Upload to S3, return S3 URL
+   - **Offline mode**: Store in IndexedDB, return blob URL or data URL
 
-2. **Update MenuBar** (`frontend/src/components/MenuBar.tsx`)
+2. **Add IndexedDB video storage** (`frontend/src/api/storage/IndexedDBStorageProvider.ts`)
+   - Store video blobs in IndexedDB (similar to how offline scenes work)
+   - Return blob URLs for playback
+   - Handle larger file sizes (videos can be 10-100MB+)
+
+3. **Update MenuBar** (`frontend/src/components/MenuBar.tsx`)
    - Add "Video" option to Add menu
    - File input accepting video/* types
-   - Call upload and add video item
+   - Call upload and add video item (respecting offline mode)
 
 #### Phase 4: Video Item Renderer
 
@@ -142,6 +149,14 @@ Add inline video blocks to the canvas, similar to image blocks but with playback
    - Primary: MP4 (H.264) - widest browser support
    - Also: WebM, MOV
    - Validate format before upload
+
+5. **Offline Mode / IndexedDB Storage**
+   - Store video blobs in IndexedDB when in offline mode
+   - Use blob URLs (`URL.createObjectURL()`) for playback
+   - IndexedDB can handle large blobs but has browser-specific limits
+   - Consider chunked storage for very large videos
+   - Scene save/load must handle both S3 URLs and blob references
+   - When switching online→offline or vice versa, videos remain in original storage
 
 ---
 
