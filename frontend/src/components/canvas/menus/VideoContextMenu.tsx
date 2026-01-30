@@ -8,6 +8,28 @@ interface VideoContextMenuProps {
   onClose: () => void
 }
 
+/**
+ * Gets the file extension from a video src URL
+ */
+function getVideoExtension(src: string): string {
+  // Try to get from URL path
+  if (src.includes('.')) {
+    const match = src.match(/\.(\w+)(?:\?|$)/)
+    if (match && ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(match[1].toLowerCase())) {
+      return match[1].toLowerCase()
+    }
+  }
+  // Try to get from data URL
+  if (src.startsWith('data:video/')) {
+    const match = src.match(/data:video\/(\w+)/)
+    if (match) {
+      return match[1]
+    }
+  }
+  // Default to mp4
+  return 'mp4'
+}
+
 export default function VideoContextMenu({
   position,
   videoItem,
@@ -35,6 +57,85 @@ export default function VideoContextMenu({
     onClose()
   }
 
+  const handleExport = async () => {
+    if (!videoItem) { onClose(); return }
+
+    try {
+      const ext = getVideoExtension(videoItem.src)
+      const baseName = videoItem.name || 'video'
+      const filename = `${baseName}.${ext}`
+
+      let blob: Blob
+
+      if (videoItem.src.startsWith('data:') || videoItem.src.startsWith('blob:')) {
+        // Fetch directly for data URLs and blob URLs
+        const response = await fetch(videoItem.src)
+        blob = await response.blob()
+      } else {
+        // Use proxy for external URLs to avoid CORS
+        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoItem.src)}`
+        const response = await fetch(proxyUrl)
+        if (!response.ok) {
+          // Try direct fetch as fallback
+          const directResponse = await fetch(videoItem.src)
+          if (!directResponse.ok) {
+            throw new Error('Failed to fetch video')
+          }
+          blob = await directResponse.blob()
+        } else {
+          blob = await response.blob()
+        }
+      }
+
+      // Try to use File System Access API for native save dialog
+      if ('showSaveFilePicker' in window) {
+        try {
+          const mimeTypes: Record<string, string> = {
+            mp4: 'video/mp4',
+            webm: 'video/webm',
+            ogg: 'video/ogg',
+            mov: 'video/quicktime',
+            avi: 'video/x-msvideo',
+            mkv: 'video/x-matroska',
+          }
+          const handle = await (window as unknown as { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+            suggestedName: filename,
+            types: [{
+              description: 'Video file',
+              accept: { [mimeTypes[ext] || 'video/mp4']: [`.${ext}`] },
+            }],
+          })
+          const writable = await handle.createWritable()
+          await writable.write(blob)
+          await writable.close()
+          onClose()
+          return
+        } catch (err) {
+          // User cancelled or API failed, fall through to download
+          if ((err as Error).name === 'AbortError') {
+            onClose()
+            return
+          }
+        }
+      }
+
+      // Fallback: Create download link
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to export video:', error)
+      alert('Failed to export video. Please try again.')
+    }
+
+    onClose()
+  }
+
   return (
     <div
       style={{
@@ -50,6 +151,14 @@ export default function VideoContextMenu({
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        onClick={handleExport}
+        style={buttonStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+      >
+        Export
+      </button>
       <button
         onClick={handleResetTransform}
         style={buttonStyle}
