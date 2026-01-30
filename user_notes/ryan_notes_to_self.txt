@@ -189,10 +189,9 @@ Next up - import and export of scenes. Here was my prompt:
   
 refinement:
   
-> instead of an import dialog, I would just like there to be "Import Scene from Zip..." and "Import Scene from            Folder..." options in the File menu. These can launch the appropriate picker directly, we don't need the
-  intermediate dialog. please update the plan.
+> instead of an import dialog, I would just like there to be "Import Scene from Zip..." and "Import Scene from Folder..." options in the File menu. These can launch the appropriate picker directly, we don't need the intermediate dialog. please update the plan.
 
-
+told it to do everything. It did it. Did some manual testing, it worked. Made some minor UX changes w/ iterative edits and committed.
 
 
 
