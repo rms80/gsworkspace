@@ -14,6 +14,10 @@ export const HTML_HEADER_HEIGHT = 24
 export const EXPORT_BUTTON_WIDTH = 50
 export const ZOOM_BUTTON_WIDTH = 24
 
+// --- Video item dimensions ---
+
+export const VIDEO_HEADER_HEIGHT = 24
+
 // --- Item constraints ---
 
 export const MIN_PROMPT_WIDTH = 100

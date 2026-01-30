@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
-import { CanvasItem, ImageItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadVideo, getVideoDimensions } from '../api/videos'
@@ -18,6 +18,7 @@ import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
+import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
@@ -44,7 +45,7 @@ interface InfiniteCanvasProps {
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
   onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
-  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number) => void
+  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number, name?: string) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
@@ -211,6 +212,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const [videoItemTransforms, setVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
+  const [editingVideoLabelId, setEditingVideoLabelId] = useState<string | null>(null)
+  const videoLabelInputRef = useRef<HTMLInputElement>(null)
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -286,7 +289,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         try {
           const dimensions = await getVideoDimensions(file)
           const url = await uploadVideo(file, isOffline)
-          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height)
+          // Extract filename without extension for the label
+          const name = file.name.replace(/\.[^/.]+$/, '')
+          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height, name)
           offsetIndex++
         } catch (err) {
           console.error('Failed to add dropped video:', err)
@@ -374,6 +379,38 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       handleHtmlLabelBlur()
     }
   }
+
+  // Video item label editing handlers
+  const handleVideoLabelDblClick = (id: string) => {
+    setEditingVideoLabelId(id)
+    setTimeout(() => {
+      videoLabelInputRef.current?.focus()
+      videoLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleVideoLabelBlur = () => {
+    if (editingVideoLabelId && videoLabelInputRef.current) {
+      onUpdateItem(editingVideoLabelId, { name: videoLabelInputRef.current.value })
+    }
+    setEditingVideoLabelId(null)
+  }
+
+  const handleVideoLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingVideoLabelId(null)
+    } else if (e.key === 'Enter') {
+      handleVideoLabelBlur()
+    }
+  }
+
+  const getEditingVideoItem = (): VideoItem | null => {
+    if (!editingVideoLabelId) return null
+    const item = items.find((i) => i.id === editingVideoLabelId)
+    if (!item || item.type !== 'video') return null
+    return item
+  }
+  const editingVideoItem = getEditingVideoItem()
 
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
@@ -486,6 +523,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                 key={item.id}
                 item={item}
                 isSelected={selectedIds.includes(item.id)}
+                editingVideoLabelId={editingVideoLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   videoContextMenuState.openMenu(
@@ -494,6 +532,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
                   )
                 }}
                 onUpdateItem={onUpdateItem}
+                onLabelDblClick={handleVideoLabelDblClick}
                 setVideoItemTransforms={setVideoItemTransforms}
               />
             )
@@ -779,6 +818,18 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           stagePos={stagePos}
           onBlur={handleHtmlLabelBlur}
           onKeyDown={handleHtmlLabelKeyDown}
+        />
+      )}
+
+      {/* Video label editing overlay */}
+      {editingVideoItem && (
+        <VideoLabelEditingOverlay
+          item={editingVideoItem}
+          inputRef={videoLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleVideoLabelBlur}
+          onKeyDown={handleVideoLabelKeyDown}
         />
       )}
 

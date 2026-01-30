@@ -34,11 +34,13 @@ interface StoredImageItem extends StoredItemBase {
 interface StoredVideoItem extends StoredItemBase {
   type: 'video'
   file: string // reference to video file
+  name?: string // editable label
   scaleX?: number
   scaleY?: number
   rotation?: number
   loop?: boolean
   muted?: boolean
+  playbackRate?: number
 }
 
 interface StoredPromptItem extends StoredItemBase {
@@ -212,11 +214,13 @@ router.post('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             file: videoFile,
+            name: item.name,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
             loop: item.loop,
             muted: item.muted,
+            playbackRate: item.playbackRate,
           })
         } else {
           console.error(`Failed to save video ${item.id}, skipping from scene`)
@@ -354,11 +358,13 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             src: videoUrl,
+            name: item.name,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
             loop: item.loop,
             muted: item.muted,
+            playbackRate: item.playbackRate,
           }
         } else if (item.type === 'prompt') {
           // For prompts, load the JSON file

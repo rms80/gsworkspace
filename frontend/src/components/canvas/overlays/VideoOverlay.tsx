@@ -1,6 +1,8 @@
 import { useRef, useState, useEffect } from 'react'
 import { VideoItem } from '../../../types'
 
+const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 10]
+
 interface VideoOverlayProps {
   item: VideoItem
   stageScale: number
@@ -43,6 +45,8 @@ export default function VideoOverlay({
   const left = x * stageScale + stagePos.x
   const top = y * stageScale + stagePos.y
 
+  const playbackRate = item.playbackRate ?? 1
+
   // Sync video properties with item state
   useEffect(() => {
     const video = videoRef.current
@@ -50,7 +54,8 @@ export default function VideoOverlay({
 
     video.loop = item.loop ?? false
     video.muted = item.muted ?? true
-  }, [item.loop, item.muted])
+    video.playbackRate = playbackRate
+  }, [item.loop, item.muted, playbackRate])
 
   // Update time display
   useEffect(() => {
@@ -104,6 +109,11 @@ export default function VideoOverlay({
 
   const toggleLoop = () => {
     onUpdateItem(item.id, { loop: !(item.loop ?? false) })
+  }
+
+  const handleSpeedChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newRate = parseFloat(e.target.value)
+    onUpdateItem(item.id, { playbackRate: newRate })
   }
 
   const formatTime = (seconds: number): string => {
@@ -168,6 +178,7 @@ export default function VideoOverlay({
             type="range"
             min={0}
             max={duration || 100}
+            step={0.1}
             value={currentTime}
             onChange={handleSeek}
             style={{
@@ -202,6 +213,28 @@ export default function VideoOverlay({
             </span>
 
             <div style={{ flex: 1 }} />
+
+            {/* Playback speed dropdown */}
+            <select
+              value={playbackRate}
+              onChange={handleSpeedChange}
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: 3,
+                color: 'white',
+                fontSize: 11,
+                padding: '2px 4px',
+                cursor: 'pointer',
+              }}
+              title="Playback speed"
+            >
+              {PLAYBACK_SPEEDS.map((speed) => (
+                <option key={speed} value={speed} style={{ background: '#333', color: 'white' }}>
+                  {speed}x
+                </option>
+              ))}
+            </select>
 
             {/* Loop toggle */}
             <button

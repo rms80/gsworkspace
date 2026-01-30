@@ -39,13 +39,15 @@ export interface ImageItem extends BaseItem {
 export interface VideoItem extends BaseItem {
   type: 'video'
   src: string
+  name?: string     // editable label displayed in header
   width: number
   height: number
   scaleX?: number
   scaleY?: number
   rotation?: number
-  loop?: boolean    // default false
-  muted?: boolean   // default true
+  loop?: boolean       // default false
+  muted?: boolean      // default true
+  playbackRate?: number // default 1 (0.5, 1, 1.5, 2, 3)
 }
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'
