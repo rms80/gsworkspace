@@ -340,6 +340,24 @@ router.post('/:id', async (req, res) => {
   }
 })
 
+// Get raw scene.json (no transformation)
+router.get('/:id/raw', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    if (!sceneJson) {
+      return res.status(404).json({ error: 'Scene not found' })
+    }
+
+    res.type('application/json').send(sceneJson)
+  } catch (error) {
+    console.error('Error loading raw scene:', error)
+    res.status(500).json({ error: 'Failed to load raw scene' })
+  }
+})
+
 // Load a scene
 router.get('/:id', async (req, res) => {
   try {

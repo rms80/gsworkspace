@@ -18,6 +18,7 @@ interface MenuBarProps {
   onImportSceneFromZip: (file: File) => void
   onImportSceneFromFolder: (files: FileList) => void
   onGetSceneJson?: () => string
+  onGetServerSceneJson?: () => Promise<string>
   onGetHistoryJson?: () => string
   onClearHistory?: () => void
 }
@@ -56,6 +57,7 @@ function MenuBar({
   onImportSceneFromZip,
   onImportSceneFromFolder,
   onGetSceneJson,
+  onGetServerSceneJson,
   onGetHistoryJson,
   onClearHistory,
 }: MenuBarProps) {
@@ -66,6 +68,10 @@ function MenuBar({
   const [jsonDialogOpen, setJsonDialogOpen] = useState(false)
   const [jsonDialogTitle, setJsonDialogTitle] = useState('')
   const [jsonDialogContent, setJsonDialogContent] = useState('')
+  const [jsonViewMode, setJsonViewMode] = useState<'local' | 'server'>('local')
+  const [localJsonContent, setLocalJsonContent] = useState('')
+  const [serverJsonContent, setServerJsonContent] = useState('')
+  const [serverJsonLoading, setServerJsonLoading] = useState(false)
   const menuBarRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoInputRef = useRef<HTMLInputElement>(null)
@@ -133,11 +139,28 @@ function MenuBar({
     }] : []),
   ]
 
-  function handleShowSceneJson() {
+  async function handleShowSceneJson() {
     if (onGetSceneJson) {
+      const localJson = onGetSceneJson()
       setJsonDialogTitle('Scene JSON')
-      setJsonDialogContent(onGetSceneJson())
+      setLocalJsonContent(localJson)
+      setJsonDialogContent(localJson)
+      setJsonViewMode('local')
+      setServerJsonContent('')
       setJsonDialogOpen(true)
+
+      // Fetch server JSON in background
+      if (onGetServerSceneJson) {
+        setServerJsonLoading(true)
+        try {
+          const serverJson = await onGetServerSceneJson()
+          setServerJsonContent(serverJson)
+        } catch (err) {
+          setServerJsonContent(`Error fetching server JSON: ${err}`)
+        } finally {
+          setServerJsonLoading(false)
+        }
+      }
     }
   }
 
@@ -152,6 +175,15 @@ function MenuBar({
   function handleClearHistory() {
     if (onClearHistory) {
       onClearHistory()
+    }
+  }
+
+  function handleJsonViewModeChange(mode: 'local' | 'server') {
+    setJsonViewMode(mode)
+    if (mode === 'local') {
+      setJsonDialogContent(localJsonContent)
+    } else {
+      setJsonDialogContent(serverJsonLoading ? 'Loading...' : serverJsonContent)
     }
   }
 
@@ -544,19 +576,53 @@ function MenuBar({
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ margin: 0, fontSize: '18px' }}>{jsonDialogTitle}</h2>
-              <button
-                onClick={() => setJsonDialogOpen(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  color: '#666',
-                  padding: '4px 8px',
-                }}
-              >
-                x
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {jsonDialogTitle === 'Scene JSON' && onGetServerSceneJson && (
+                  <div style={{ display: 'flex', backgroundColor: '#e0e0e0', borderRadius: '4px', padding: '2px' }}>
+                    <button
+                      onClick={() => handleJsonViewModeChange('local')}
+                      style={{
+                        padding: '4px 12px',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        backgroundColor: jsonViewMode === 'local' ? '#fff' : 'transparent',
+                        boxShadow: jsonViewMode === 'local' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                      }}
+                    >
+                      Local
+                    </button>
+                    <button
+                      onClick={() => handleJsonViewModeChange('server')}
+                      style={{
+                        padding: '4px 12px',
+                        border: 'none',
+                        borderRadius: '3px',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        backgroundColor: jsonViewMode === 'server' ? '#fff' : 'transparent',
+                        boxShadow: jsonViewMode === 'server' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
+                      }}
+                    >
+                      Server {serverJsonLoading && '...'}
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => setJsonDialogOpen(false)}
+                  style={{
+                    border: 'none',
+                    background: 'none',
+                    fontSize: '20px',
+                    cursor: 'pointer',
+                    color: '#666',
+                    padding: '4px 8px',
+                  }}
+                >
+                  x
+                </button>
+              </div>
             </div>
             <pre
               style={{

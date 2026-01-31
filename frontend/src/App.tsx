@@ -1439,6 +1439,22 @@ function App() {
         onImportSceneFromZip={handleImportFromZip}
         onImportSceneFromFolder={handleImportFromFolder}
         onGetSceneJson={() => activeScene ? JSON.stringify(activeScene, null, 2) : '{}'}
+        onGetServerSceneJson={async () => {
+          if (!activeSceneId) return '{}'
+          try {
+            const response = await fetch(`/api/scenes/${activeSceneId}/raw`)
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            const text = await response.text()
+            // Pretty-print if it's valid JSON
+            try {
+              return JSON.stringify(JSON.parse(text), null, 2)
+            } catch {
+              return text
+            }
+          } catch (err) {
+            return `Error: ${err}`
+          }
+        }}
         onGetHistoryJson={() => activeHistory ? JSON.stringify(activeHistory.serialize(), null, 2) : '{}'}
         onClearHistory={() => {
           if (activeSceneId) {
