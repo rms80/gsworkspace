@@ -1,12 +1,10 @@
 import { ImageItem, CropRect } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
-import { resolveAssetUrl } from '../../../utils/assetUrl'
 
 interface ImageContextMenuProps {
   position: { x: number; y: number }
   imageItem: ImageItem | undefined
   loadedImages: Map<string, HTMLImageElement>
-  assetBaseUrl?: string
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
   onStartCrop: (id: string, initialCrop: CropRect) => void
   onClose: () => void
@@ -38,7 +36,6 @@ export default function ImageContextMenu({
   position,
   imageItem,
   loadedImages,
-  assetBaseUrl,
   onUpdateItem,
   onStartCrop,
   onClose,
@@ -103,9 +100,7 @@ export default function ImageContextMenu({
 
     try {
       // Use cropped version if available, otherwise original
-      // Resolve relative paths to full URLs
-      const rawSrc = imageItem.cropSrc || imageItem.src
-      const srcToExport = resolveAssetUrl(assetBaseUrl, rawSrc)
+      const srcToExport = imageItem.cropSrc || imageItem.src
       const ext = getImageExtension(srcToExport)
       const filename = `image.${ext}`
 

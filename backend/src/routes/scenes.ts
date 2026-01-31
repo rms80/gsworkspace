@@ -178,45 +178,6 @@ router.post('/:id', async (req, res) => {
           }
         }
 
-        // Handle cropSrc if present - save as separate file
-        let cropFile: string | undefined = undefined
-        if (item.cropSrc) {
-          if (isRelativePath(item.cropSrc)) {
-            // Already saved
-            cropFile = item.cropSrc
-          } else if (item.cropSrc.startsWith('data:')) {
-            // Save data URL to S3
-            const cropMatches = item.cropSrc.match(/^data:([^;]+);base64,(.+)$/)
-            if (cropMatches) {
-              cropFile = `${item.id}.crop.png`
-              const contentType = cropMatches[1]
-              const base64Data = cropMatches[2]
-              await saveToS3(
-                `${sceneFolder}/${cropFile}`,
-                Buffer.from(base64Data, 'base64'),
-                contentType
-              )
-            }
-          } else if (item.cropSrc.startsWith('http')) {
-            // Fetch and save external URL
-            try {
-              const response = await fetch(item.cropSrc)
-              if (response.ok) {
-                cropFile = `${item.id}.crop.png`
-                const arrayBuffer = await response.arrayBuffer()
-                const contentType = response.headers.get('content-type') || 'image/png'
-                await saveToS3(
-                  `${sceneFolder}/${cropFile}`,
-                  Buffer.from(arrayBuffer),
-                  contentType
-                )
-              }
-            } catch (err) {
-              console.error(`Failed to fetch cropSrc from ${item.cropSrc}:`, err)
-            }
-          }
-        }
-
         // Only add to stored items if the image was successfully saved
         if (imageSaved) {
           storedItems.push({
@@ -231,7 +192,7 @@ router.post('/:id', async (req, res) => {
             scaleY: item.scaleY,
             rotation: item.rotation,
             cropRect: item.cropRect,
-            cropSrc: cropFile,
+            cropSrc: item.cropSrc,
           })
         } else {
           console.error(`Failed to save image ${item.id}, skipping from scene`)

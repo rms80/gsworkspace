@@ -900,7 +900,6 @@ function InfiniteCanvas({ items, selectedIds, assetBaseUrl, onUpdateItem, onSele
           position={imageContextMenuState.menuPosition}
           imageItem={items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined}
           loadedImages={loadedImages}
-          assetBaseUrl={assetBaseUrl}
           onUpdateItem={onUpdateItem}
           onStartCrop={(id, initialCrop) => {
             setCroppingImageId(id)

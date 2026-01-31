@@ -70,18 +70,14 @@ export function convertItemsToSpatialJson(items: CanvasItem[]): SpatialConversio
   return { blocks, imageMap }
 }
 
-import { resolveAssetUrl } from './assetUrl'
-
 /**
  * Replaces image placeholder IDs in HTML with actual source URLs.
  */
-export function replaceImagePlaceholders(html: string, imageMap: ImageSourceMap, assetBaseUrl?: string): string {
+export function replaceImagePlaceholders(html: string, imageMap: ImageSourceMap): string {
   let result = html
   imageMap.forEach((src, imageId) => {
-    // Resolve relative paths to full URLs
-    const resolvedSrc = resolveAssetUrl(assetBaseUrl, src)
     // Replace all occurrences of the placeholder ID with the actual src
-    result = result.replace(new RegExp(imageId, 'g'), resolvedSrc)
+    result = result.replace(new RegExp(imageId, 'g'), src)
   })
   return result
 }
