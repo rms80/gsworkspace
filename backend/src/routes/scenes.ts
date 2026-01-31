@@ -6,16 +6,6 @@ const router = Router()
 // User folder - hardcoded for now, will be per-user later
 const USER_FOLDER = 'version0'
 
-// Check if a path is relative (already saved asset) vs absolute URL or data URL
-function isRelativePath(src: string): boolean {
-  return !(
-    src.startsWith('data:') ||
-    src.startsWith('blob:') ||
-    src.startsWith('http://') ||
-    src.startsWith('https://')
-  )
-}
-
 // Types for stored scene format
 interface StoredItemBase {
   id: string
@@ -139,15 +129,11 @@ router.post('/:id', async (req, res) => {
           file: textFile,
         })
       } else if (item.type === 'image') {
-        let imageFile = `${item.id}.png`
+        const imageFile = `${item.id}.png`
         let imageSaved = false
 
-        // If src is a relative path, asset is already saved - use it directly
-        if (isRelativePath(item.src)) {
-          imageFile = item.src
-          imageSaved = true
-        } else if (item.src.startsWith('data:')) {
-          // If src is a data URL, extract and save the image
+        // If src is a data URL, extract and save the image
+        if (item.src.startsWith('data:')) {
           const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
           if (matches) {
             const contentType = matches[1]
@@ -160,21 +146,26 @@ router.post('/:id', async (req, res) => {
             imageSaved = true
           }
         } else if (item.src.startsWith('http')) {
-          // If src is an external URL, fetch and save the image to the scene folder
-          try {
-            const response = await fetch(item.src)
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer()
-              const contentType = response.headers.get('content-type') || 'image/png'
-              await saveToS3(
-                `${sceneFolder}/${imageFile}`,
-                Buffer.from(arrayBuffer),
-                contentType
-              )
-              imageSaved = true
+          // Check if the image is already in this scene folder (skip re-upload)
+          if (item.src.includes(`/${sceneFolder}/`)) {
+            imageSaved = true
+          } else {
+            // If src is a URL, fetch and save the image to the scene folder
+            try {
+              const response = await fetch(item.src)
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer()
+                const contentType = response.headers.get('content-type') || 'image/png'
+                await saveToS3(
+                  `${sceneFolder}/${imageFile}`,
+                  Buffer.from(arrayBuffer),
+                  contentType
+                )
+                imageSaved = true
+              }
+            } catch (err) {
+              console.error(`Failed to fetch image from ${item.src}:`, err)
             }
-          } catch (err) {
-            console.error(`Failed to fetch image from ${item.src}:`, err)
           }
         }
 
@@ -209,15 +200,11 @@ router.post('/:id', async (req, res) => {
             ext = urlExt
           }
         }
-        let videoFile = `${item.id}.${ext}`
+        const videoFile = `${item.id}.${ext}`
         let videoSaved = false
 
-        // If src is a relative path, asset is already saved - use it directly
-        if (isRelativePath(item.src)) {
-          videoFile = item.src
-          videoSaved = true
-        } else if (item.src.startsWith('data:')) {
-          // If src is a data URL, extract and save the video
+        // If src is a data URL, extract and save the video
+        if (item.src.startsWith('data:')) {
           const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
           if (matches) {
             const contentType = matches[1]
@@ -230,21 +217,26 @@ router.post('/:id', async (req, res) => {
             videoSaved = true
           }
         } else if (item.src.startsWith('http')) {
-          // If src is an external URL, fetch and save the video to the scene folder
-          try {
-            const response = await fetch(item.src)
-            if (response.ok) {
-              const arrayBuffer = await response.arrayBuffer()
-              const contentType = response.headers.get('content-type') || 'video/mp4'
-              await saveToS3(
-                `${sceneFolder}/${videoFile}`,
-                Buffer.from(arrayBuffer),
-                contentType
-              )
-              videoSaved = true
+          // Check if the video is already in this scene folder (skip re-upload)
+          if (item.src.includes(`/${sceneFolder}/`)) {
+            videoSaved = true
+          } else {
+            // If src is a URL, fetch and save the video to the scene folder
+            try {
+              const response = await fetch(item.src)
+              if (response.ok) {
+                const arrayBuffer = await response.arrayBuffer()
+                const contentType = response.headers.get('content-type') || 'video/mp4'
+                await saveToS3(
+                  `${sceneFolder}/${videoFile}`,
+                  Buffer.from(arrayBuffer),
+                  contentType
+                )
+                videoSaved = true
+              }
+            } catch (err) {
+              console.error(`Failed to fetch video from ${item.src}:`, err)
             }
-          } catch (err) {
-            console.error(`Failed to fetch video from ${item.src}:`, err)
           }
         }
 
@@ -378,7 +370,8 @@ router.get('/:id', async (req, res) => {
             text: text || '',
           }
         } else if (item.type === 'image') {
-          // For images, return relative path (filename only)
+          // For images, return the public URL
+          const imageUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
           return {
             id: item.id,
             type: 'image' as const,
@@ -386,7 +379,7 @@ router.get('/:id', async (req, res) => {
             y: item.y,
             width: item.width,
             height: item.height,
-            src: item.file,
+            src: imageUrl,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
@@ -394,7 +387,8 @@ router.get('/:id', async (req, res) => {
             cropSrc: item.cropSrc,
           }
         } else if (item.type === 'video') {
-          // For videos, return relative path (filename only)
+          // For videos, return the public URL
+          const videoUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
           return {
             id: item.id,
             type: 'video' as const,
@@ -402,7 +396,7 @@ router.get('/:id', async (req, res) => {
             y: item.y,
             width: item.width,
             height: item.height,
-            src: item.file,
+            src: videoUrl,
             name: item.name,
             originalWidth: item.originalWidth,
             originalHeight: item.originalHeight,
@@ -480,15 +474,11 @@ router.get('/:id', async (req, res) => {
       })
     )
 
-    // Construct asset base URL for this scene's folder
-    const assetBaseUrl = getPublicUrl(`${sceneFolder}/`)
-
     res.json({
       id: storedScene.id,
       name: storedScene.name,
       createdAt: storedScene.createdAt,
       modifiedAt: storedScene.modifiedAt,
-      assetBaseUrl,
       items,
     })
   } catch (error) {

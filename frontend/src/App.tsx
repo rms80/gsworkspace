@@ -1464,7 +1464,6 @@ function App() {
         <InfiniteCanvas
           items={items}
           selectedIds={selectedIds}
-          assetBaseUrl={activeScene?.assetBaseUrl}
           onUpdateItem={updateItem}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}
