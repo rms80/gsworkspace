@@ -1,6 +1,6 @@
 import { DelegatingStorageProvider } from './DelegatingStorageProvider'
 
-export type { StorageProvider, SceneMetadata, SceneTimestamp, LoadedScene } from './StorageProvider'
+export type { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 
 // Initialize offline mode from environment variable
 // In Vite, env vars must be prefixed with VITE_ and accessed via import.meta.env

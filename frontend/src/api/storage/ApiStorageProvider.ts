@@ -1,6 +1,6 @@
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
-import { StorageProvider, SceneMetadata, SceneTimestamp, LoadedScene } from './StorageProvider'
+import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 
 const API_BASE = '/api/scenes'
 
@@ -16,15 +16,12 @@ export class ApiStorageProvider implements StorageProvider {
     }
   }
 
-  async loadScene(id: string): Promise<LoadedScene> {
+  async loadScene(id: string): Promise<Scene> {
     const response = await fetch(`${API_BASE}/${id}`)
     if (!response.ok) {
       throw new Error(`Failed to load scene: ${response.statusText}`)
     }
-    const data = await response.json()
-    // Extract assetBaseUrl from response, return scene data separately
-    const { assetBaseUrl, ...scene } = data
-    return { scene, assetBaseUrl }
+    return response.json()
   }
 
   async listScenes(): Promise<SceneMetadata[]> {
