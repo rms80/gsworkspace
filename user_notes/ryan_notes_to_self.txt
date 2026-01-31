@@ -211,6 +211,16 @@ every save. Dumb! easily fixed it though.
 Added basic conflict-resolution, ie detecting if remote scene had changed on server. Show popup dialog
 with options to stomp, fetch, or fork. Seems to work. 
 
+Added Debug menu with ability to see scene and history json, to see what this thing is actually storing/etc.
+Discovered it is storing full URLs to the images and videos, which shouldn't be necessary as they are
+all relative to the server base URL. Asked it to change how this works, so it gets the base URL from
+the server. It completely shit the bed trying to do this refactor! It went off and made duplicate versions
+of some features that already were working. Also for some reason it decided to merge the feature branch
+where it was working back into main, and push to github, without me saying so (up to this point I had always
+been telling it when to merge and push, and usually when to commit, although sometimes it did commit on it's own).
+Had it roll back these changes so we could try again with a more specific plan
+
+
 
 
 
