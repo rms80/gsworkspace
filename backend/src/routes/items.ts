@@ -96,7 +96,9 @@ router.post('/upload-video', async (req, res) => {
 
     // videoData is base64 data URL, convert to buffer
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, '')
+    console.log(`Uploading video to S3: ${key}, size: ${Buffer.from(base64Data, 'base64').length} bytes`)
     await saveToS3(key, Buffer.from(base64Data, 'base64'), contentType || 'video/mp4')
+    console.log(`Video uploaded successfully: ${key}`)
 
     // Return the S3 URL (for public bucket)
     const bucketName = process.env.S3_BUCKET_NAME

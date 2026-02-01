@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { saveToS3, loadFromS3, listFromS3, getPublicUrl, deleteFromS3 } from '../services/s3.js'
+import { saveToS3, loadFromS3, listFromS3, getPublicUrl, deleteFromS3, existsInS3 } from '../services/s3.js'
 
 const router = Router()
 
@@ -166,26 +166,33 @@ router.post('/:id', async (req, res) => {
           if (item.src.includes(`/${sceneFolder}/`)) {
             imageSaved = true
           } else {
-            // If src is a URL, fetch and save the image to the scene folder
-            try {
-              const response = await fetch(item.src)
-              if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer()
-                const contentType = response.headers.get('content-type') || 'image/png'
-                await saveToS3(
-                  `${sceneFolder}/${imageFile}`,
-                  Buffer.from(arrayBuffer),
-                  contentType
-                )
-                imageSaved = true
-                // Track staging file for cleanup if it's from /temp/images/ folder
-                const stagingKey = getS3KeyFromUrl(item.src)
-                if (stagingKey && stagingKey.startsWith('temp/images/')) {
-                  stagingKeysToDelete.push(stagingKey)
+            // Check if the image file already exists in the scene folder (from a previous save)
+            const imageKey = `${sceneFolder}/${imageFile}`
+            const alreadyExists = await existsInS3(imageKey)
+            if (alreadyExists) {
+              imageSaved = true
+            } else {
+              // If src is a URL, fetch and save the image to the scene folder
+              try {
+                const response = await fetch(item.src)
+                if (response.ok) {
+                  const arrayBuffer = await response.arrayBuffer()
+                  const contentType = response.headers.get('content-type') || 'image/png'
+                  await saveToS3(
+                    imageKey,
+                    Buffer.from(arrayBuffer),
+                    contentType
+                  )
+                  imageSaved = true
+                  // Track staging file for cleanup if it's from /temp/images/ folder
+                  const stagingKey = getS3KeyFromUrl(item.src)
+                  if (stagingKey && stagingKey.startsWith('temp/images/')) {
+                    stagingKeysToDelete.push(stagingKey)
+                  }
                 }
+              } catch (err) {
+                console.error(`Failed to fetch image from ${item.src}:`, err)
               }
-            } catch (err) {
-              console.error(`Failed to fetch image from ${item.src}:`, err)
             }
           }
         }
@@ -242,31 +249,43 @@ router.post('/:id', async (req, res) => {
           if (item.src.includes(`/${sceneFolder}/`)) {
             videoSaved = true
           } else {
-            // If src is a URL, fetch and save the video to the scene folder
-            try {
-              const response = await fetch(item.src)
-              if (response.ok) {
-                const arrayBuffer = await response.arrayBuffer()
-                const contentType = response.headers.get('content-type') || 'video/mp4'
-                await saveToS3(
-                  `${sceneFolder}/${videoFile}`,
-                  Buffer.from(arrayBuffer),
-                  contentType
-                )
-                videoSaved = true
-                // Track staging file for cleanup if it's from /temp/videos/ folder
-                const stagingKey = getS3KeyFromUrl(item.src)
-                if (stagingKey && stagingKey.startsWith('temp/videos/')) {
-                  stagingKeysToDelete.push(stagingKey)
+            // Check if the video file already exists in the scene folder (from a previous save)
+            const videoKey = `${sceneFolder}/${videoFile}`
+            const alreadyExists = await existsInS3(videoKey)
+            if (alreadyExists) {
+              videoSaved = true
+            } else {
+              // If src is a URL, fetch and save the video to the scene folder
+              try {
+                const response = await fetch(item.src)
+                if (response.ok) {
+                  const arrayBuffer = await response.arrayBuffer()
+                  const contentType = response.headers.get('content-type') || 'video/mp4'
+                  await saveToS3(
+                    videoKey,
+                    Buffer.from(arrayBuffer),
+                    contentType
+                  )
+                  videoSaved = true
+                  // Track staging file for cleanup if it's from /temp/videos/ folder
+                  const stagingKey = getS3KeyFromUrl(item.src)
+                  if (stagingKey && stagingKey.startsWith('temp/videos/')) {
+                    stagingKeysToDelete.push(stagingKey)
+                  }
+                } else {
+                  console.error(`Failed to fetch video ${item.id}: HTTP ${response.status} ${response.statusText}`)
                 }
+              } catch (err) {
+                console.error(`Failed to fetch video from ${item.src}:`, err)
               }
-            } catch (err) {
-              console.error(`Failed to fetch video from ${item.src}:`, err)
             }
           }
         }
 
         // Only add to stored items if the video was successfully saved
+        if (!videoSaved) {
+          console.error(`Video ${item.id} not saved. Full src:`, item.src)
+        }
         if (videoSaved) {
           storedItems.push({
             id: item.id,

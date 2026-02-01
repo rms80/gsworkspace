@@ -4,6 +4,7 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   DeleteObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3'
 import dotenv from 'dotenv'
 
@@ -139,5 +140,30 @@ export async function deleteFromS3(key: string): Promise<void> {
     if (!response.ok && response.status !== 404) {
       throw new Error(`S3 DELETE failed: ${response.status} ${response.statusText}`)
     }
+  }
+}
+
+export async function existsInS3(key: string): Promise<boolean> {
+  if (s3Client) {
+    try {
+      await s3Client.send(
+        new HeadObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: key,
+        })
+      )
+      return true
+    } catch (error: unknown) {
+      if ((error as { name?: string }).name === 'NotFound') {
+        return false
+      }
+      throw error
+    }
+  } else {
+    // Use direct HTTP HEAD for public bucket
+    const response = await fetch(getS3Url(key), {
+      method: 'HEAD',
+    })
+    return response.ok
   }
 }

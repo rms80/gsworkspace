@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CanvasItem } from '../types'
 import { uploadImage } from '../api/images'
+import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 
 interface UseClipboardParams {
   items: CanvasItem[]
@@ -35,6 +36,7 @@ export function useClipboard({
   onDeleteSelected,
 }: UseClipboardParams): ClipboardActions {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const { startOperation, endOperation } = useBackgroundOperations()
 
   // Track mouse position globally
   useEffect(() => {
@@ -90,9 +92,12 @@ export function useClipboard({
                 return
               }
               try {
+                startOperation()
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+                endOperation()
                 onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height)
               } catch (err) {
+                endOperation()
                 console.error('Failed to upload image, using data URL:', err)
                 onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
               }
@@ -254,9 +259,12 @@ export function useClipboard({
                 return
               }
               try {
+                startOperation()
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+                endOperation()
                 onAddImageAt(canvasX, canvasY, s3Url, scaled.width, scaled.height)
               } catch (err) {
+                endOperation()
                 console.error('Failed to upload image, using data URL:', err)
                 onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height)
               }

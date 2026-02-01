@@ -6,11 +6,12 @@ interface StatusBarProps {
   saveStatus: SaveStatus
   isOffline: boolean
   onSetOfflineMode: (offline: boolean) => void
+  backgroundOperationsCount: number
 }
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode, backgroundOperationsCount }: StatusBarProps) {
   const handleSwitchToOnline = async () => {
     try {
       // Check if server is available before switching
@@ -119,6 +120,29 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
           </span>
         )}
       </div>
+      {backgroundOperationsCount > 0 && (
+        <span
+          style={{
+            padding: '2px 8px',
+            backgroundColor: '#f59e0b',
+            color: '#fff',
+            borderRadius: 3,
+            fontSize: 11,
+            fontWeight: 500,
+            animation: 'pulse-bg 1.5s ease-in-out infinite',
+          }}
+        >
+          {backgroundOperationsCount} background upload{backgroundOperationsCount !== 1 ? 's' : ''}...
+        </span>
+      )}
+      <style>
+        {`
+          @keyframes pulse-bg {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+          }
+        `}
+      </style>
       <button
         onClick={onToggleDebug}
         style={{

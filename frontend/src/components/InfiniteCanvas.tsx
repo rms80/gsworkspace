@@ -32,6 +32,7 @@ import { usePulseAnimation } from '../hooks/usePulseAnimation'
 import { useMenuState } from '../hooks/useMenuState'
 import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
+import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
   HTML_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
@@ -75,6 +76,9 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
+
+  // Background operations tracking
+  const { startOperation, endOperation } = useBackgroundOperations()
 
   // 1. Viewport hook
   const {
@@ -289,10 +293,13 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             const scaled = scaleImageToViewport(img.width, img.height)
             try {
               // Upload to S3 immediately to avoid storing large data URLs in memory
+              startOperation()
               const s3Url = await uploadImage(dataUrl, file.name || `dropped-${Date.now()}.png`)
+              endOperation()
               // Offset multiple files so they don't stack exactly
               onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height)
             } catch (err) {
+              endOperation()
               console.error('Failed to upload image, using data URL:', err)
               // Fallback to data URL if upload fails
               onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height)
@@ -307,13 +314,18 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
       else if (file.type.startsWith('video/') && config.features.videoSupport) {
         try {
           const dimensions = await getVideoDimensions(file)
+          startOperation()
+          console.log('Video upload started:', file.name, 'size:', (file.size / 1024 / 1024).toFixed(1) + 'MB')
           const url = await uploadVideo(file, isOffline)
+          console.log('Video upload completed:', file.name)
+          endOperation()
           // Extract filename without extension for the label
           const name = file.name.replace(/\.[^/.]+$/, '')
           onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height, name, dimensions.fileSize)
           offsetIndex++
         } catch (err) {
-          console.error('Failed to add dropped video:', err)
+          console.error('Video upload failed:', file.name, err)
+          endOperation()
         }
       }
     }

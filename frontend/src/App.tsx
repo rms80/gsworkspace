@@ -8,6 +8,7 @@ import ConflictDialog from './components/ConflictDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
+import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
@@ -44,6 +45,7 @@ function createScene(name: string): Scene {
 }
 
 function App() {
+  const { activeCount: backgroundOpsCount, startOperation, endOperation } = useBackgroundOperations()
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
@@ -578,15 +580,18 @@ function App() {
   const handleAddVideo = useCallback(async (file: File) => {
     try {
       const dimensions = await getVideoDimensions(file)
+      startOperation()
       const url = await uploadVideo(file, isOffline)
+      endOperation()
       // Extract filename without extension for the label
       const name = file.name.replace(/\.[^/.]+$/, '')
       addVideoItem(url, dimensions.width, dimensions.height, name, dimensions.fileSize)
     } catch (error) {
+      endOperation()
       console.error('Failed to add video:', error)
       alert('Failed to add video. Please try again.')
     }
-  }, [isOffline, addVideoItem])
+  }, [isOffline, addVideoItem, startOperation, endOperation])
 
   const addPromptItem = useCallback(() => {
     const newItem: CanvasItem = {
@@ -1559,6 +1564,7 @@ function App() {
         saveStatus={saveStatus}
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
+        backgroundOperationsCount={backgroundOpsCount}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}
