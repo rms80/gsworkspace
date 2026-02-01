@@ -779,21 +779,24 @@ function App() {
     const selectedItems = items.filter((item) => currentSelectedIds.includes(item.id))
 
     // For images with data URL src, upload to S3 first to avoid storing large data in history
-    const itemsForHistory: CanvasItem[] = await Promise.all(
-      selectedItems.map(async (item) => {
-        if (item.type === 'image' && item.src.startsWith('data:')) {
-          try {
-            const s3Url = await uploadImage(item.src, `deleted-${item.id}.png`)
-            // Return item with S3 URL for history
-            return { ...item, src: s3Url }
-          } catch (err) {
-            console.error('Failed to upload image before delete, storing data URL in history:', err)
+    // Skip this in offline mode - no point attempting upload without network
+    const itemsForHistory: CanvasItem[] = isOffline
+      ? selectedItems
+      : await Promise.all(
+          selectedItems.map(async (item) => {
+            if (item.type === 'image' && item.src.startsWith('data:')) {
+              try {
+                const s3Url = await uploadImage(item.src, `deleted-${item.id}.png`)
+                // Return item with S3 URL for history
+                return { ...item, src: s3Url }
+              } catch (err) {
+                console.error('Failed to upload image before delete, storing data URL in history:', err)
+                return item
+              }
+            }
             return item
-          }
-        }
-        return item
-      })
-    )
+          })
+        )
 
     // Record deletion for each selected item (using S3 URLs where possible)
     itemsForHistory.forEach((item) => {
@@ -807,7 +810,7 @@ function App() {
       return newMap
     })
     updateActiveSceneItems((prev) => prev.filter((item) => !currentSelectedIds.includes(item.id)))
-  }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
+  }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap, isOffline])
 
   const selectItems = useCallback(
     (ids: string[]) => {
