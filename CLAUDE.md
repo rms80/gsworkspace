@@ -5,10 +5,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Workspaceapp is an infinite canvas web application where users can:
-- Drop images and text blocks onto a canvas
+- Drop text blocks, images, and videos onto an infinite canvas
 - Pan/zoom the canvas freely
-- Select items via click or marquee selection
-- Send selected content to Claude LLM with prompts for generation tasks
+- canvas objects can be selected via click or marquee selection, translated and resized
+- The user can create LLM Prompt, ImageGen Prompt, and HTMLGen Prompt objects and configure which AI service will be called when they are run
+- The Prompt objects generate new content - currently text, images or HTML blocks
+- all content can be exported
+- in online mode the scene and content synchronizes with a remote server, in offline mode it is stored locally
+
+
 
 ## Tech Stack
 
@@ -75,3 +80,9 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 
 ## Notes to CLAUDE
 - Everything in the /user_notes folder is just for humans and not relevant to development. These files should still be committed to github but can be ignored by CLAUDE.
+
+- Major work (eg a top-level TODO task) should always be done in a feature branch
+- Never merge a feature branch back into main automatically, always ask me for confirmation
+- Do not push the master branch unless I tell you to
+
+

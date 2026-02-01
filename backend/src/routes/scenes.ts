@@ -18,7 +18,7 @@ interface StoredItemBase {
 interface StoredTextItem extends StoredItemBase {
   type: 'text'
   fontSize: number
-  file: string // reference to .txt file
+  text: string // inline text content
 }
 
 interface StoredImageItem extends StoredItemBase {
@@ -49,13 +49,17 @@ interface StoredVideoItem extends StoredItemBase {
 interface StoredPromptItem extends StoredItemBase {
   type: 'prompt'
   fontSize: number
-  file: string // reference to .json file containing label and text
+  label: string
+  text: string
+  model: string
 }
 
 interface StoredImageGenPromptItem extends StoredItemBase {
   type: 'image-gen-prompt'
   fontSize: number
-  file: string // reference to .json file containing label, text, and model
+  label: string
+  text: string
+  model: string
 }
 
 interface StoredHtmlItem extends StoredItemBase {
@@ -68,7 +72,9 @@ interface StoredHtmlItem extends StoredItemBase {
 interface StoredHtmlGenPromptItem extends StoredItemBase {
   type: 'html-gen-prompt'
   fontSize: number
-  file: string // reference to .json file containing label, text, and model
+  label: string
+  text: string
+  model: string
 }
 
 type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
@@ -116,8 +122,6 @@ router.post('/:id', async (req, res) => {
     // Process each item
     for (const item of items) {
       if (item.type === 'text') {
-        const textFile = `${item.id}.txt`
-        await saveToS3(`${sceneFolder}/${textFile}`, item.text, 'text/plain')
         storedItems.push({
           id: item.id,
           type: 'text',
@@ -126,7 +130,7 @@ router.post('/:id', async (req, res) => {
           width: item.width,
           height: item.height,
           fontSize: item.fontSize,
-          file: textFile,
+          text: item.text,
         })
       } else if (item.type === 'image') {
         const imageFile = `${item.id}.png`
@@ -265,9 +269,6 @@ router.post('/:id', async (req, res) => {
           console.error(`Failed to save video ${item.id}, skipping from scene`)
         }
       } else if (item.type === 'prompt') {
-        const promptFile = `${item.id}.prompt.json`
-        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'claude-sonnet' })
-        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
         storedItems.push({
           id: item.id,
           type: 'prompt',
@@ -276,12 +277,11 @@ router.post('/:id', async (req, res) => {
           width: item.width,
           height: item.height,
           fontSize: item.fontSize,
-          file: promptFile,
+          label: item.label,
+          text: item.text,
+          model: item.model || 'claude-sonnet',
         })
       } else if (item.type === 'image-gen-prompt') {
-        const promptFile = `${item.id}.imagegen.json`
-        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'gemini-imagen' })
-        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
         storedItems.push({
           id: item.id,
           type: 'image-gen-prompt',
@@ -290,12 +290,11 @@ router.post('/:id', async (req, res) => {
           width: item.width,
           height: item.height,
           fontSize: item.fontSize,
-          file: promptFile,
+          label: item.label,
+          text: item.text,
+          model: item.model || 'gemini-imagen',
         })
       } else if (item.type === 'html-gen-prompt') {
-        const promptFile = `${item.id}.htmlgen.json`
-        const promptData = JSON.stringify({ label: item.label, text: item.text, model: item.model || 'claude-sonnet' })
-        await saveToS3(`${sceneFolder}/${promptFile}`, promptData, 'application/json')
         storedItems.push({
           id: item.id,
           type: 'html-gen-prompt',
@@ -304,7 +303,9 @@ router.post('/:id', async (req, res) => {
           width: item.width,
           height: item.height,
           fontSize: item.fontSize,
-          file: promptFile,
+          label: item.label,
+          text: item.text,
+          model: item.model || 'claude-sonnet',
         })
       } else if (item.type === 'html') {
         const htmlFile = `${item.id}.html`
@@ -376,7 +377,6 @@ router.get('/:id', async (req, res) => {
     const items = await Promise.all(
       storedScene.items.map(async (item) => {
         if (item.type === 'text') {
-          const text = await loadFromS3(`${sceneFolder}/${item.file}`)
           return {
             id: item.id,
             type: 'text' as const,
@@ -385,7 +385,7 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             fontSize: item.fontSize,
-            text: text || '',
+            text: item.text,
           }
         } else if (item.type === 'image') {
           // For images, return the public URL
@@ -427,9 +427,6 @@ router.get('/:id', async (req, res) => {
             playbackRate: item.playbackRate,
           }
         } else if (item.type === 'prompt') {
-          // For prompts, load the JSON file
-          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
-          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Prompt', text: '', model: 'claude-sonnet' }
           return {
             id: item.id,
             type: 'prompt' as const,
@@ -438,14 +435,11 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             fontSize: item.fontSize,
-            label: promptData.label,
-            text: promptData.text,
-            model: promptData.model || 'claude-sonnet',
+            label: item.label,
+            text: item.text,
+            model: item.model || 'claude-sonnet',
           }
         } else if (item.type === 'image-gen-prompt') {
-          // For image-gen-prompts, load the JSON file
-          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
-          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'Image Gen', text: '', model: 'gemini-imagen' }
           return {
             id: item.id,
             type: 'image-gen-prompt' as const,
@@ -454,14 +448,11 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             fontSize: item.fontSize,
-            label: promptData.label,
-            text: promptData.text,
-            model: promptData.model || 'gemini-imagen',
+            label: item.label,
+            text: item.text,
+            model: item.model || 'gemini-imagen',
           }
         } else if (item.type === 'html-gen-prompt') {
-          // For html-gen-prompts, load the JSON file
-          const promptJson = await loadFromS3(`${sceneFolder}/${item.file}`)
-          const promptData = promptJson ? JSON.parse(promptJson) : { label: 'HTML Gen', text: '', model: 'claude-sonnet' }
           return {
             id: item.id,
             type: 'html-gen-prompt' as const,
@@ -470,9 +461,9 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             fontSize: item.fontSize,
-            label: promptData.label,
-            text: promptData.text,
-            model: promptData.model || 'claude-sonnet',
+            label: item.label,
+            text: item.text,
+            model: item.model || 'claude-sonnet',
           }
         } else {
           // For HTML items, load the HTML file
