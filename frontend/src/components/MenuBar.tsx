@@ -90,7 +90,7 @@ function MenuBar({
     reader.readAsDataURL(file)
   }
 
-  const menus: MenuDef[] = [
+  const leftMenus: MenuDef[] = [
     {
       label: 'File',
       items: [
@@ -125,10 +125,6 @@ function MenuBar({
         { label: 'Hotkey Reference', onClick: () => setHotkeyDialogOpen(true) },
       ],
     },
-    {
-      label: 'About',
-      onClick: handleOpenAbout,
-    },
     ...(config.features.debugMenu ? [{
       label: 'Debug',
       items: [
@@ -137,6 +133,13 @@ function MenuBar({
         { label: 'Clear History', onClick: handleClearHistory },
       ],
     }] : []),
+  ]
+
+  const rightMenus: MenuDef[] = [
+    {
+      label: 'About',
+      onClick: handleOpenAbout,
+    },
   ]
 
   async function handleShowSceneJson() {
@@ -308,7 +311,7 @@ function MenuBar({
         zIndex: 60,
       }}
     >
-      {menus.map((menu) => (
+      {leftMenus.map((menu) => (
         <div key={menu.label} style={{ position: 'relative' }}>
           <button
             onClick={() => handleMenuClick(menu)}
@@ -331,6 +334,81 @@ function MenuBar({
                 position: 'absolute',
                 top: '100%',
                 left: 0,
+                backgroundColor: '#fff',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                minWidth: '160px',
+                zIndex: 200,
+              }}
+            >
+              {menu.items.map((item, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleItemClick(item)}
+                  disabled={item.disabled}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    width: '100%',
+                    padding: '8px 12px',
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    cursor: item.disabled ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '14px',
+                    textAlign: 'left',
+                    color: item.disabled ? '#aaa' : '#333',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!item.disabled) {
+                      e.currentTarget.style.backgroundColor = '#f0f0f0'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent'
+                  }}
+                >
+                  <span>{item.label}</span>
+                  {item.shortcut && (
+                    <span style={{ color: '#888', fontSize: '12px', marginLeft: '16px' }}>
+                      {item.shortcut}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+
+      {/* Spacer to push right menus to the right */}
+      <div style={{ flex: 1 }} />
+
+      {rightMenus.map((menu) => (
+        <div key={menu.label} style={{ position: 'relative' }}>
+          <button
+            onClick={() => handleMenuClick(menu)}
+            style={{
+              padding: '4px 12px',
+              backgroundColor: openMenu === menu.label ? '#e0e0e0' : 'transparent',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '14px',
+            }}
+          >
+            {menu.label}
+          </button>
+
+          {openMenu === menu.label && menu.items && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
                 backgroundColor: '#fff',
                 border: '1px solid #ccc',
                 borderRadius: '4px',
