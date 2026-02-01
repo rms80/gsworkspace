@@ -52,8 +52,11 @@ export default function VideoItemRenderer({
   const totalHeight = displayHeight + headerHeight
 
   // Build metadata string (dimensions and file size)
+  // Show cropped dimensions if crop exists, otherwise original dimensions
   const metadataParts: string[] = []
-  if (item.originalWidth && item.originalHeight) {
+  if (item.cropRect) {
+    metadataParts.push(`${Math.round(item.cropRect.width)}×${Math.round(item.cropRect.height)}`)
+  } else if (item.originalWidth && item.originalHeight) {
     metadataParts.push(`${item.originalWidth}×${item.originalHeight}`)
   }
   if (item.fileSize) {
