@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Scene } from '../types'
 
 interface TabBarProps {
@@ -30,6 +30,36 @@ function TabBar({
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameDialog, setRenameDialog] = useState<{ sceneId: string; currentName: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+
+    // Use setTimeout to avoid closing immediately from the same click that opened it
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [contextMenu])
+
+  // Select all text when rename dialog opens
+  useEffect(() => {
+    if (renameDialog && renameInputRef.current) {
+      renameInputRef.current.select()
+    }
+  }, [renameDialog])
 
   const handleContextMenu = (e: React.MouseEvent, scene: Scene) => {
     e.preventDefault()
@@ -44,6 +74,11 @@ function TabBar({
 
   const handleCloseContextMenu = () => {
     setContextMenu(null)
+  }
+
+  const handleDoubleClick = (scene: Scene) => {
+    setRenameDialog({ sceneId: scene.id, currentName: scene.name })
+    setRenameValue(scene.name)
   }
 
   const handleRenameClick = () => {
@@ -102,6 +137,7 @@ function TabBar({
           <div
             key={scene.id}
             onClick={() => onSelectScene(scene.id)}
+            onDoubleClick={() => handleDoubleClick(scene)}
             onContextMenu={(e) => handleContextMenu(e, scene)}
             style={{
               display: 'flex',
@@ -159,6 +195,7 @@ function TabBar({
       {/* Context Menu */}
       {contextMenu && (
         <div
+          ref={contextMenuRef}
           style={{
             position: 'fixed',
             top: contextMenu.y,
@@ -239,6 +276,7 @@ function TabBar({
           >
             <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Rename Scene</h3>
             <input
+              ref={renameInputRef}
               type="text"
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}

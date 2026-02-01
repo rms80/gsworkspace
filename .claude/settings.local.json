@@ -31,7 +31,8 @@
       "Bash(npx vite build)",
       "Bash(npx eslint:*)",
       "Bash(pkill:*)",
-      "Bash(git stash:*)"
+      "Bash(git stash:*)",
+      "Bash(git branch:*)"
     ]
   }
 }
