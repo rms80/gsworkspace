@@ -1508,6 +1508,10 @@ function App() {
         onRenameScene={renameScene}
         onCloseScene={closeScene}
         onDeleteScene={handleDeleteScene}
+        onAddText={addTextItem}
+        onAddPrompt={addPromptItem}
+        onAddImageGenPrompt={addImageGenPromptItem}
+        onAddHtmlGenPrompt={addHtmlGenPromptItem}
       />
       {activeScene ? (
         <InfiniteCanvas

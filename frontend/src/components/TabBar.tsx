@@ -9,6 +9,10 @@ interface TabBarProps {
   onRenameScene: (id: string, name: string) => void
   onCloseScene: (id: string) => void
   onDeleteScene: (id: string) => void
+  onAddText?: () => void
+  onAddPrompt?: () => void
+  onAddImageGenPrompt?: () => void
+  onAddHtmlGenPrompt?: () => void
 }
 
 interface ContextMenuState {
@@ -26,10 +30,15 @@ function TabBar({
   onRenameScene,
   onCloseScene,
   onDeleteScene,
+  onAddText,
+  onAddPrompt,
+  onAddImageGenPrompt,
+  onAddHtmlGenPrompt,
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameDialog, setRenameDialog] = useState<{ sceneId: string; currentName: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [newSubmenuOpen, setNewSubmenuOpen] = useState(false)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
@@ -74,6 +83,7 @@ function TabBar({
 
   const handleCloseContextMenu = () => {
     setContextMenu(null)
+    setNewSubmenuOpen(false)
   }
 
   const handleDoubleClick = (scene: Scene) => {
@@ -226,6 +236,110 @@ function TabBar({
           >
             Rename
           </button>
+          {/* New submenu */}
+          <div
+            style={{ position: 'relative' }}
+            onMouseEnter={() => setNewSubmenuOpen(true)}
+            onMouseLeave={() => setNewSubmenuOpen(false)}
+          >
+            <button
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: newSubmenuOpen ? '#f0f0f0' : 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+            >
+              New &rarr;
+            </button>
+            {newSubmenuOpen && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '100%',
+                  top: 0,
+                  background: 'white',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  minWidth: 140,
+                }}
+              >
+                <button
+                  onClick={() => { onAddText?.(); setContextMenu(null) }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  Text Block
+                </button>
+                <button
+                  onClick={() => { onAddPrompt?.(); setContextMenu(null) }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  LLM Prompt
+                </button>
+                <button
+                  onClick={() => { onAddImageGenPrompt?.(); setContextMenu(null) }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  ImageGen Prompt
+                </button>
+                <button
+                  onClick={() => { onAddHtmlGenPrompt?.(); setContextMenu(null) }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px 16px',
+                    border: 'none',
+                    background: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                    fontSize: 14,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+                >
+                  HTMLGen Prompt
+                </button>
+              </div>
+            )}
+          </div>
           <button
             onClick={handleDeleteClick}
             style={{
