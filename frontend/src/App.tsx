@@ -64,6 +64,7 @@ function App() {
   const lastSavedRef = useRef<Map<string, string>>(new Map())
   const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
+  const persistedSceneIdsRef = useRef<Set<string>>(new Set()) // Tracks scenes that have been saved to server
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -163,6 +164,7 @@ function App() {
         scenesWithHistory.forEach(({ scene, history }) => {
           lastSavedRef.current.set(scene.id, JSON.stringify(scene))
           lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
+          persistedSceneIdsRef.current.add(scene.id) // Mark as persisted (loaded from server)
           newHistoryMap.set(scene.id, history)
           newSelectionMap.set(scene.id, []) // Start with empty selection
         })
@@ -249,6 +251,7 @@ function App() {
         lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
         // Update the known server timestamp to match what we just saved
         lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
+        persistedSceneIdsRef.current.add(activeScene.id) // Mark as persisted
         setSaveStatus('saved')
       } catch (error) {
         console.error('Failed to auto-save scene:', error)
@@ -268,6 +271,9 @@ function App() {
   // Auto-save history when it changes (debounced)
   useEffect(() => {
     if (!activeSceneId || isLoading) return
+
+    // Only save history for scenes that have been persisted to the server
+    if (!persistedSceneIdsRef.current.has(activeSceneId)) return
 
     const history = historyMap.get(activeSceneId)
     if (!history) return
@@ -459,6 +465,7 @@ function App() {
         setSaveStatus('saving')
         await saveScene(updatedScene)
         lastSavedRef.current.set(id, JSON.stringify(updatedScene))
+        persistedSceneIdsRef.current.add(id) // Mark as persisted
         setSaveStatus('saved')
       } catch (error) {
         console.error('Failed to save renamed scene:', error)
@@ -1238,6 +1245,7 @@ function App() {
         setOpenScenes((prev) => [...prev, scene])
         lastSavedRef.current.set(scene.id, JSON.stringify(scene))
         lastKnownServerModifiedAtRef.current.set(scene.id, scene.modifiedAt)
+        persistedSceneIdsRef.current.add(scene.id) // Mark as persisted (loaded from server)
 
         // Initialize history
         setHistoryMap((prev) => {
@@ -1287,6 +1295,7 @@ function App() {
       )
       lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
       lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+      persistedSceneIdsRef.current.add(activeSceneId) // Mark as persisted (loaded from server)
 
       // Update history
       setHistoryMap((prev) => {
@@ -1324,6 +1333,7 @@ function App() {
       await saveScene(activeScene)
       lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
       lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
+      persistedSceneIdsRef.current.add(activeScene.id) // Mark as persisted
 
       // Clear conflict state
       clearConflict()
@@ -1374,8 +1384,10 @@ function App() {
       ])
       lastSavedRef.current.set(activeSceneId, JSON.stringify(remoteScene))
       lastKnownServerModifiedAtRef.current.set(activeSceneId, remoteScene.modifiedAt)
+      persistedSceneIdsRef.current.add(activeSceneId) // Mark original as persisted (loaded from server)
       lastSavedRef.current.set(forkedScene.id, '') // Mark fork as needing save
       // Forked scene has no server timestamp yet - it will be set on first save
+      // Note: forkedScene.id is NOT added to persistedSceneIdsRef - it's a new local scene
 
       // Update history for both scenes
       setHistoryMap((prev) => {
