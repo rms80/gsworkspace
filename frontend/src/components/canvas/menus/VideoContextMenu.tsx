@@ -69,14 +69,45 @@ export default function VideoContextMenu({
 
   const handleRemoveCrop = () => {
     if (!videoItem) { onClose(); return }
-    // Reset to original dimensions
+    // Calculate scale factor from cropped display size
     const origW = videoItem.originalWidth ?? videoItem.width
     const origH = videoItem.originalHeight ?? videoItem.height
+    const cropRect = videoItem.cropRect
+    const scaleX = videoItem.scaleX ?? 1
+    const scaleY = videoItem.scaleY ?? 1
+
+    let newWidth: number
+    let newHeight: number
+    let newX = videoItem.x
+    let newY = videoItem.y
+
+    if (cropRect) {
+      // The cropped region (cropRect.width x cropRect.height source pixels)
+      // is displayed at (videoItem.width x videoItem.height) canvas size.
+      // Maintain the same scale for the full video.
+      const baseDisplayScaleX = videoItem.width / cropRect.width
+      const baseDisplayScaleY = videoItem.height / cropRect.height
+      const displayScaleX = baseDisplayScaleX * scaleX
+      const displayScaleY = baseDisplayScaleY * scaleY
+      newWidth = origW * baseDisplayScaleX
+      newHeight = origH * baseDisplayScaleY
+      // Adjust position so the uncropped video aligns with where crop region was
+      newX = videoItem.x - cropRect.x * displayScaleX
+      newY = videoItem.y - cropRect.y * displayScaleY
+    } else {
+      // No crop rect, just use original dimensions
+      newWidth = origW
+      newHeight = origH
+    }
+
     onUpdateItem(videoItem.id, {
-      width: origW,
-      height: origH,
+      x: newX,
+      y: newY,
+      width: newWidth,
+      height: newHeight,
       cropRect: undefined,
       cropSrc: undefined,
+      speedFactor: undefined,
     })
     onClose()
   }
