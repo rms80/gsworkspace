@@ -48,7 +48,7 @@ router.post('/upload-image', async (req, res) => {
   try {
     const { imageData, filename } = req.body
     const id = uuidv4()
-    const key = `images/${id}-${filename}`
+    const key = `temp/images/${id}-${filename}`
 
     // imageData is base64, convert to buffer
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
@@ -82,7 +82,7 @@ router.post('/upload-video', async (req, res) => {
       if (dotIndex >= 0) ext = filename.slice(dotIndex + 1)
     }
 
-    const key = `videos/${id}-${filename || `video.${ext}`}`
+    const key = `temp/videos/${id}-${filename || `video.${ext}`}`
 
     // videoData is base64 data URL, convert to buffer
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, '')

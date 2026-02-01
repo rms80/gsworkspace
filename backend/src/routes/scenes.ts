@@ -178,9 +178,9 @@ router.post('/:id', async (req, res) => {
                   contentType
                 )
                 imageSaved = true
-                // Track staging file for cleanup if it's from /images/ folder
+                // Track staging file for cleanup if it's from /temp/images/ folder
                 const stagingKey = getS3KeyFromUrl(item.src)
-                if (stagingKey && stagingKey.startsWith('images/')) {
+                if (stagingKey && stagingKey.startsWith('temp/images/')) {
                   stagingKeysToDelete.push(stagingKey)
                 }
               }
@@ -254,9 +254,9 @@ router.post('/:id', async (req, res) => {
                   contentType
                 )
                 videoSaved = true
-                // Track staging file for cleanup if it's from /videos/ folder
+                // Track staging file for cleanup if it's from /temp/videos/ folder
                 const stagingKey = getS3KeyFromUrl(item.src)
-                if (stagingKey && stagingKey.startsWith('videos/')) {
+                if (stagingKey && stagingKey.startsWith('temp/videos/')) {
                   stagingKeysToDelete.push(stagingKey)
                 }
               }

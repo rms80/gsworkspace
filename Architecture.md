@@ -13,8 +13,8 @@ Media files (images and videos) follow a two-stage storage pattern to balance im
 **Stage 1: Staging Upload (immediate)**
 
 When a user pastes or drops an image/video onto the canvas, the file is immediately uploaded to a staging folder in S3:
-- Images: `images/{uuid}-{filename}.png`
-- Videos: `videos/{uuid}-{filename}.{ext}`
+- Images: `temp/images/{uuid}-{filename}.png`
+- Videos: `temp/videos/{uuid}-{filename}.{ext}`
 
 This happens via the `/api/items/upload-image` and `/api/items/upload-video` endpoints.
 
@@ -38,10 +38,10 @@ After successful copy, the original staging file is deleted to avoid duplication
 User drops image
        │
        ▼
-┌──────────────────┐
-│ uploadImage()    │  Frontend calls /api/items/upload-image
-│ → images/{uuid}  │  File stored in staging folder
-└────────┬─────────┘
+┌──────────────────────┐
+│ uploadImage()        │  Frontend calls /api/items/upload-image
+│ → temp/images/{uuid} │  File stored in staging folder
+└────────┬─────────────┘
          │
          ▼
    Canvas shows image
