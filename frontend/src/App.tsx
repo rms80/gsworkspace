@@ -1519,10 +1519,6 @@ function App() {
         onRenameScene={renameScene}
         onCloseScene={closeScene}
         onDeleteScene={handleDeleteScene}
-        onAddText={addTextItem}
-        onAddPrompt={addPromptItem}
-        onAddImageGenPrompt={addImageGenPromptItem}
-        onAddHtmlGenPrompt={addHtmlGenPromptItem}
       />
       {activeScene ? (
         <InfiniteCanvas
@@ -1541,6 +1537,10 @@ function App() {
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
           isOffline={isOffline}
+          onAddText={addTextItem}
+          onAddPrompt={addPromptItem}
+          onAddImageGenPrompt={addImageGenPromptItem}
+          onAddHtmlGenPrompt={addHtmlGenPromptItem}
         />
       ) : (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>

@@ -54,9 +54,13 @@ interface InfiniteCanvasProps {
   onRunHtmlGenPrompt: (promptId: string) => void
   runningHtmlGenPromptIds: Set<string>
   isOffline: boolean
+  onAddText?: () => void
+  onAddPrompt?: () => void
+  onAddImageGenPrompt?: () => void
+  onAddHtmlGenPrompt?: () => void
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -838,6 +842,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         <CanvasContextMenu
           position={contextMenuState.menuPosition}
           onPaste={handleContextMenuPaste}
+          onAddText={onAddText}
+          onAddPrompt={onAddPrompt}
+          onAddImageGenPrompt={onAddImageGenPrompt}
+          onAddHtmlGenPrompt={onAddHtmlGenPrompt}
+          onClose={contextMenuState.closeMenu}
         />
       )}
 
