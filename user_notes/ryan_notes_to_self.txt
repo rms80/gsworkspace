@@ -220,6 +220,22 @@ where it was working back into main, and push to github, without me saying so (u
 been telling it when to merge and push, and usually when to commit, although sometimes it did commit on it's own).
 Had it roll back these changes so we could try again with a more specific plan
 
+Feb 1
+
+Had some new ideas and decided that the current back-end structure was not ideal - each scene object was backed
+by a separate file, even simple text blocks and prompt objects. I want it to be easy for an LLM to generate 
+scene content, inlining this text in the scene will simplify that. So I asked for a detailed plan in TODO.
+It's plan seems sensible, told it to do everything in a feature branch. Seems to be working fine.
+
+Discovered some weirdness w/ images on the server. Asked CC to explain. It had apparently implemented some 
+temporary upload storage to deal with images in unsaved scenes. More complicated than I expected, but sensible.
+It suggested a way to clean up temporary files, seems to be working.
+
+Noticed huge data URLs in history. Asked it about this. It explained it's due to deletes before images are uploaded.
+CC suggested delete operations could wait until image upload finishes. Seems fine, agreed, it works.
+
+Noticed empty scene folders being created on server when I make a new empty scene - scene file is not saved but an
+empty history file was. Asked CC to fix. It did something...watched changes go by, they seem kinda dumb, but it works soo....
 
 
 
