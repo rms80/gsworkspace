@@ -74,7 +74,11 @@ export default function VideoItemRenderer({
       height={totalHeight}
       draggable
       onClick={(e) => onItemClick(e, item.id)}
-      onContextMenu={(e) => onContextMenu(e, item.id)}
+      onContextMenu={(e) => {
+        e.evt.preventDefault()
+        e.cancelBubble = true
+        onContextMenu(e, item.id)
+      }}
       onDragStart={() => {
         setVideoItemTransforms((prev) => {
           const newMap = new Map(prev)
