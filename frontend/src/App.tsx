@@ -990,16 +990,27 @@ function App() {
       let currentY = startY
       const newItems: CanvasItem[] = []
 
+      // Find the largest selected image to use as target size
+      const selectedImages = selectedItems.filter((item): item is typeof item & { type: 'image' } => item.type === 'image')
+      let targetSize = 400 // default max size
+      if (selectedImages.length > 0) {
+        // Find the largest displayed dimension among selected images
+        targetSize = Math.max(...selectedImages.map(img => {
+          const displayedWidth = img.width * (img.scaleX ?? 1)
+          const displayedHeight = img.height * (img.scaleY ?? 1)
+          return Math.max(displayedWidth, displayedHeight)
+        }))
+      }
+
       for (const dataUrl of images) {
         const item = await new Promise<CanvasItem>((resolve) => {
           const img = new window.Image()
           img.onload = () => {
-            // Scale down if too large, maintaining aspect ratio
-            const maxSize = 400
+            // Scale to match selected image size, or default max size
             let width = img.width
             let height = img.height
-            if (width > maxSize || height > maxSize) {
-              const scale = maxSize / Math.max(width, height)
+            if (width > targetSize || height > targetSize) {
+              const scale = targetSize / Math.max(width, height)
               width = Math.round(width * scale)
               height = Math.round(height * scale)
             }
