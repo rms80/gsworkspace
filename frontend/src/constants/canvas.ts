@@ -131,6 +131,6 @@ export const LLM_MODEL_LABELS: Record<LLMModel, string> = {
 }
 
 export const IMAGE_GEN_MODEL_LABELS: Record<ImageGenModel, string> = {
-  'gemini-imagen': 'Gemini Imagen',
-  'gemini-flash-imagen': 'Gemini Flash Imagen',
+  'gemini-imagen': 'Gemini Nanobana',
+  'gemini-flash-imagen': 'Gemini Nanobana Pro',
 }
