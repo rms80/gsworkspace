@@ -237,6 +237,11 @@ CC suggested delete operations could wait until image upload finishes. Seems fin
 Noticed empty scene folders being created on server when I make a new empty scene - scene file is not saved but an
 empty history file was. Asked CC to fix. It did something...watched changes go by, they seem kinda dumb, but it works soo....
 
+Created a list of minor improvements in TODO file. I'm pretty sure it would easily handle each of these.
+Tell it to do them all at once. Actually does kind of a shit job, two out of 6 are wrong. 
+The confusion seems to be that the things at not related, but there is overlap in words, eg
+two are related to context menus, but different context menus. But it does the second
+change to the first context menu.
 
 
 
