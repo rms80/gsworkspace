@@ -85,23 +85,25 @@ export default function VideoContextMenu({
     if (!videoItem) { onClose(); return }
 
     try {
-      const ext = getVideoExtension(videoItem.src)
+      // Use cropped version if available, otherwise original
+      const exportSrc = videoItem.cropSrc ?? videoItem.src
+      const ext = videoItem.cropSrc ? 'mp4' : getVideoExtension(videoItem.src)
       const baseName = videoItem.name || 'video'
       const filename = `${baseName}.${ext}`
 
       let blob: Blob
 
-      if (videoItem.src.startsWith('data:') || videoItem.src.startsWith('blob:')) {
+      if (exportSrc.startsWith('data:') || exportSrc.startsWith('blob:')) {
         // Fetch directly for data URLs and blob URLs
-        const response = await fetch(videoItem.src)
+        const response = await fetch(exportSrc)
         blob = await response.blob()
       } else {
         // Use proxy for external URLs to avoid CORS
-        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoItem.src)}`
+        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(exportSrc)}`
         const response = await fetch(proxyUrl)
         if (!response.ok) {
           // Try direct fetch as fallback
-          const directResponse = await fetch(videoItem.src)
+          const directResponse = await fetch(exportSrc)
           if (!directResponse.ok) {
             throw new Error('Failed to fetch video')
           }
