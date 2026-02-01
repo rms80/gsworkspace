@@ -36,23 +36,6 @@ export default function CanvasContextMenu({
         minWidth: 120,
       }}
     >
-      <button
-        onClick={onPaste}
-        style={{
-          display: 'block',
-          width: '100%',
-          padding: '8px 16px',
-          border: 'none',
-          background: 'none',
-          textAlign: 'left',
-          cursor: 'pointer',
-          fontSize: 14,
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-      >
-        Paste
-      </button>
       {/* New submenu */}
       <div
         style={{ position: 'relative' }}
@@ -71,7 +54,7 @@ export default function CanvasContextMenu({
             fontSize: 14,
           }}
         >
-          New &rarr;
+          New...
         </button>
         {newSubmenuOpen && (
           <div
@@ -158,6 +141,23 @@ export default function CanvasContextMenu({
           </div>
         )}
       </div>
+      <button
+        onClick={onPaste}
+        style={{
+          display: 'block',
+          width: '100%',
+          padding: '8px 16px',
+          border: 'none',
+          background: 'none',
+          textAlign: 'left',
+          cursor: 'pointer',
+          fontSize: 14,
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+      >
+        Paste
+      </button>
     </div>
   )
 }
