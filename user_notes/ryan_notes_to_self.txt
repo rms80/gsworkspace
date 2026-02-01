@@ -243,6 +243,14 @@ The confusion seems to be that the things at not related, but there is overlap i
 two are related to context menus, but different context menus. But it does the second
 change to the first context menu.
 
+Next up: video cropping support. Previously had asked about this and it had suggested using ffmpeg.wasm. 
+Asked it to make a plan for implementation and get back to me. It points out that the wasm version is very
+slow and (except in offline mode) we can use a server-side version which calls platform ffmpeg binary.
+I agree with this plan except I would like to not have to install ffmpeg myself. It finds an npm module
+that installs platform ffmpeg locally. I agree w/ the plan and tell it to continue.
+It's going to town with agents...
+
+
 
 
 ----------------------

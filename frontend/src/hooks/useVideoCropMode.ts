@@ -16,6 +16,12 @@ export interface VideoCropMode {
   setPendingCropRect: (rect: CropRect | null) => void
   applyCrop: () => void
   cancelCrop: () => void
+  applyOrCancelCrop: () => void
+}
+
+function cropRectsEqual(a: CropRect | null, b: CropRect | null): boolean {
+  if (!a || !b) return a === b
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
 }
 
 export function useVideoCropMode({
@@ -25,11 +31,13 @@ export function useVideoCropMode({
 }: UseVideoCropModeParams): VideoCropMode {
   const [croppingVideoId, setCroppingVideoId] = useState<string | null>(null)
   const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
+  const [initialCropRect, setInitialCropRect] = useState<CropRect | null>(null)
   const [processingVideoId, setProcessingVideoId] = useState<string | null>(null)
 
   const startCrop = useCallback((id: string, initialRect: CropRect) => {
     setCroppingVideoId(id)
     setPendingCropRect(initialRect)
+    setInitialCropRect(initialRect)
   }, [])
 
   const applyCrop = useCallback(() => {
@@ -84,6 +92,7 @@ export function useVideoCropMode({
 
     setCroppingVideoId(null)
     setPendingCropRect(null)
+    setInitialCropRect(null)
 
     // Skip server-side crop in offline mode
     if (isOffline) {
@@ -107,7 +116,17 @@ export function useVideoCropMode({
   const cancelCrop = useCallback(() => {
     setCroppingVideoId(null)
     setPendingCropRect(null)
+    setInitialCropRect(null)
   }, [])
+
+  // Apply crop if modified, otherwise cancel
+  const applyOrCancelCrop = useCallback(() => {
+    if (cropRectsEqual(pendingCropRect, initialCropRect)) {
+      cancelCrop()
+    } else {
+      applyCrop()
+    }
+  }, [pendingCropRect, initialCropRect, cancelCrop, applyCrop])
 
   // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
   useEffect(() => {
@@ -134,5 +153,6 @@ export function useVideoCropMode({
     setPendingCropRect,
     applyCrop,
     cancelCrop,
+    applyOrCancelCrop,
   }
 }

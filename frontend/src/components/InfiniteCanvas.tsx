@@ -113,6 +113,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     processingVideoId,
     startCrop: startVideoCrop,
     setPendingCropRect: setVideoPendingCropRect,
+    applyOrCancelCrop: applyOrCancelVideoCrop,
   } = useVideoCropMode({ items, isOffline, onUpdateItem })
 
   // 4. Prompt editing hooks (x3)
@@ -145,6 +146,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     onSelectItems,
     croppingImageId,
     applyCrop,
+    croppingVideoId,
+    applyOrCancelVideoCrop: applyOrCancelVideoCrop,
   })
 
   // 8. Clipboard hook

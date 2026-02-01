@@ -11,6 +11,8 @@ interface UseCanvasSelectionParams {
   onSelectItems: (ids: string[]) => void
   croppingImageId: string | null
   applyCrop: () => void
+  croppingVideoId: string | null
+  applyOrCancelVideoCrop: () => void
 }
 
 export interface CanvasSelection {
@@ -32,16 +34,25 @@ export function useCanvasSelection({
   onSelectItems,
   croppingImageId,
   applyCrop,
+  croppingVideoId,
+  applyOrCancelVideoCrop,
 }: UseCanvasSelectionParams): CanvasSelection {
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionStartRef = useRef({ x: 0, y: 0 })
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // If in crop mode and clicking on empty canvas, apply crop
+    // If in image crop mode and clicking on empty canvas, apply crop
     if (croppingImageId) {
       if (e.target === stageRef.current) {
         applyCrop()
+      }
+      return
+    }
+    // If in video crop mode and clicking on empty canvas, apply or cancel crop
+    if (croppingVideoId) {
+      if (e.target === stageRef.current) {
+        applyOrCancelVideoCrop()
       }
       return
     }
