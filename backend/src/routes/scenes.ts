@@ -6,6 +6,17 @@ const router = Router()
 // User folder - hardcoded for now, will be per-user later
 const USER_FOLDER = 'version0'
 
+// Helper to extract S3 key from a full S3 URL
+function getS3KeyFromUrl(url: string): string | null {
+  const bucketName = process.env.S3_BUCKET_NAME
+  const region = process.env.AWS_REGION || 'us-east-1'
+  const prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+  if (url.startsWith(prefix)) {
+    return url.slice(prefix.length)
+  }
+  return null
+}
+
 // Types for stored scene format
 interface StoredItemBase {
   id: string
@@ -118,6 +129,7 @@ router.post('/:id', async (req, res) => {
 
     const sceneFolder = `${USER_FOLDER}/${id}`
     const storedItems: StoredItem[] = []
+    const stagingKeysToDelete: string[] = [] // Track staging files to clean up
 
     // Process each item
     for (const item of items) {
@@ -166,6 +178,11 @@ router.post('/:id', async (req, res) => {
                   contentType
                 )
                 imageSaved = true
+                // Track staging file for cleanup if it's from /images/ folder
+                const stagingKey = getS3KeyFromUrl(item.src)
+                if (stagingKey && stagingKey.startsWith('images/')) {
+                  stagingKeysToDelete.push(stagingKey)
+                }
               }
             } catch (err) {
               console.error(`Failed to fetch image from ${item.src}:`, err)
@@ -237,6 +254,11 @@ router.post('/:id', async (req, res) => {
                   contentType
                 )
                 videoSaved = true
+                // Track staging file for cleanup if it's from /videos/ folder
+                const stagingKey = getS3KeyFromUrl(item.src)
+                if (stagingKey && stagingKey.startsWith('videos/')) {
+                  stagingKeysToDelete.push(stagingKey)
+                }
               }
             } catch (err) {
               console.error(`Failed to fetch video from ${item.src}:`, err)
@@ -333,6 +355,17 @@ router.post('/:id', async (req, res) => {
       items: storedItems,
     }
     await saveToS3(`${sceneFolder}/scene.json`, JSON.stringify(storedScene, null, 2))
+
+    // Clean up staging files (images/ and videos/ folders) after successful save
+    if (stagingKeysToDelete.length > 0) {
+      await Promise.all(
+        stagingKeysToDelete.map(key =>
+          deleteFromS3(key).catch(err =>
+            console.error(`Failed to delete staging file ${key}:`, err)
+          )
+        )
+      )
+    }
 
     res.json({ success: true, id })
   } catch (error) {
