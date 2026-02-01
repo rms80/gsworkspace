@@ -170,7 +170,7 @@ router.post('/crop-image', async (req, res) => {
   }
 })
 
-// Crop a video and save the cropped version to S3
+// Process a video (crop and/or speed change) and save to S3
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
   const inputPath = path.join(tempDir, `video-input-${uuidv4()}.mp4`)
@@ -183,18 +183,15 @@ router.post('/crop-video', async (req, res) => {
   }
 
   try {
-    const { src, cropRect } = req.body
-    if (!src || !cropRect) {
-      return res.status(400).json({ error: 'src and cropRect are required' })
+    const { src, cropRect, speed } = req.body
+    console.log('crop-video request:', { src: src?.substring(0, 50), cropRect, speed })
+    if (!src) {
+      return res.status(400).json({ error: 'src is required' })
     }
-
-    let { x, y, width, height } = cropRect
-
-    // Ensure even dimensions (required by H.264)
-    x = Math.round(x)
-    y = Math.round(y)
-    width = Math.round(width / 2) * 2
-    height = Math.round(height / 2) * 2
+    if (!cropRect && (!speed || speed === 1)) {
+      console.log('crop-video rejected: no cropRect and speed is 1 or undefined')
+      return res.status(400).json({ error: 'cropRect or speed change is required' })
+    }
 
     // Download video to temp file
     const response = await fetch(src)
@@ -204,12 +201,63 @@ router.post('/crop-video', async (req, res) => {
     const arrayBuffer = await response.arrayBuffer()
     fs.writeFileSync(inputPath, Buffer.from(arrayBuffer))
 
-    // Crop with ffmpeg
+    // Build ffmpeg command with filters
+    const videoFilters: string[] = []
+    const audioFilters: string[] = []
+
+    // Add crop filter if cropRect provided
+    if (cropRect) {
+      let { x, y, width, height } = cropRect
+      // Ensure even dimensions (required by H.264)
+      x = Math.round(x)
+      y = Math.round(y)
+      width = Math.round(width / 2) * 2
+      height = Math.round(height / 2) * 2
+      videoFilters.push(`crop=${width}:${height}:${x}:${y}`)
+    }
+
+    // Add speed filter if speed provided and not 1
+    const effectiveSpeed = speed && speed !== 1 ? speed : null
+    if (effectiveSpeed) {
+      // Video: setpts divides by speed (faster = smaller PTS values)
+      videoFilters.push(`setpts=PTS/${effectiveSpeed}`)
+
+      // Audio: atempo only supports 0.5-2.0, so chain multiple for extreme values
+      // For speed > 1 (faster): atempo=speed (chain if > 2)
+      // For speed < 1 (slower): atempo=speed (chain if < 0.5)
+      let remainingSpeed = effectiveSpeed
+      while (remainingSpeed > 2.0) {
+        audioFilters.push('atempo=2.0')
+        remainingSpeed /= 2.0
+      }
+      while (remainingSpeed < 0.5) {
+        audioFilters.push('atempo=0.5')
+        remainingSpeed /= 0.5
+      }
+      audioFilters.push(`atempo=${remainingSpeed}`)
+    }
+
+    // Process with ffmpeg
     await new Promise<void>((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoFilter(`crop=${width}:${height}:${x}:${y}`)
-        .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy'])
-        .output(outputPath)
+      const cmd = ffmpeg(inputPath)
+
+      if (videoFilters.length > 0) {
+        cmd.videoFilter(videoFilters)
+      }
+      if (audioFilters.length > 0) {
+        cmd.audioFilter(audioFilters)
+      }
+
+      cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+
+      // If we're changing audio, we need to re-encode it
+      if (audioFilters.length > 0) {
+        cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
+      } else {
+        cmd.outputOptions(['-c:a', 'copy'])
+      }
+
+      cmd.output(outputPath)
         .on('end', () => resolve())
         .on('error', (err) => reject(err))
         .run()
@@ -242,8 +290,8 @@ router.post('/crop-video', async (req, res) => {
     res.json({ success: true, url })
   } catch (error) {
     cleanup()
-    console.error('Error cropping video:', error)
-    res.status(500).json({ error: 'Failed to crop video' })
+    console.error('Error processing video:', error)
+    res.status(500).json({ error: 'Failed to process video' })
   }
 })
 

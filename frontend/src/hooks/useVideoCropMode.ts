@@ -11,9 +11,11 @@ interface UseVideoCropModeParams {
 export interface VideoCropMode {
   croppingVideoId: string | null
   pendingCropRect: CropRect | null
+  pendingSpeed: number
   processingVideoId: string | null
-  startCrop: (id: string, initialRect: CropRect) => void
+  startCrop: (id: string, initialRect: CropRect, initialSpeed: number) => void
   setPendingCropRect: (rect: CropRect | null) => void
+  setPendingSpeed: (speed: number) => void
   applyCrop: () => void
   cancelCrop: () => void
   applyOrCancelCrop: () => void
@@ -32,12 +34,16 @@ export function useVideoCropMode({
   const [croppingVideoId, setCroppingVideoId] = useState<string | null>(null)
   const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
   const [initialCropRect, setInitialCropRect] = useState<CropRect | null>(null)
+  const [pendingSpeed, setPendingSpeed] = useState<number>(1)
+  const [initialSpeed, setInitialSpeed] = useState<number>(1)
   const [processingVideoId, setProcessingVideoId] = useState<string | null>(null)
 
-  const startCrop = useCallback((id: string, initialRect: CropRect) => {
+  const startCrop = useCallback((id: string, initialRect: CropRect, speed: number) => {
     setCroppingVideoId(id)
     setPendingCropRect(initialRect)
     setInitialCropRect(initialRect)
+    setPendingSpeed(speed)
+    setInitialSpeed(speed)
   }, [])
 
   const applyCrop = useCallback(() => {
@@ -81,52 +87,72 @@ export function useVideoCropMode({
     const itemId = croppingVideoId
     const cropRect = pendingCropRect
 
-    // Update item with crop rect immediately (for UI display)
+    // Check if crop rect actually changed from original
+    const cropRectChanged = !cropRectsEqual(cropRect, initialCropRect)
+    const speedChanged = pendingSpeed !== initialSpeed
+
+    // Update item with crop rect and speed immediately (for UI display)
     onUpdateItem(itemId, {
       x: newX,
       y: newY,
       width: newWidth,
       height: newHeight,
       cropRect,
+      speedFactor: pendingSpeed !== 1 ? pendingSpeed : undefined,
     })
 
     setCroppingVideoId(null)
     setPendingCropRect(null)
     setInitialCropRect(null)
+    setPendingSpeed(1)
+    setInitialSpeed(1)
 
-    // Skip server-side crop in offline mode
+    // Skip server-side processing in offline mode
     if (isOffline) {
+      return
+    }
+
+    // Only call server if something changed
+    if (!cropRectChanged && !speedChanged) {
       return
     }
 
     // Show processing spinner and call server
     setProcessingVideoId(itemId)
 
-    cropVideo(videoItem.src, cropRect)
+    // Pass cropRect only if it changed, speed only if not 1
+    const cropRectToSend = cropRectChanged ? cropRect : undefined
+    const speedToSend = speedChanged ? pendingSpeed : undefined
+
+    cropVideo(videoItem.src, cropRectToSend, speedToSend)
       .then((cropUrl) => {
         onUpdateItem(itemId, { cropSrc: cropUrl })
         setProcessingVideoId(null)
       })
       .catch((err) => {
-        console.error('Failed to create server-side video crop:', err)
+        console.error('Failed to create server-side video processing:', err)
         setProcessingVideoId(null)
       })
-  }, [croppingVideoId, pendingCropRect, items, isOffline, onUpdateItem])
+  }, [croppingVideoId, pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, items, isOffline, onUpdateItem])
 
   const cancelCrop = useCallback(() => {
     setCroppingVideoId(null)
     setPendingCropRect(null)
     setInitialCropRect(null)
+    setPendingSpeed(1)
+    setInitialSpeed(1)
   }, [])
 
-  // Apply crop if modified, otherwise cancel
+  // Apply crop if modified (crop or speed changed), otherwise cancel
   const applyOrCancelCrop = useCallback(() => {
-    if (cropRectsEqual(pendingCropRect, initialCropRect)) {
+    const cropChanged = !cropRectsEqual(pendingCropRect, initialCropRect)
+    const speedChanged = pendingSpeed !== initialSpeed
+    if (!cropChanged && !speedChanged) {
       cancelCrop()
     } else {
       applyCrop()
     }
-  }, [pendingCropRect, initialCropRect, cancelCrop, applyCrop])
+  }, [pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, cancelCrop, applyCrop])
 
   // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
   useEffect(() => {
@@ -148,9 +174,11 @@ export function useVideoCropMode({
   return {
     croppingVideoId,
     pendingCropRect,
+    pendingSpeed,
     processingVideoId,
     startCrop,
     setPendingCropRect,
+    setPendingSpeed,
     applyCrop,
     cancelCrop,
     applyOrCancelCrop,

@@ -114,9 +114,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
   const {
     croppingVideoId,
     pendingCropRect: videoPendingCropRect,
+    pendingSpeed: videoPendingSpeed,
     processingVideoId,
     startCrop: startVideoCrop,
     setPendingCropRect: setVideoPendingCropRect,
+    setPendingSpeed: setVideoPendingSpeed,
     applyOrCancelCrop: applyOrCancelVideoCrop,
   } = useVideoCropMode({ items, isOffline, onUpdateItem })
 
@@ -807,9 +809,11 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
           <VideoCropOverlay
             item={videoItem}
             cropRect={videoPendingCropRect}
+            speed={videoPendingSpeed}
             stageScale={stageScale}
             stagePos={stagePos}
             onCropChange={setVideoPendingCropRect}
+            onSpeedChange={setVideoPendingSpeed}
           />
         )
       })()}
@@ -993,7 +997,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               const origH = videoItem.originalHeight ?? videoItem.height
               // Start with full frame or existing crop
               const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
-              startVideoCrop(videoId, initialCrop)
+              const initialSpeed = videoItem.speedFactor ?? 1
+              startVideoCrop(videoId, initialCrop, initialSpeed)
             }
           }}
           onClose={videoContextMenuState.closeMenu}

@@ -4,10 +4,22 @@ import { CropRect, VideoItem } from '../../../types'
 interface VideoCropOverlayProps {
   item: VideoItem
   cropRect: CropRect
+  speed: number
   stageScale: number
   stagePos: { x: number; y: number }
   onCropChange: (crop: CropRect) => void
+  onSpeedChange: (speed: number) => void
 }
+
+const SPEED_OPTIONS = [
+  { value: 0.25, label: '0.25x' },
+  { value: 0.5, label: '0.5x' },
+  { value: 1, label: '1x' },
+  { value: 1.5, label: '1.5x' },
+  { value: 2, label: '2x' },
+  { value: 3, label: '3x' },
+  { value: 4, label: '4x' },
+]
 
 const MIN_CROP_SIZE = 10
 const HANDLE_SIZE = 10
@@ -40,9 +52,11 @@ interface DragState {
 export default function VideoCropOverlay({
   item,
   cropRect,
+  speed,
   stageScale,
   stagePos,
   onCropChange,
+  onSpeedChange,
 }: VideoCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
 
@@ -319,22 +333,54 @@ export default function VideoCropOverlay({
         />
       ))}
 
-      {/* Instructions */}
+      {/* Control Panel */}
       <div
         style={{
           position: 'absolute',
-          bottom: -30,
-          left: 0,
-          right: 0,
-          textAlign: 'center',
-          color: 'white',
-          fontSize: 12,
+          bottom: -60,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          borderRadius: 6,
+          padding: '8px 12px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 6,
           fontFamily: 'system-ui, sans-serif',
-          textShadow: '0 1px 2px rgba(0,0,0,0.8)',
-          pointerEvents: 'none',
+          fontSize: 12,
+          color: 'white',
+          whiteSpace: 'nowrap',
         }}
       >
-        Press Enter to apply, Escape to cancel
+        {/* Controls row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span>Speed:</span>
+            <select
+              value={speed}
+              onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+              style={{
+                backgroundColor: '#333',
+                color: 'white',
+                border: '1px solid #555',
+                borderRadius: 3,
+                padding: '2px 6px',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              {SPEED_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {/* Instructions row */}
+        <div style={{ textAlign: 'center', opacity: 0.8 }}>
+          Press Enter to apply, Escape to cancel
+        </div>
       </div>
     </div>
   )
