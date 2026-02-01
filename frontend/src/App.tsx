@@ -17,6 +17,7 @@ import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensions } from './api/videos'
+import { uploadImage } from './api/images'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
@@ -771,14 +772,31 @@ function App() {
     [updateActiveSceneItems, items, pushChange]
   )
 
-  const deleteSelected = useCallback(() => {
+  const deleteSelected = useCallback(async () => {
     if (!activeSceneId) return
     // Get currently selected items
     const currentSelectedIds = selectionMap.get(activeSceneId) ?? []
     const selectedItems = items.filter((item) => currentSelectedIds.includes(item.id))
 
-    // Record deletion for each selected item
-    selectedItems.forEach((item) => {
+    // For images with data URL src, upload to S3 first to avoid storing large data in history
+    const itemsForHistory: CanvasItem[] = await Promise.all(
+      selectedItems.map(async (item) => {
+        if (item.type === 'image' && item.src.startsWith('data:')) {
+          try {
+            const s3Url = await uploadImage(item.src, `deleted-${item.id}.png`)
+            // Return item with S3 URL for history
+            return { ...item, src: s3Url }
+          } catch (err) {
+            console.error('Failed to upload image before delete, storing data URL in history:', err)
+            return item
+          }
+        }
+        return item
+      })
+    )
+
+    // Record deletion for each selected item (using S3 URLs where possible)
+    itemsForHistory.forEach((item) => {
       pushChange(new DeleteObjectChange(item))
     })
 
