@@ -126,6 +126,43 @@ export default function VideoOverlay({
   // Only show controls when selected and not dragging
   const controlsVisible = isSelected && !isAnyDragActive
 
+  // If we have a cropped video file, use that. Otherwise, use the original with CSS crop.
+  const videoSrc = item.cropSrc ?? item.src
+
+  // Calculate CSS crop styling when we have cropRect but no cropSrc
+  const hasCropRect = item.cropRect && !item.cropSrc
+  let videoStyle: React.CSSProperties = {
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+    backgroundColor: '#1a1a2e',
+    borderRadius: 4,
+    pointerEvents: 'none',
+  }
+
+  // Apply CSS-based cropping when we have cropRect but no server-generated crop
+  if (hasCropRect && item.cropRect) {
+    const origW = item.originalWidth ?? item.width
+    const origH = item.originalHeight ?? item.height
+    const cropRect = item.cropRect
+
+    // Scale the video so the crop region fills the display area
+    const videoScaleX = width / cropRect.width
+    const videoScaleY = height / cropRect.height
+
+    videoStyle = {
+      ...videoStyle,
+      width: origW * scaleX,
+      height: origH * scaleY,
+      objectFit: 'fill',
+      position: 'absolute',
+      left: -(cropRect.x * videoScaleX),
+      top: -(cropRect.y * videoScaleY),
+      transform: `scale(${videoScaleX / scaleX}, ${videoScaleY / scaleY})`,
+      transformOrigin: 'top left',
+    }
+  }
+
   return (
     <div
       style={{
@@ -134,6 +171,7 @@ export default function VideoOverlay({
         top,
         width: displayWidth,
         height: displayHeight,
+        overflow: hasCropRect ? 'hidden' : undefined,
         // Let clicks pass through to Konva canvas underneath
         pointerEvents: 'none',
       }}
@@ -141,15 +179,8 @@ export default function VideoOverlay({
       {/* Video element - no pointer events, just displays video */}
       <video
         ref={videoRef}
-        src={item.src}
-        style={{
-          width: '100%',
-          height: '100%',
-          objectFit: 'contain',
-          backgroundColor: '#1a1a2e',
-          borderRadius: 4,
-          pointerEvents: 'none',
-        }}
+        src={videoSrc}
+        style={videoStyle}
         muted={item.muted ?? true}
         loop={item.loop ?? false}
         playsInline

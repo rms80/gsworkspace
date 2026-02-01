@@ -2,6 +2,16 @@ import { Router } from 'express'
 import { saveToS3, loadFromS3, listFromS3, getPublicUrl } from '../services/s3.js'
 import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
+import ffmpeg from 'fluent-ffmpeg'
+import ffmpegStatic from 'ffmpeg-static'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
+
+// Configure ffmpeg to use the bundled binary from ffmpeg-static
+if (ffmpegStatic) {
+  ffmpeg.setFfmpegPath(ffmpegStatic)
+}
 
 const router = Router()
 
@@ -155,6 +165,83 @@ router.post('/crop-image', async (req, res) => {
   } catch (error) {
     console.error('Error cropping image:', error)
     res.status(500).json({ error: 'Failed to crop image' })
+  }
+})
+
+// Crop a video and save the cropped version to S3
+router.post('/crop-video', async (req, res) => {
+  const tempDir = os.tmpdir()
+  const inputPath = path.join(tempDir, `video-input-${uuidv4()}.mp4`)
+  const outputPath = path.join(tempDir, `video-output-${uuidv4()}.mp4`)
+
+  // Helper to clean up temp files
+  const cleanup = () => {
+    try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath) } catch { /* ignore */ }
+  }
+
+  try {
+    const { src, cropRect } = req.body
+    if (!src || !cropRect) {
+      return res.status(400).json({ error: 'src and cropRect are required' })
+    }
+
+    let { x, y, width, height } = cropRect
+
+    // Ensure even dimensions (required by H.264)
+    x = Math.round(x)
+    y = Math.round(y)
+    width = Math.round(width / 2) * 2
+    height = Math.round(height / 2) * 2
+
+    // Download video to temp file
+    const response = await fetch(src)
+    if (!response.ok) {
+      return res.status(400).json({ error: 'Failed to fetch source video' })
+    }
+    const arrayBuffer = await response.arrayBuffer()
+    fs.writeFileSync(inputPath, Buffer.from(arrayBuffer))
+
+    // Crop with ffmpeg
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(inputPath)
+        .videoFilter(`crop=${width}:${height}:${x}:${y}`)
+        .outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy'])
+        .output(outputPath)
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .run()
+    })
+
+    // Read cropped video
+    const croppedBuffer = fs.readFileSync(outputPath)
+
+    // Derive S3 key for the crop file
+    let key: string
+    const bucketName = process.env.S3_BUCKET_NAME
+    const region = process.env.AWS_REGION || 'us-east-1'
+    const s3UrlPrefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+
+    if (src.startsWith(s3UrlPrefix)) {
+      // For S3 URLs, derive crop key from original key
+      const originalKey = src.slice(s3UrlPrefix.length)
+      const dotIndex = originalKey.lastIndexOf('.')
+      const basePath = dotIndex >= 0 ? originalKey.slice(0, dotIndex) : originalKey
+      key = `${basePath}.crop.mp4`
+    } else {
+      // For other sources, generate a new key
+      key = `videos/${uuidv4()}-crop.mp4`
+    }
+
+    await saveToS3(key, croppedBuffer, 'video/mp4')
+    const url = getPublicUrl(key)
+
+    cleanup()
+    res.json({ success: true, url })
+  } catch (error) {
+    cleanup()
+    console.error('Error cropping video:', error)
+    res.status(500).json({ error: 'Failed to crop video' })
   }
 })
 

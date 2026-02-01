@@ -20,10 +20,13 @@ import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
+import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
+import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
 import { useCropMode } from '../hooks/useCropMode'
+import { useVideoCropMode } from '../hooks/useVideoCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
 import { usePulseAnimation } from '../hooks/usePulseAnimation'
 import { useMenuState } from '../hooks/useMenuState'
@@ -102,6 +105,15 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     applyCrop,
     cancelCrop: _cancelCrop,
   } = useCropMode({ items, loadedImages, isOffline, onUpdateItem })
+
+  // 3b. Video crop mode hook
+  const {
+    croppingVideoId,
+    pendingCropRect: videoPendingCropRect,
+    processingVideoId,
+    startCrop: startVideoCrop,
+    setPendingCropRect: setVideoPendingCropRect,
+  } = useVideoCropMode({ items, isOffline, onUpdateItem })
 
   // 4. Prompt editing hooks (x3)
   const promptEditing = usePromptEditing({ items, onUpdateItem }, 'prompt')
@@ -755,6 +767,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         .filter((item) => item.type === 'video')
         .map((item) => {
           if (item.type !== 'video') return null
+          // Don't render normal overlay when cropping this video
+          if (croppingVideoId === item.id) return null
           const transform = videoItemTransforms.get(item.id)
           return (
             <VideoOverlay
@@ -769,6 +783,40 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             />
           )
         })}
+
+      {/* Video crop overlay */}
+      {croppingVideoId && videoPendingCropRect && (() => {
+        const videoItem = items.find((i) => i.id === croppingVideoId && i.type === 'video') as VideoItem | undefined
+        if (!videoItem) return null
+        return (
+          <VideoCropOverlay
+            item={videoItem}
+            cropRect={videoPendingCropRect}
+            stageScale={stageScale}
+            stagePos={stagePos}
+            onCropChange={setVideoPendingCropRect}
+          />
+        )
+      })()}
+
+      {/* Processing overlay for video crop */}
+      {processingVideoId && (() => {
+        const videoItem = items.find((i) => i.id === processingVideoId && i.type === 'video') as VideoItem | undefined
+        if (!videoItem) return null
+        const scaleX = videoItem.scaleX ?? 1
+        const scaleY = videoItem.scaleY ?? 1
+        return (
+          <ProcessingOverlay
+            x={videoItem.x}
+            y={videoItem.y}
+            width={videoItem.width * scaleX}
+            height={videoItem.height * scaleY}
+            stageScale={stageScale}
+            stagePos={stagePos}
+            message="Processing video..."
+          />
+        )
+      })()}
 
       {/* Text editing overlay */}
       {editingItem && (
@@ -921,7 +969,18 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
         <VideoContextMenu
           position={videoContextMenuState.menuPosition}
           videoItem={items.find((i) => i.id === videoContextMenuState.menuData!.videoId && i.type === 'video') as import('../types').VideoItem | undefined}
+          isOffline={isOffline}
           onUpdateItem={onUpdateItem}
+          onCrop={(videoId) => {
+            const videoItem = items.find((i) => i.id === videoId && i.type === 'video') as VideoItem | undefined
+            if (videoItem) {
+              const origW = videoItem.originalWidth ?? videoItem.width
+              const origH = videoItem.originalHeight ?? videoItem.height
+              // Start with full frame or existing crop
+              const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
+              startVideoCrop(videoId, initialCrop)
+            }
+          }}
           onClose={videoContextMenuState.closeMenu}
         />
       )}

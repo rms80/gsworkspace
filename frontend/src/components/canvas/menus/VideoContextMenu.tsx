@@ -4,7 +4,9 @@ import { Z_MENU } from '../../../constants/canvas'
 interface VideoContextMenuProps {
   position: { x: number; y: number }
   videoItem: VideoItem | undefined
+  isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
+  onCrop: (videoId: string) => void
   onClose: () => void
 }
 
@@ -33,7 +35,9 @@ function getVideoExtension(src: string): string {
 export default function VideoContextMenu({
   position,
   videoItem,
+  isOffline,
   onUpdateItem,
+  onCrop,
   onClose,
 }: VideoContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -53,6 +57,26 @@ export default function VideoContextMenu({
       scaleX: 1,
       scaleY: 1,
       rotation: 0,
+    })
+    onClose()
+  }
+
+  const handleCrop = () => {
+    if (!videoItem) { onClose(); return }
+    onCrop(videoItem.id)
+    onClose()
+  }
+
+  const handleRemoveCrop = () => {
+    if (!videoItem) { onClose(); return }
+    // Reset to original dimensions
+    const origW = videoItem.originalWidth ?? videoItem.width
+    const origH = videoItem.originalHeight ?? videoItem.height
+    onUpdateItem(videoItem.id, {
+      width: origW,
+      height: origH,
+      cropRect: undefined,
+      cropSrc: undefined,
     })
     onClose()
   }
@@ -151,6 +175,30 @@ export default function VideoContextMenu({
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        onClick={handleCrop}
+        style={{
+          ...buttonStyle,
+          opacity: isOffline ? 0.5 : 1,
+          cursor: isOffline ? 'not-allowed' : 'pointer',
+        }}
+        disabled={isOffline}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        title={isOffline ? 'Crop unavailable in offline mode' : undefined}
+      >
+        Crop
+      </button>
+      {videoItem?.cropRect && (
+        <button
+          onClick={handleRemoveCrop}
+          style={buttonStyle}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        >
+          Remove Crop
+        </button>
+      )}
       <button
         onClick={handleExport}
         style={buttonStyle}

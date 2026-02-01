@@ -52,6 +52,30 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
+export interface CropVideoResult {
+  url: string
+}
+
+/**
+ * Crop a video on the server and save the cropped version to S3.
+ * Returns the S3 URL of the cropped video.
+ */
+export async function cropVideo(
+  src: string,
+  cropRect: { x: number; y: number; width: number; height: number }
+): Promise<string> {
+  const response = await fetch(`${API_BASE}/crop-video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ src, cropRect }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to crop video: ${response.statusText}`)
+  }
+  const result: CropVideoResult = await response.json()
+  return result.url
+}
+
 /**
  * Get video dimensions and file size from a file
  */
