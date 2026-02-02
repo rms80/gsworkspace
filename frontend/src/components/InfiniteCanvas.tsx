@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Stage, Layer, Rect, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
@@ -80,6 +80,12 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
 
   // Background operations tracking
   const { startOperation, endOperation } = useBackgroundOperations()
+
+  // Tooltip state for Run button
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
+  const handleShowTooltip = useCallback((t: { text: string; x: number; y: number } | null) => {
+    setTooltip(t)
+  }, [])
 
   // 1. Viewport hook
   const {
@@ -595,6 +601,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 onUpdateItem={onUpdateItem}
                 onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
                 onRun={onRunPrompt}
+                onShowTooltip={handleShowTooltip}
               />
             )
           } else if (item.type === 'image-gen-prompt') {
@@ -612,6 +619,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 onUpdateItem={onUpdateItem}
                 onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
                 onRun={onRunImageGenPrompt}
+                onShowTooltip={handleShowTooltip}
               />
             )
           } else if (item.type === 'html-gen-prompt') {
@@ -629,6 +637,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 onUpdateItem={onUpdateItem}
                 onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
                 onRun={onRunHtmlGenPrompt}
+                onShowTooltip={handleShowTooltip}
               />
             )
           } else if (item.type === 'html') {
@@ -1042,6 +1051,28 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
           />
         )
       })()}
+
+      {/* Tooltip for disabled Run button */}
+      {tooltip && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltip.x + 10,
+            top: tooltip.y + 10,
+            backgroundColor: '#333',
+            color: '#fff',
+            padding: '6px 10px',
+            borderRadius: 4,
+            fontSize: 12,
+            whiteSpace: 'nowrap',
+            zIndex: 1000,
+            pointerEvents: 'none',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+          }}
+        >
+          {tooltip.text}
+        </div>
+      )}
     </div>
   )
 }

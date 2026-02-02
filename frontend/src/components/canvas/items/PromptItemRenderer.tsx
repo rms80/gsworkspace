@@ -8,9 +8,10 @@ import {
   PromptThemeColors, getPulseColor,
 } from '../../../constants/canvas'
 import { PromptEditing } from '../../../hooks/usePromptEditing'
+import { hasAnthropicApiKey, hasGoogleApiKey } from '../../../utils/apiKeyStorage'
 
 interface PromptItemRendererProps {
-  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number }
+  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model: string }
   theme: PromptThemeColors
   isSelected: boolean
   isRunning: boolean
@@ -21,6 +22,7 @@ interface PromptItemRendererProps {
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onOpenModelMenu: (id: string, position: { x: number; y: number }) => void
   onRun: (id: string) => void
+  onShowTooltip?: (tooltip: { text: string; x: number; y: number } | null) => void
 }
 
 export default function PromptItemRenderer({
@@ -35,10 +37,28 @@ export default function PromptItemRenderer({
   onUpdateItem,
   onOpenModelMenu,
   onRun,
+  onShowTooltip,
 }: PromptItemRendererProps) {
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
-  const isRunDisabled = isOffline || isRunning
+
+  // Check if we can run based on mode and API keys
+  const needsAnthropicKey = item.model.startsWith('claude-')
+  const needsGoogleKey = item.model.startsWith('gemini-')
+  const hasRequiredKey = needsAnthropicKey ? hasAnthropicApiKey() : needsGoogleKey ? hasGoogleApiKey() : false
+  const isMissingApiKey = isOffline && !hasRequiredKey
+  const isRunDisabled = isRunning || isMissingApiKey
+
+  // Tooltip message for missing API key
+  const getTooltipMessage = () => {
+    if (!isMissingApiKey) return null
+    if (needsAnthropicKey) {
+      return 'Anthropic API key required. Add it in Edit > Settings.'
+    } else if (needsGoogleKey) {
+      return 'Google API key required. Add it in Edit > Settings.'
+    }
+    return null
+  }
 
   const borderColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseBorder)
@@ -47,8 +67,8 @@ export default function PromptItemRenderer({
 
   const runButtonColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseRunButton)
-    : isOffline
-      ? '#666' // Greyed out when offline
+    : isRunDisabled
+      ? '#666' // Greyed out when disabled
       : theme.runButton
 
   return (
@@ -143,6 +163,17 @@ export default function PromptItemRenderer({
             onRun(item.id)
           }
         }}
+        onMouseEnter={(e) => {
+          const tooltipMsg = getTooltipMessage()
+          if (tooltipMsg && onShowTooltip) {
+            onShowTooltip({ text: tooltipMsg, x: e.evt.clientX, y: e.evt.clientY })
+          }
+        }}
+        onMouseLeave={() => {
+          if (onShowTooltip) {
+            onShowTooltip(null)
+          }
+        }}
       >
         <Rect
           width={RUN_BUTTON_WIDTH}
@@ -156,7 +187,7 @@ export default function PromptItemRenderer({
           height={BUTTON_HEIGHT}
           fontSize={12}
           fontStyle="bold"
-          fill={isOffline && !isRunning ? '#999' : '#fff'}
+          fill={isRunDisabled && !isRunning ? '#999' : '#fff'}
           align="center"
           verticalAlign="middle"
         />

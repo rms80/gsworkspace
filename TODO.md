@@ -1,170 +1,163 @@
-# TODO
+# TODO: Offline Mode AI Support
 
-## Video Cropping Implementation Plan
+## Overview
 
-### Overview
-Add video cropping support using server-side ffmpeg (fluent-ffmpeg). Similar to image cropping, generates `filename.crop.mp4` on the server. Includes processing visualization with spinner. Crop functionality hidden when offline.
+Add support for AI features (LLM prompts, image generation, HTML generation) in offline mode by allowing users to configure their own API keys via a Settings dialog. API keys will be stored in the browser's localStorage.
 
-### Branch
-`feature/video-crop`
+Do all implementation in a feature branch. Don't merge or push unless I explicitly tell you to.
 
----
+## Architecture
 
-### Phase 1: Backend Setup
+### New Components
+- `SettingsDialog.tsx` - Modal dialog with tabbed interface
+- `OfflineModeSettings.tsx` - Tab content for API key configuration
 
-#### 1.1 Install fluent-ffmpeg and ffmpeg-static
-```bash
-cd backend
-npm install fluent-ffmpeg ffmpeg-static
-npm install --save-dev @types/fluent-ffmpeg
-```
+### Storage
+- Extend `frontend/src/utils/settings.ts` to store API keys in localStorage
+- Keys stored: `anthropicApiKey`, `googleApiKey`
+- Keys should be stored separately from scene data for security (different localStorage key)
 
-This bundles the ffmpeg binary within `node_modules` - no system installation required.
-
-Configure in code:
-```javascript
-const ffmpegStatic = require('ffmpeg-static');
-const ffmpeg = require('fluent-ffmpeg');
-ffmpeg.setFfmpegPath(ffmpegStatic);
-```
-
-#### 1.2 Add crop-video endpoint
-**File:** `backend/src/routes/items.ts`
-
-Add `POST /api/items/crop-video` endpoint:
-- Accept `{ src: string, cropRect: { x, y, width, height } }`
-- Download video to temp file
-- Use ffmpeg crop filter: `crop=width:height:x:y`
-- Ensure even dimensions (required by H.264): round to nearest even number
-- Upload result to S3 as `{basePath}.crop.mp4`
-- Clean up temp files
-- Return `{ success: true, url: string }`
+### API Layer Changes
+- Create client-side API wrappers that call Claude/Gemini APIs directly from the browser
+- Modify existing `frontend/src/api/llm.ts` to check offline mode and route accordingly:
+  - Online mode: Use existing `/api/llm/*` backend endpoints
+  - Offline mode: Use new client-side API calls with stored keys
 
 ---
 
-### Phase 2: Type Definitions
+## Implementation Tasks
 
-#### 2.1 Update VideoItem type
-**File:** `frontend/src/types/index.ts`
+### Phase 1: Settings Infrastructure
 
-Add to VideoItem interface:
-```typescript
-cropRect?: CropRect      // Crop region in source video pixels
-cropSrc?: string         // S3 URL of cropped video file
-```
+#### 1.1 Create API Key Storage Utilities
+**File:** `frontend/src/utils/apiKeyStorage.ts`
+- [x] Create `getAnthropicApiKey(): string | null`
+- [x] Create `setAnthropicApiKey(key: string | null): void`
+- [x] Create `getGoogleApiKey(): string | null`
+- [x] Create `setGoogleApiKey(key: string | null): void`
+- [x] Use a separate localStorage key (e.g., `workspaceapp-api-keys`) from scene settings
+- [x] Consider basic obfuscation (not encryption - keys are client-side anyway)
 
-#### 2.2 Add cropVideo API function
-**File:** `frontend/src/api/videos.ts`
+#### 1.2 Create Settings Dialog Component
+**File:** `frontend/src/components/SettingsDialog.tsx`
+- [x] Create modal dialog component (similar style to existing dialogs)
+- [x] Add tab navigation system (start with single "Offline Mode" tab, extensible for future)
+- [x] Add open/close state management
+- [x] Style consistently with existing app UI
 
-Add function similar to `cropImage()` in `api/images.ts`
+#### 1.3 Create Offline Mode Settings Tab
+**File:** `frontend/src/components/settings/OfflineModeSettingsTab.tsx`
+- [x] Add password-type input field for Anthropic API key
+- [x] Add password-type input field for Google API key
+- [x] Add show/hide toggle for each key field
+- [x] Add "Save" and "Clear" buttons for each key
+- [x] Display validation status (key format check, not API validation)
+- [x] Add help text explaining what each key is used for
+- [x] Add warning about storing keys in browser
 
----
+### Phase 2: Menu Integration
 
-### Phase 3: Processing Overlay Component
+#### 2.1 Add Settings to Edit Menu
+**File:** `frontend/src/components/MenuBar.tsx`
+- [x] Add "Settings..." menu item to Edit menu
+- [x] Add keyboard shortcut (Ctrl+, or Ctrl+Shift+S)
+- [x] Wire up to open SettingsDialog
 
-#### 3.1 Create ProcessingOverlay
-**File:** `frontend/src/components/canvas/overlays/ProcessingOverlay.tsx`
+#### 2.2 Dialog State Management
+**File:** `frontend/src/App.tsx`
+- [x] Add `settingsDialogOpen` state
+- [x] Add handlers for opening/closing settings dialog
+- [x] Pass props down to MenuBar and render SettingsDialog
 
-- Dark semi-transparent overlay covering item bounds
-- Centered CSS spinner animation
-- Text: "Processing video..."
-- Positioned using same transform logic as VideoOverlay
+### Phase 3: Client-Side API Implementation
 
----
+#### 3.1 Anthropic Client-Side API
+**File:** `frontend/src/api/anthropicClient.ts`
+- [x] Implement direct calls to Anthropic API using fetch
+- [x] Handle Claude messages API format
+- [x] Support text generation with context items
+- [x] Support image inputs (base64)
+- [x] Handle API errors gracefully
+- [x] Note: May require CORS considerations - Anthropic API supports browser calls with API key
 
-### Phase 4: Video Crop Mode Hook
+#### 3.2 Google/Gemini Client-Side API
+**File:** `frontend/src/api/googleClient.ts`
+- [x] Implement direct calls to Google Generative AI API
+- [x] Support Gemini text generation
+- [x] Support Imagen image generation
+- [x] Handle API errors gracefully
 
-#### 4.1 Create useVideoCropMode hook
-**File:** `frontend/src/hooks/useVideoCropMode.ts`
+#### 3.3 Modify LLM API Router
+**File:** `frontend/src/api/llm.ts`
+- [x] Import `isOfflineMode` from storage
+- [x] Import client-side API modules
+- [x] Modify `generateFromPrompt()`:
+  - If offline + has Anthropic key: use anthropicClient
+  - If offline + no key: throw descriptive error
+  - If online: use existing backend endpoint
+- [x] Modify `generateImage()`:
+  - If offline + has Google key: use googleClient
+  - If offline + no key: throw descriptive error
+  - If online: use existing backend endpoint
+- [x] Modify `generateHtml()`: same pattern as generateFromPrompt
 
-Follow pattern from `useCropMode.ts`:
-- Track `croppingVideoId: string | null`
-- Track `pendingCropRect: CropRect | null`
-- Track `processingVideoId: string | null` (for spinner)
-- `startCrop(id, initialRect)` - enter crop mode
-- `applyCrop()` - update item, call API, show spinner
-- `cancelCrop()` - exit without changes
+### Phase 4: User Experience
 
----
+#### 4.1 Error Handling & Feedback
+- [x] Show clear error when attempting AI features without configured keys
+- [x] Add toast/notification when API call fails due to invalid key
+- [x] Guide user to Settings dialog when keys are missing
 
-### Phase 5: Video Crop Overlay UI
-
-#### 5.1 Create VideoCropOverlay
-**File:** `frontend/src/components/canvas/overlays/VideoCropOverlay.tsx`
-
-Similar to ImageCropOverlay but as HTML overlay (not Konva):
-- Pause video during crop
-- Show video frame with crop region highlighted
-- 8 drag handles (corners + edges)
-- Drag center to move crop region
-- Enter to apply, Escape to cancel
-- Minimum crop size: 10px
-- Clamp to video bounds
-
----
-
-### Phase 6: Integration
-
-#### 6.1 Update VideoContextMenu
-**File:** `frontend/src/components/canvas/menus/VideoContextMenu.tsx`
-
-- Add "Crop" menu item (disabled when offline)
-- Add "Remove Crop" menu item (only when cropRect exists)
-
-#### 6.2 Update VideoItemRenderer
-**File:** `frontend/src/components/canvas/items/VideoItemRenderer.tsx`
-
-- Pass crop mode state
-- Conditionally render crop overlay
-
-#### 6.3 Update VideoOverlay
-**File:** `frontend/src/components/canvas/overlays/VideoOverlay.tsx`
-
-- Apply CSS to show only cropped region when `cropRect` exists
-- Use `object-position` and `clip-path` or adjust video sizing
-
-#### 6.4 Update InfiniteCanvas
-**File:** `frontend/src/components/InfiniteCanvas.tsx`
-
-- Import and use `useVideoCropMode` hook
-- Render `ProcessingOverlay` when `processingVideoId` is set
-- Wire up context menu crop action
-- Handle keyboard (Enter/Escape) during crop mode
-
----
-
-### Files Summary
-
-**Create:**
-- `frontend/src/components/canvas/overlays/ProcessingOverlay.tsx`
-- `frontend/src/components/canvas/overlays/VideoCropOverlay.tsx`
-- `frontend/src/hooks/useVideoCropMode.ts`
-
-**Modify:**
-- `backend/package.json` - add fluent-ffmpeg
-- `backend/src/routes/items.ts` - add crop-video endpoint
-- `frontend/src/types/index.ts` - add cropRect/cropSrc to VideoItem
-- `frontend/src/api/videos.ts` - add cropVideo function
-- `frontend/src/components/canvas/menus/VideoContextMenu.tsx` - add Crop menu items
-- `frontend/src/components/canvas/items/VideoItemRenderer.tsx` - integrate crop overlay
-- `frontend/src/components/canvas/overlays/VideoOverlay.tsx` - apply crop styling
-- `frontend/src/components/InfiniteCanvas.tsx` - integrate hook and processing overlay
+#### 4.2 Status Indication
+**File:** `frontend/src/components/StatusBar.tsx`
+- [x] Consider showing API key status in offline mode (e.g., "Offline - API keys configured")
+- [x] Or show warning icon if in offline mode without keys
 
 ---
 
-### Verification
+## Security Considerations
 
-1. **Backend test:** Use curl/Postman to POST to `/api/items/crop-video` with a video URL and crop rect
-2. **UI test:** Right-click video > Crop > adjust handles > press Enter
-3. **Spinner test:** Verify spinner appears during processing
-4. **Offline test:** Verify "Crop" is disabled when offline
-5. **Result test:** Verify cropped video plays correctly with new dimensions
+1. **API keys in localStorage**: Users should understand their keys are stored in the browser. Add appropriate warnings in the UI.
+
+2. **No server-side exposure**: Keys never leave the browser in offline mode - calls go directly to API providers.
+
+3. **Basic obfuscation only**: We can base64 encode or use simple obfuscation, but this is NOT security - just prevents casual inspection. True encryption would require a user password.
+
+4. **Clear key option**: Users should be able to easily remove their keys.
 
 ---
 
-### Considerations
+## CORS Considerations
 
-- **Even dimensions:** FFmpeg H.264 requires even width/height - round to nearest even
-- **Large videos:** May take time - spinner essential for UX
-- **Temp file cleanup:** Ensure cleanup on both success and error paths
-- **Offline mode:** Crop menu item hidden/disabled when `isOffline` is true
+- **Anthropic API**: Supports direct browser calls with `anthropic-dangerous-direct-browser-access: true` header
+- **Google AI API**: Generally supports browser calls with API key authentication
+
+If CORS issues arise, alternatives:
+1. Document that users need to use a browser extension to bypass CORS
+2. Provide a simple proxy option they can self-host
+3. Use a serverless function approach
+
+---
+
+## Testing Checklist
+
+- [ ] Settings dialog opens from Edit menu
+- [ ] API keys save to localStorage correctly
+- [ ] API keys persist across page reloads
+- [ ] API keys can be cleared
+- [ ] LLM prompt works in offline mode with valid Anthropic key
+- [ ] Image generation works in offline mode with valid Google key
+- [ ] HTML generation works in offline mode with valid Anthropic key
+- [ ] Appropriate errors shown when keys are missing
+- [ ] Appropriate errors shown when keys are invalid
+- [ ] Online mode continues to work unchanged (uses backend)
+
+---
+
+## Future Enhancements (Out of Scope)
+
+- Additional settings tabs (appearance, keyboard shortcuts, etc.)
+- Support for other LLM providers (OpenAI, etc.)
+- API key validation on save (test call)
+- Usage tracking/rate limiting awareness
+- Import/export settings
