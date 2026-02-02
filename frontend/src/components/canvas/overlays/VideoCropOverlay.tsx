@@ -85,6 +85,10 @@ export default function VideoCropOverlay({
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
 
+  // Timeline ref for trim marker dragging
+  const timelineRef = useRef<HTMLDivElement>(null)
+  const trimDragRef = useRef<'start' | 'end' | null>(null)
+
   // Local state for input fields - only commit on blur/Enter
   const [inputValues, setInputValues] = useState({
     x: String(Math.round(cropRect.x)),
@@ -116,6 +120,13 @@ export default function VideoCropOverlay({
       end: trimEnd.toFixed(1),
     })
   }, [trimStart, trimEnd])
+
+  // When trim is enabled and trimEnd is 0, set it to video duration
+  useEffect(() => {
+    if (trim && duration > 0 && trimEnd === 0) {
+      onTrimEndChange(duration)
+    }
+  }, [trim, duration, trimEnd, onTrimEndChange])
 
   // Trim input handlers
   const handleTrimInputChange = (field: 'start' | 'end', value: string) => {
@@ -153,6 +164,46 @@ export default function VideoCropOverlay({
   const setTrimEndFromPlayhead = () => {
     onTrimEndChange(currentTime)
   }
+
+  // Trim marker drag handlers
+  const handleTrimMarkerMouseDown = (marker: 'start' | 'end') => (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    trimDragRef.current = marker
+  }
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!trimDragRef.current || !timelineRef.current || !duration) return
+
+      const rect = timelineRef.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const percent = Math.max(0, Math.min(1, x / rect.width))
+      const time = percent * duration
+
+      if (trimDragRef.current === 'start') {
+        // Clamp start to not exceed end
+        const clampedTime = Math.min(time, trimEnd)
+        onTrimStartChange(clampedTime)
+      } else {
+        // Clamp end to not be less than start
+        const clampedTime = Math.max(time, trimStart)
+        onTrimEndChange(clampedTime)
+      }
+    }
+
+    const handleMouseUp = () => {
+      trimDragRef.current = null
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [duration, trimStart, trimEnd, onTrimStartChange, onTrimEndChange])
 
   // Video playback event handlers
   useEffect(() => {
@@ -209,6 +260,17 @@ export default function VideoCropOverlay({
     const bgVideo = bgVideoRef.current
     if (!video) return
     const newTime = parseFloat(e.target.value)
+
+    // // Snap to trim points when within 1 second
+    // if (trim) {
+    //   const snapThreshold = 1
+    //   if (Math.abs(newTime - trimStart) < snapThreshold) {
+    //     newTime = trimStart
+    //   } else if (Math.abs(newTime - trimEnd) < snapThreshold) {
+    //     newTime = trimEnd
+    //   }
+    // }
+
     video.currentTime = newTime
     if (bgVideo) bgVideo.currentTime = newTime
   }
@@ -867,20 +929,84 @@ export default function VideoCropOverlay({
           >
             [
           </button>
-          <input
-            type="range"
-            min={0}
-            max={duration || 100}
-            step={0.1}
-            value={currentTime}
-            onChange={handleSeek}
-            style={{
-              flex: 1,
-              minWidth: 120,
-              height: 4,
-              cursor: 'pointer',
-            }}
-          />
+          <div ref={timelineRef} style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+            <input
+              type="range"
+              min={0}
+              max={duration || 100}
+              step={0.1}
+              value={currentTime}
+              onChange={handleSeek}
+              style={{
+                width: '100%',
+                height: 4,
+                cursor: 'pointer',
+              }}
+            />
+            {/* Trim start/end markers */}
+            {trim && duration > 0 && (
+              <>
+                <div
+                  onMouseDown={handleTrimMarkerMouseDown('start')}
+                  style={{
+                    position: 'absolute',
+                    left: `${(trimStart / duration) * 100}%`,
+                    top: 12,
+                    transform: 'translateX(-50%)',
+                    padding: '4px 6px',
+                    cursor: 'ew-resize',
+                  }}
+                  title={`Trim start: ${trimStart.toFixed(1)}s`}
+                >
+                  <div
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeft: '5px solid transparent',
+                      borderRight: '5px solid transparent',
+                      borderBottom: '6px solid white',
+                    }}
+                  />
+                </div>
+                <div
+                  onMouseDown={handleTrimMarkerMouseDown('end')}
+                  style={{
+                    position: 'absolute',
+                    left: `${(trimEnd / duration) * 100}%`,
+                    top: 12,
+                    transform: 'translateX(-50%)',
+                    padding: '4px 6px',
+                    cursor: 'ew-resize',
+                  }}
+                  title={`Trim end: ${trimEnd.toFixed(1)}s`}
+                >
+                  <div
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderLeft: '5px solid transparent',
+                      borderRight: '5px solid transparent',
+                      borderBottom: '6px solid white',
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    position: 'absolute',
+                    left: `${((trimStart + trimEnd) / 2 / duration) * 100}%`,
+                    top: 12,
+                    transform: 'translateX(-50%)',
+                    fontSize: 9,
+                    color: 'white',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {(trimEnd - trimStart).toFixed(1)}s
+                </span>
+              </>
+            )}
+          </div>
           <button
             onClick={setTrimEndFromPlayhead}
             disabled={!trim}
