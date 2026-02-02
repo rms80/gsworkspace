@@ -177,11 +177,13 @@ const USER_FOLDER = 'version0'
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
   const inputPath = path.join(tempDir, `video-input-${uuidv4()}.mp4`)
+  const intermediatePath = path.join(tempDir, `video-intermediate-${uuidv4()}.mp4`)
   const outputPath = path.join(tempDir, `video-output-${uuidv4()}.mp4`)
 
   // Helper to clean up temp files
   const cleanup = () => {
     try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(intermediatePath)) fs.unlinkSync(intermediatePath) } catch { /* ignore */ }
     try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath) } catch { /* ignore */ }
   }
 
@@ -210,84 +212,157 @@ router.post('/crop-video', async (req, res) => {
     const arrayBuffer = await response.arrayBuffer()
     fs.writeFileSync(inputPath, Buffer.from(arrayBuffer))
 
-    // Build ffmpeg command with filters
-    const videoFilters: string[] = []
-    const audioFilters: string[] = []
-
-    // Add crop filter if cropRect provided
-    if (cropRect) {
-      let { x, y, width, height } = cropRect
-      // Ensure even dimensions (required by H.264)
-      x = Math.round(x)
-      y = Math.round(y)
-      width = Math.round(width / 2) * 2
-      height = Math.round(height / 2) * 2
-      videoFilters.push(`crop=${width}:${height}:${x}:${y}`)
-    }
-
-    // Add speed filter if speed provided and not 1
     const effectiveSpeed = speed && speed !== 1 ? speed : null
-    if (effectiveSpeed) {
-      // Video: setpts divides by speed (faster = smaller PTS values)
-      videoFilters.push(`setpts=PTS/${effectiveSpeed}`)
 
-      // Audio: atempo only supports 0.5-2.0, so chain multiple for extreme values
-      // For speed > 1 (faster): atempo=speed (chain if > 2)
-      // For speed < 1 (slower): atempo=speed (chain if < 0.5)
-      let remainingSpeed = effectiveSpeed
-      while (remainingSpeed > 2.0) {
-        audioFilters.push('atempo=2.0')
-        remainingSpeed /= 2.0
-      }
-      while (remainingSpeed < 0.5) {
-        audioFilters.push('atempo=0.5')
-        remainingSpeed /= 0.5
-      }
-      audioFilters.push(`atempo=${remainingSpeed}`)
-    }
+    // If both trim and speed are used, we need two passes to avoid timing issues
+    // Pass 1: crop + trim -> intermediate file
+    // Pass 2: speed change -> output file
+    // If no trim, we can do everything in one pass
+    const needsTwoPasses = hasTrim && effectiveSpeed
 
-    // Process with ffmpeg
-    await new Promise<void>((resolve, reject) => {
-      const cmd = ffmpeg(inputPath)
+    if (needsTwoPasses) {
+      // PASS 1: Crop and trim
+      await new Promise<void>((resolve, reject) => {
+        const cmd = ffmpeg(inputPath)
 
-      // Apply trim as input options for efficiency (seeks before decoding)
-      if (hasTrim) {
+        // Apply trim as input options
         if (trim.start > 0) {
           cmd.inputOptions(['-ss', String(trim.start)])
         }
         if (trim.end > 0) {
-          // Use -to for absolute end time (adjusted for start offset if using -ss)
           const duration = trim.end - (trim.start || 0)
           if (duration > 0) {
             cmd.inputOptions(['-t', String(duration)])
           }
         }
-      }
 
-      if (videoFilters.length > 0) {
-        cmd.videoFilter(videoFilters)
-      }
-
-      cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
-
-      // Handle audio: remove, re-encode for speed change, or copy
-      // Note: when trimming, we need to re-encode audio to avoid sync issues
-      if (removeAudio) {
-        cmd.noAudio()
-      } else if (audioFilters.length > 0 || hasTrim) {
-        if (audioFilters.length > 0) {
-          cmd.audioFilter(audioFilters)
+        // Apply crop filter
+        if (cropRect) {
+          let { x, y, width, height } = cropRect
+          x = Math.round(x)
+          y = Math.round(y)
+          width = Math.round(width / 2) * 2
+          height = Math.round(height / 2) * 2
+          cmd.videoFilter([`crop=${width}:${height}:${x}:${y}`])
         }
-        cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
-      } else {
-        cmd.outputOptions(['-c:a', 'copy'])
+
+        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+
+        if (removeAudio) {
+          cmd.noAudio()
+        } else {
+          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
+        }
+
+        cmd.output(intermediatePath)
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .run()
+      })
+
+      // PASS 2: Apply speed change
+      await new Promise<void>((resolve, reject) => {
+        const cmd = ffmpeg(intermediatePath)
+
+        // Video speed filter
+        cmd.videoFilter([`setpts=PTS/${effectiveSpeed}`])
+
+        // Audio speed filter (atempo only supports 0.5-2.0, chain for extreme values)
+        if (!removeAudio) {
+          const audioFilters: string[] = []
+          let remainingSpeed = effectiveSpeed
+          while (remainingSpeed > 2.0) {
+            audioFilters.push('atempo=2.0')
+            remainingSpeed /= 2.0
+          }
+          while (remainingSpeed < 0.5) {
+            audioFilters.push('atempo=0.5')
+            remainingSpeed /= 0.5
+          }
+          audioFilters.push(`atempo=${remainingSpeed}`)
+          cmd.audioFilter(audioFilters)
+          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
+        } else {
+          cmd.noAudio()
+        }
+
+        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+        cmd.output(outputPath)
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .run()
+      })
+    } else {
+      // Single pass: no trim, or no speed change
+      const videoFilters: string[] = []
+      const audioFilters: string[] = []
+
+      // Add crop filter if cropRect provided
+      if (cropRect) {
+        let { x, y, width, height } = cropRect
+        x = Math.round(x)
+        y = Math.round(y)
+        width = Math.round(width / 2) * 2
+        height = Math.round(height / 2) * 2
+        videoFilters.push(`crop=${width}:${height}:${x}:${y}`)
       }
 
-      cmd.output(outputPath)
-        .on('end', () => resolve())
-        .on('error', (err) => reject(err))
-        .run()
-    })
+      // Add speed filter if speed provided and not 1
+      if (effectiveSpeed) {
+        videoFilters.push(`setpts=PTS/${effectiveSpeed}`)
+
+        let remainingSpeed = effectiveSpeed
+        while (remainingSpeed > 2.0) {
+          audioFilters.push('atempo=2.0')
+          remainingSpeed /= 2.0
+        }
+        while (remainingSpeed < 0.5) {
+          audioFilters.push('atempo=0.5')
+          remainingSpeed /= 0.5
+        }
+        audioFilters.push(`atempo=${remainingSpeed}`)
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const cmd = ffmpeg(inputPath)
+
+        // Apply trim as input options for efficiency (seeks before decoding)
+        if (hasTrim) {
+          if (trim.start > 0) {
+            cmd.inputOptions(['-ss', String(trim.start)])
+          }
+          if (trim.end > 0) {
+            const duration = trim.end - (trim.start || 0)
+            if (duration > 0) {
+              cmd.inputOptions(['-t', String(duration)])
+            }
+          }
+        }
+
+        if (videoFilters.length > 0) {
+          cmd.videoFilter(videoFilters)
+        }
+
+        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+
+        // Handle audio: remove, re-encode for speed change, or copy
+        if (removeAudio) {
+          cmd.noAudio()
+        } else if (audioFilters.length > 0 || hasTrim) {
+          if (audioFilters.length > 0) {
+            cmd.audioFilter(audioFilters)
+          }
+          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
+        } else {
+          cmd.outputOptions(['-c:a', 'copy'])
+        }
+
+        cmd.output(outputPath)
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .run()
+      })
+    }
 
     // Read processed video
     const processedBuffer = fs.readFileSync(outputPath)
