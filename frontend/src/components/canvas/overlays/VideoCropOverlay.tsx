@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { CropRect, VideoItem } from '../../../types'
 
 interface VideoCropOverlayProps {
@@ -59,6 +59,26 @@ export default function VideoCropOverlay({
   onSpeedChange,
 }: VideoCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
+  const [lockAspectRatio, setLockAspectRatio] = useState(false)
+  const aspectRatioRef = useRef(cropRect.width / cropRect.height)
+
+  // Local state for input fields - only commit on blur/Enter
+  const [inputValues, setInputValues] = useState({
+    x: String(Math.round(cropRect.x)),
+    y: String(Math.round(cropRect.y)),
+    width: String(Math.round(cropRect.width)),
+    height: String(Math.round(cropRect.height)),
+  })
+
+  // Sync input values when cropRect changes from dragging
+  useEffect(() => {
+    setInputValues({
+      x: String(Math.round(cropRect.x)),
+      y: String(Math.round(cropRect.y)),
+      width: String(Math.round(cropRect.width)),
+      height: String(Math.round(cropRect.height)),
+    })
+  }, [cropRect.x, cropRect.y, cropRect.width, cropRect.height])
 
   // Original video dimensions
   const origW = item.originalWidth ?? item.width
@@ -107,6 +127,8 @@ export default function VideoCropOverlay({
   displayScaleYRef.current = displayScaleY
   const onCropChangeRef = useRef(onCropChange)
   onCropChangeRef.current = onCropChange
+  const lockAspectRatioRef = useRef(lockAspectRatio)
+  lockAspectRatioRef.current = lockAspectRatio
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     const ds = dragStateRef.current
@@ -124,23 +146,89 @@ export default function VideoCropOverlay({
       onCropChangeRef.current({ ...ds.startCrop, x: nx, y: ny })
     } else if (ds.type === 'handle' && ds.handlePos) {
       let { x: bx, y: by, width: bw, height: bh } = ds.startCrop
+      const ar = aspectRatioRef.current
+      const locked = lockAspectRatioRef.current
+
       switch (ds.handlePos) {
         case 'top-left':
-          bx += dx; by += dy; bw -= dx; bh -= dy; break
+          bw -= dx; bh -= dy
+          if (locked) {
+            // Use the larger change to determine new size
+            const newW = ds.startCrop.width - dx
+            const newH = ds.startCrop.height - dy
+            if (Math.abs(dx) > Math.abs(dy)) {
+              bh = newW / ar
+            } else {
+              bw = newH * ar
+            }
+          }
+          bx = ds.startCrop.x + ds.startCrop.width - bw
+          by = ds.startCrop.y + ds.startCrop.height - bh
+          break
         case 'top-right':
-          by += dy; bw += dx; bh -= dy; break
+          bw += dx; bh -= dy
+          if (locked) {
+            const newW = ds.startCrop.width + dx
+            const newH = ds.startCrop.height - dy
+            if (Math.abs(dx) > Math.abs(dy)) {
+              bh = newW / ar
+            } else {
+              bw = newH * ar
+            }
+          }
+          by = ds.startCrop.y + ds.startCrop.height - bh
+          break
         case 'bottom-left':
-          bx += dx; bw -= dx; bh += dy; break
+          bw -= dx; bh += dy
+          if (locked) {
+            const newW = ds.startCrop.width - dx
+            const newH = ds.startCrop.height + dy
+            if (Math.abs(dx) > Math.abs(dy)) {
+              bh = newW / ar
+            } else {
+              bw = newH * ar
+            }
+          }
+          bx = ds.startCrop.x + ds.startCrop.width - bw
+          break
         case 'bottom-right':
-          bw += dx; bh += dy; break
+          bw += dx; bh += dy
+          if (locked) {
+            const newW = ds.startCrop.width + dx
+            const newH = ds.startCrop.height + dy
+            if (Math.abs(dx) > Math.abs(dy)) {
+              bh = newW / ar
+            } else {
+              bw = newH * ar
+            }
+          }
+          break
         case 'top':
-          by += dy; bh -= dy; break
+          bh -= dy
+          if (locked) bw = bh * ar
+          by = ds.startCrop.y + ds.startCrop.height - bh
+          // Center horizontally when locked
+          if (locked) bx = ds.startCrop.x + (ds.startCrop.width - bw) / 2
+          break
         case 'bottom':
-          bh += dy; break
+          bh += dy
+          if (locked) bw = bh * ar
+          // Center horizontally when locked
+          if (locked) bx = ds.startCrop.x + (ds.startCrop.width - bw) / 2
+          break
         case 'left':
-          bx += dx; bw -= dx; break
+          bw -= dx
+          if (locked) bh = bw / ar
+          bx = ds.startCrop.x + ds.startCrop.width - bw
+          // Center vertically when locked
+          if (locked) by = ds.startCrop.y + (ds.startCrop.height - bh) / 2
+          break
         case 'right':
-          bw += dx; break
+          bw += dx
+          if (locked) bh = bw / ar
+          // Center vertically when locked
+          if (locked) by = ds.startCrop.y + (ds.startCrop.height - bh) / 2
+          break
       }
       onCropChangeRef.current(clampCrop({ x: bx, y: by, width: bw, height: bh }, origW, origH))
     }
@@ -182,6 +270,71 @@ export default function VideoCropOverlay({
     { pos: 'left', left: screenCx, top: screenCy + screenCh / 2, cursor: 'ew-resize' },
     { pos: 'right', left: screenCx + screenCw, top: screenCy + screenCh / 2, cursor: 'ew-resize' },
   ]
+
+  // Input change handler - only update local state
+  const handleInputChange = (field: 'x' | 'y' | 'width' | 'height', value: string) => {
+    setInputValues((prev) => ({ ...prev, [field]: value }))
+  }
+
+  // Commit input value to crop rect
+  const commitInput = (field: 'x' | 'y' | 'width' | 'height') => {
+    const num = parseInt(inputValues[field], 10)
+    if (isNaN(num)) {
+      // Reset to current crop value if invalid
+      setInputValues((prev) => ({
+        ...prev,
+        [field]: String(Math.round(cropRect[field])),
+      }))
+      return
+    }
+
+    let newCrop = { ...cropRect }
+
+    if (field === 'width') {
+      newCrop.width = num
+      if (lockAspectRatio) {
+        newCrop.height = Math.round(num / aspectRatioRef.current)
+      }
+    } else if (field === 'height') {
+      newCrop.height = num
+      if (lockAspectRatio) {
+        newCrop.width = Math.round(num * aspectRatioRef.current)
+      }
+    } else {
+      newCrop[field] = num
+    }
+
+    onCropChange(clampCrop(newCrop, origW, origH))
+  }
+
+  // Handle Enter key in input fields
+  const handleInputKeyDown = (e: React.KeyboardEvent, field: 'x' | 'y' | 'width' | 'height') => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      commitInput(field)
+      ;(e.target as HTMLInputElement).blur()
+    }
+  }
+
+  const handleLockToggle = () => {
+    if (!lockAspectRatio) {
+      // When locking, capture current aspect ratio
+      aspectRatioRef.current = cropRect.width / cropRect.height
+    }
+    setLockAspectRatio(!lockAspectRatio)
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: 38,
+    backgroundColor: 'white',
+    color: '#333',
+    border: '1px solid #555',
+    borderRadius: 3,
+    padding: '2px 4px',
+    fontSize: 12,
+    textAlign: 'right',
+  }
 
   return (
     <div
@@ -337,7 +490,7 @@ export default function VideoCropOverlay({
       <div
         style={{
           position: 'absolute',
-          bottom: -60,
+          bottom: -70,
           left: '50%',
           transform: 'translateX(-50%)',
           backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -352,8 +505,86 @@ export default function VideoCropOverlay({
           whiteSpace: 'nowrap',
         }}
       >
-        {/* Controls row */}
+        <style>{`
+          .crop-input::-webkit-outer-spin-button,
+          .crop-input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+          }
+          .crop-input[type=number] {
+            -moz-appearance: textfield;
+          }
+        `}</style>
+        {/* All controls in one row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>X:</span>
+            <input
+              type="number"
+              className="crop-input"
+              value={inputValues.x}
+              onChange={(e) => handleInputChange('x', e.target.value)}
+              onBlur={() => commitInput('x')}
+              onKeyDown={(e) => handleInputKeyDown(e, 'x')}
+              onFocus={(e) => e.target.select()}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>Y:</span>
+            <input
+              type="number"
+              className="crop-input"
+              value={inputValues.y}
+              onChange={(e) => handleInputChange('y', e.target.value)}
+              onBlur={() => commitInput('y')}
+              onKeyDown={(e) => handleInputKeyDown(e, 'y')}
+              onFocus={(e) => e.target.select()}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>W:</span>
+            <input
+              type="number"
+              className="crop-input"
+              value={inputValues.width}
+              onChange={(e) => handleInputChange('width', e.target.value)}
+              onBlur={() => commitInput('width')}
+              onKeyDown={(e) => handleInputKeyDown(e, 'width')}
+              onFocus={(e) => e.target.select()}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span>H:</span>
+            <input
+              type="number"
+              className="crop-input"
+              value={inputValues.height}
+              onChange={(e) => handleInputChange('height', e.target.value)}
+              onBlur={() => commitInput('height')}
+              onKeyDown={(e) => handleInputKeyDown(e, 'height')}
+              onFocus={(e) => e.target.select()}
+              style={inputStyle}
+            />
+          </label>
+          <button
+            onClick={handleLockToggle}
+            style={{
+              backgroundColor: lockAspectRatio ? '#4a9eff' : '#333',
+              color: 'white',
+              border: '1px solid #555',
+              borderRadius: 3,
+              padding: '2px 6px',
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+            title={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+          >
+            {lockAspectRatio ? '🔒' : '🔓'}
+          </button>
+          <div style={{ width: 1, height: 16, backgroundColor: '#555' }} />
           <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>Speed:</span>
             <select
