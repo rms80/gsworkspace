@@ -57,7 +57,7 @@ export interface CropVideoResult {
 }
 
 /**
- * Process a video on the server (crop, speed change, and/or audio removal) and save to S3.
+ * Process a video on the server (crop, speed change, audio removal, and/or trim) and save to S3.
  * Returns the S3 URL of the processed video.
  */
 export async function cropVideo(
@@ -65,9 +65,10 @@ export async function cropVideo(
   videoId: string,
   cropRect?: { x: number; y: number; width: number; height: number },
   speed?: number,
-  removeAudio?: boolean
+  removeAudio?: boolean,
+  trim?: { start: number; end: number }
 ): Promise<string> {
-  const requestBody = { sceneId, videoId, cropRect, speed, removeAudio }
+  const requestBody = { sceneId, videoId, cropRect, speed, removeAudio, trim }
   const response = await fetch(`${API_BASE}/crop-video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -82,7 +83,7 @@ export async function cropVideo(
     console.error('cropVideo failed:', {
       status: response.status,
       error: errorDetail,
-      request: { sceneId, videoId, cropRect, speed, removeAudio },
+      request: { sceneId, videoId, cropRect, speed, removeAudio, trim },
     })
     throw new Error(`Failed to process video: ${errorDetail}`)
   }

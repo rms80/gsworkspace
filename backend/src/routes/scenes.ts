@@ -59,6 +59,9 @@ interface StoredVideoItem extends StoredItemBase {
   removeAudio?: boolean
   cropRect?: { x: number; y: number; width: number; height: number }
   cropSrc?: string
+  trim?: boolean
+  trimStart?: number
+  trimEnd?: number
 }
 
 interface StoredPromptItem extends StoredItemBase {
@@ -347,6 +350,9 @@ router.post('/:id', async (req, res) => {
             removeAudio: item.removeAudio,
             cropRect: item.cropRect,
             cropSrc: item.cropSrc,
+            trim: item.trim,
+            trimStart: item.trimStart,
+            trimEnd: item.trimEnd,
           })
         } else {
           console.error(`Failed to save video ${item.id}, skipping from scene`)
@@ -523,6 +529,9 @@ router.get('/:id', async (req, res) => {
             removeAudio: item.removeAudio,
             cropRect: item.cropRect,
             cropSrc: item.cropSrc,
+            trim: item.trim,
+            trimStart: item.trimStart,
+            trimEnd: item.trimEnd,
           }
         } else if (item.type === 'prompt') {
           return {

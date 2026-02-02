@@ -55,6 +55,9 @@ export interface VideoItem extends BaseItem {
   cropSrc?: string      // S3 URL of cropped video file
   speedFactor?: number  // encoded speed multiplier (0.25, 0.5, 1, 1.5, 2, 3, 4)
   removeAudio?: boolean // remove audio track from encoded video
+  trim?: boolean        // whether trim is enabled
+  trimStart?: number    // trim start time in seconds (fractional)
+  trimEnd?: number      // trim end time in seconds (fractional)
 }
 
 export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'

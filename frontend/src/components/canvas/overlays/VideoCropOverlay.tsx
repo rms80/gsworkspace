@@ -6,11 +6,17 @@ interface VideoCropOverlayProps {
   cropRect: CropRect
   speed: number
   removeAudio: boolean
+  trim: boolean
+  trimStart: number
+  trimEnd: number
   stageScale: number
   stagePos: { x: number; y: number }
   onCropChange: (crop: CropRect) => void
   onSpeedChange: (speed: number) => void
   onRemoveAudioChange: (remove: boolean) => void
+  onTrimChange: (trim: boolean) => void
+  onTrimStartChange: (start: number) => void
+  onTrimEndChange: (end: number) => void
 }
 
 const SPEED_OPTIONS = [
@@ -56,11 +62,17 @@ export default function VideoCropOverlay({
   cropRect,
   speed,
   removeAudio,
+  trim,
+  trimStart,
+  trimEnd,
   stageScale,
   stagePos,
   onCropChange,
   onSpeedChange,
   onRemoveAudioChange,
+  onTrimChange,
+  onTrimStartChange,
+  onTrimEndChange,
 }: VideoCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(false)
@@ -81,6 +93,12 @@ export default function VideoCropOverlay({
     height: String(Math.round(cropRect.height)),
   })
 
+  // Local state for trim input fields
+  const [trimInputValues, setTrimInputValues] = useState({
+    start: trimStart.toFixed(1),
+    end: trimEnd.toFixed(1),
+  })
+
   // Sync input values when cropRect changes from dragging
   useEffect(() => {
     setInputValues({
@@ -90,6 +108,51 @@ export default function VideoCropOverlay({
       height: String(Math.round(cropRect.height)),
     })
   }, [cropRect.x, cropRect.y, cropRect.width, cropRect.height])
+
+  // Sync trim input values when trim times change externally
+  useEffect(() => {
+    setTrimInputValues({
+      start: trimStart.toFixed(1),
+      end: trimEnd.toFixed(1),
+    })
+  }, [trimStart, trimEnd])
+
+  // Trim input handlers
+  const handleTrimInputChange = (field: 'start' | 'end', value: string) => {
+    setTrimInputValues(prev => ({ ...prev, [field]: value }))
+  }
+
+  const commitTrimInput = (field: 'start' | 'end') => {
+    const value = parseFloat(trimInputValues[field])
+    if (!isNaN(value) && value >= 0) {
+      if (field === 'start') {
+        // Ensure start is not greater than end
+        const clampedValue = Math.min(value, trimEnd > 0 ? trimEnd : duration)
+        onTrimStartChange(clampedValue)
+      } else {
+        // Ensure end is not less than start
+        const clampedValue = Math.max(value, trimStart)
+        onTrimEndChange(clampedValue)
+      }
+    }
+  }
+
+  const handleTrimInputKeyDown = (e: React.KeyboardEvent, field: 'start' | 'end') => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitTrimInput(field)
+      ;(e.target as HTMLInputElement).blur()
+    }
+  }
+
+  // Set trim start/end from current playback position
+  const setTrimStartFromPlayhead = () => {
+    onTrimStartChange(currentTime)
+  }
+
+  const setTrimEndFromPlayhead = () => {
+    onTrimEndChange(currentTime)
+  }
 
   // Video playback event handlers
   useEffect(() => {
@@ -708,6 +771,68 @@ export default function VideoCropOverlay({
           >
             Mute
           </button>
+          <div style={{ width: 1, height: 16, backgroundColor: '#555' }} />
+          <button
+            onClick={() => onTrimChange(!trim)}
+            style={{
+              backgroundColor: trim ? '#4a9eff' : '#333',
+              color: 'white',
+              border: '1px solid #555',
+              borderRadius: 3,
+              padding: '2px 8px',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+            title={trim ? 'Trim enabled' : 'Trim disabled'}
+          >
+            Trim
+          </button>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: trim ? 1 : 0.5 }}>
+            <span>Start:</span>
+            <input
+              type="text"
+              className="crop-input"
+              value={trimInputValues.start}
+              onChange={(e) => handleTrimInputChange('start', e.target.value)}
+              onBlur={() => commitTrimInput('start')}
+              onKeyDown={(e) => handleTrimInputKeyDown(e, 'start')}
+              onFocus={(e) => e.target.select()}
+              disabled={!trim}
+              style={{
+                width: 45,
+                padding: '2px 4px',
+                backgroundColor: trim ? 'white' : '#666',
+                color: trim ? 'black' : '#999',
+                border: '1px solid #555',
+                borderRadius: 3,
+                fontSize: 12,
+                textAlign: 'right',
+              }}
+            />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: trim ? 1 : 0.5 }}>
+            <span>End:</span>
+            <input
+              type="text"
+              className="crop-input"
+              value={trimInputValues.end}
+              onChange={(e) => handleTrimInputChange('end', e.target.value)}
+              onBlur={() => commitTrimInput('end')}
+              onKeyDown={(e) => handleTrimInputKeyDown(e, 'end')}
+              onFocus={(e) => e.target.select()}
+              disabled={!trim}
+              style={{
+                width: 45,
+                padding: '2px 4px',
+                backgroundColor: trim ? 'white' : '#666',
+                color: trim ? 'black' : '#999',
+                border: '1px solid #555',
+                borderRadius: 3,
+                fontSize: 12,
+                textAlign: 'right',
+              }}
+            />
+          </label>
         </div>
         {/* Playback controls row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -724,6 +849,24 @@ export default function VideoCropOverlay({
           >
             {isPlaying ? '⏸' : '▶'}
           </button>
+          <button
+            onClick={setTrimStartFromPlayhead}
+            disabled={!trim}
+            style={{
+              background: 'none',
+              border: '1px solid',
+              borderColor: trim ? '#4a9eff' : '#555',
+              color: trim ? '#4a9eff' : '#666',
+              cursor: trim ? 'pointer' : 'default',
+              fontSize: 10,
+              padding: '2px 4px',
+              borderRadius: 3,
+              opacity: trim ? 1 : 0.5,
+            }}
+            title="Set trim start from current position"
+          >
+            [
+          </button>
           <input
             type="range"
             min={0}
@@ -738,6 +881,24 @@ export default function VideoCropOverlay({
               cursor: 'pointer',
             }}
           />
+          <button
+            onClick={setTrimEndFromPlayhead}
+            disabled={!trim}
+            style={{
+              background: 'none',
+              border: '1px solid',
+              borderColor: trim ? '#4a9eff' : '#555',
+              color: trim ? '#4a9eff' : '#666',
+              cursor: trim ? 'pointer' : 'default',
+              fontSize: 10,
+              padding: '2px 4px',
+              borderRadius: 3,
+              opacity: trim ? 1 : 0.5,
+            }}
+            title="Set trim end from current position"
+          >
+            ]
+          </button>
           <span style={{ fontSize: 11, fontFamily: 'monospace', minWidth: 75 }}>
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>

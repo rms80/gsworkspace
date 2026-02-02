@@ -173,7 +173,7 @@ router.post('/crop-image', async (req, res) => {
 // User folder - must match scenes.ts
 const USER_FOLDER = 'version0'
 
-// Process a video (crop and/or speed change) and save to S3
+// Process a video (crop, speed change, trim) and save to S3
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
   const inputPath = path.join(tempDir, `video-input-${uuidv4()}.mp4`)
@@ -186,14 +186,15 @@ router.post('/crop-video', async (req, res) => {
   }
 
   try {
-    const { sceneId, videoId, cropRect, speed, removeAudio } = req.body
-    console.log('crop-video request:', { sceneId, videoId, cropRect, speed, removeAudio })
+    const { sceneId, videoId, cropRect, speed, removeAudio, trim } = req.body
+    console.log('crop-video request:', { sceneId, videoId, cropRect, speed, removeAudio, trim })
     if (!sceneId || !videoId) {
       return res.status(400).json({ error: 'sceneId and videoId are required' })
     }
-    if (!cropRect && (!speed || speed === 1) && !removeAudio) {
-      console.log('crop-video rejected: no cropRect, speed is 1 or undefined, and removeAudio is false')
-      return res.status(400).json({ error: 'cropRect, speed change, or removeAudio is required' })
+    const hasTrim = trim && (trim.start > 0 || trim.end > 0)
+    if (!cropRect && (!speed || speed === 1) && !removeAudio && !hasTrim) {
+      console.log('crop-video rejected: no cropRect, speed is 1 or undefined, removeAudio is false, and no trim')
+      return res.status(400).json({ error: 'cropRect, speed change, removeAudio, or trim is required' })
     }
 
     // Construct the source video URL from scene and video IDs
@@ -249,6 +250,20 @@ router.post('/crop-video', async (req, res) => {
     await new Promise<void>((resolve, reject) => {
       const cmd = ffmpeg(inputPath)
 
+      // Apply trim as input options for efficiency (seeks before decoding)
+      if (hasTrim) {
+        if (trim.start > 0) {
+          cmd.inputOptions(['-ss', String(trim.start)])
+        }
+        if (trim.end > 0) {
+          // Use -to for absolute end time (adjusted for start offset if using -ss)
+          const duration = trim.end - (trim.start || 0)
+          if (duration > 0) {
+            cmd.inputOptions(['-t', String(duration)])
+          }
+        }
+      }
+
       if (videoFilters.length > 0) {
         cmd.videoFilter(videoFilters)
       }
@@ -256,10 +271,13 @@ router.post('/crop-video', async (req, res) => {
       cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
 
       // Handle audio: remove, re-encode for speed change, or copy
+      // Note: when trimming, we need to re-encode audio to avoid sync issues
       if (removeAudio) {
         cmd.noAudio()
-      } else if (audioFilters.length > 0) {
-        cmd.audioFilter(audioFilters)
+      } else if (audioFilters.length > 0 || hasTrim) {
+        if (audioFilters.length > 0) {
+          cmd.audioFilter(audioFilters)
+        }
         cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
       } else {
         cmd.outputOptions(['-c:a', 'copy'])

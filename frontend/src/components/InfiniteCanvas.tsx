@@ -117,11 +117,17 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     pendingCropRect: videoPendingCropRect,
     pendingSpeed: videoPendingSpeed,
     pendingRemoveAudio: videoPendingRemoveAudio,
+    pendingTrim: videoPendingTrim,
+    pendingTrimStart: videoPendingTrimStart,
+    pendingTrimEnd: videoPendingTrimEnd,
     processingVideoId,
     startCrop: startVideoCrop,
     setPendingCropRect: setVideoPendingCropRect,
     setPendingSpeed: setVideoPendingSpeed,
     setPendingRemoveAudio: setVideoPendingRemoveAudio,
+    setPendingTrim: setVideoPendingTrim,
+    setPendingTrimStart: setVideoPendingTrimStart,
+    setPendingTrimEnd: setVideoPendingTrimEnd,
     applyOrCancelCrop: applyOrCancelVideoCrop,
   } = useVideoCropMode({ items, sceneId, isOffline, onUpdateItem })
 
@@ -814,11 +820,17 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             cropRect={videoPendingCropRect}
             speed={videoPendingSpeed}
             removeAudio={videoPendingRemoveAudio}
+            trim={videoPendingTrim}
+            trimStart={videoPendingTrimStart}
+            trimEnd={videoPendingTrimEnd}
             stageScale={stageScale}
             stagePos={stagePos}
             onCropChange={setVideoPendingCropRect}
             onSpeedChange={setVideoPendingSpeed}
             onRemoveAudioChange={setVideoPendingRemoveAudio}
+            onTrimChange={setVideoPendingTrim}
+            onTrimStartChange={setVideoPendingTrimStart}
+            onTrimEndChange={setVideoPendingTrimEnd}
           />
         )
       })()}
@@ -1005,7 +1017,10 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
               const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
               const initialSpeed = videoItem.speedFactor ?? 1
               const initialRemoveAudio = videoItem.removeAudio ?? false
-              startVideoCrop(videoId, initialCrop, initialSpeed, initialRemoveAudio)
+              const initialTrim = videoItem.trim ?? false
+              const initialTrimStart = videoItem.trimStart ?? 0
+              const initialTrimEnd = videoItem.trimEnd ?? 0
+              startVideoCrop(videoId, initialCrop, initialSpeed, initialRemoveAudio, initialTrim, initialTrimStart, initialTrimEnd)
             }
           }}
           onClose={videoContextMenuState.closeMenu}

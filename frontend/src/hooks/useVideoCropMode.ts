@@ -14,11 +14,17 @@ export interface VideoCropMode {
   pendingCropRect: CropRect | null
   pendingSpeed: number
   pendingRemoveAudio: boolean
+  pendingTrim: boolean
+  pendingTrimStart: number
+  pendingTrimEnd: number
   processingVideoId: string | null
-  startCrop: (id: string, initialRect: CropRect, initialSpeed: number, initialRemoveAudio: boolean) => void
+  startCrop: (id: string, initialRect: CropRect, initialSpeed: number, initialRemoveAudio: boolean, initialTrim: boolean, initialTrimStart: number, initialTrimEnd: number) => void
   setPendingCropRect: (rect: CropRect | null) => void
   setPendingSpeed: (speed: number) => void
   setPendingRemoveAudio: (remove: boolean) => void
+  setPendingTrim: (trim: boolean) => void
+  setPendingTrimStart: (start: number) => void
+  setPendingTrimEnd: (end: number) => void
   applyCrop: () => void
   cancelCrop: () => void
   applyOrCancelCrop: () => void
@@ -42,9 +48,15 @@ export function useVideoCropMode({
   const [initialSpeed, setInitialSpeed] = useState<number>(1)
   const [pendingRemoveAudio, setPendingRemoveAudio] = useState<boolean>(false)
   const [initialRemoveAudio, setInitialRemoveAudio] = useState<boolean>(false)
+  const [pendingTrim, setPendingTrim] = useState<boolean>(false)
+  const [initialTrim, setInitialTrim] = useState<boolean>(false)
+  const [pendingTrimStart, setPendingTrimStart] = useState<number>(0)
+  const [initialTrimStart, setInitialTrimStart] = useState<number>(0)
+  const [pendingTrimEnd, setPendingTrimEnd] = useState<number>(0)
+  const [initialTrimEnd, setInitialTrimEnd] = useState<number>(0)
   const [processingVideoId, setProcessingVideoId] = useState<string | null>(null)
 
-  const startCrop = useCallback((id: string, initialRect: CropRect, speed: number, removeAudio: boolean) => {
+  const startCrop = useCallback((id: string, initialRect: CropRect, speed: number, removeAudio: boolean, trim: boolean, trimStart: number, trimEnd: number) => {
     setCroppingVideoId(id)
     setPendingCropRect(initialRect)
     setInitialCropRect(initialRect)
@@ -52,6 +64,12 @@ export function useVideoCropMode({
     setInitialSpeed(speed)
     setPendingRemoveAudio(removeAudio)
     setInitialRemoveAudio(removeAudio)
+    setPendingTrim(trim)
+    setInitialTrim(trim)
+    setPendingTrimStart(trimStart)
+    setInitialTrimStart(trimStart)
+    setPendingTrimEnd(trimEnd)
+    setInitialTrimEnd(trimEnd)
   }, [])
 
   const applyCrop = useCallback(() => {
@@ -99,8 +117,11 @@ export function useVideoCropMode({
     const cropRectChanged = !cropRectsEqual(cropRect, initialCropRect)
     const speedChanged = pendingSpeed !== initialSpeed
     const removeAudioChanged = pendingRemoveAudio !== initialRemoveAudio
+    const trimChanged = pendingTrim !== initialTrim
+    const trimStartChanged = pendingTrimStart !== initialTrimStart
+    const trimEndChanged = pendingTrimEnd !== initialTrimEnd
 
-    // Update item with crop rect, speed, and removeAudio immediately (for UI display)
+    // Update item with crop rect, speed, removeAudio, and trim immediately (for UI display)
     onUpdateItem(itemId, {
       x: newX,
       y: newY,
@@ -109,6 +130,9 @@ export function useVideoCropMode({
       cropRect,
       speedFactor: pendingSpeed !== 1 ? pendingSpeed : undefined,
       removeAudio: pendingRemoveAudio || undefined,
+      trim: pendingTrim || undefined,
+      trimStart: pendingTrim ? pendingTrimStart : undefined,
+      trimEnd: pendingTrim ? pendingTrimEnd : undefined,
     })
 
     setCroppingVideoId(null)
@@ -118,6 +142,12 @@ export function useVideoCropMode({
     setInitialSpeed(1)
     setPendingRemoveAudio(false)
     setInitialRemoveAudio(false)
+    setPendingTrim(false)
+    setInitialTrim(false)
+    setPendingTrimStart(0)
+    setInitialTrimStart(0)
+    setPendingTrimEnd(0)
+    setInitialTrimEnd(0)
 
     // Skip server-side processing in offline mode
     if (isOffline) {
@@ -125,7 +155,7 @@ export function useVideoCropMode({
     }
 
     // Only call server if something changed
-    if (!cropRectChanged && !speedChanged && !removeAudioChanged) {
+    if (!cropRectChanged && !speedChanged && !removeAudioChanged && !trimChanged && !trimStartChanged && !trimEndChanged) {
       return
     }
 
@@ -136,8 +166,9 @@ export function useVideoCropMode({
     const cropRectToSend = cropRectChanged ? cropRect : undefined
     const speedToSend = speedChanged ? pendingSpeed : undefined
     const removeAudioToSend = removeAudioChanged ? pendingRemoveAudio : undefined
+    const trimToSend = (trimChanged || trimStartChanged || trimEndChanged) && pendingTrim ? { start: pendingTrimStart, end: pendingTrimEnd } : undefined
 
-    cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend)
+    cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend, trimToSend)
       .then((cropUrl) => {
         onUpdateItem(itemId, { cropSrc: cropUrl })
         setProcessingVideoId(null)
@@ -146,7 +177,7 @@ export function useVideoCropMode({
         console.error('Failed to create server-side video processing:', err)
         setProcessingVideoId(null)
       })
-  }, [croppingVideoId, pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, items, sceneId, isOffline, onUpdateItem])
+  }, [croppingVideoId, pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, pendingTrim, initialTrim, pendingTrimStart, initialTrimStart, pendingTrimEnd, initialTrimEnd, items, sceneId, isOffline, onUpdateItem])
 
   const cancelCrop = useCallback(() => {
     setCroppingVideoId(null)
@@ -156,19 +187,26 @@ export function useVideoCropMode({
     setInitialSpeed(1)
     setPendingRemoveAudio(false)
     setInitialRemoveAudio(false)
+    setPendingTrim(false)
+    setInitialTrim(false)
+    setPendingTrimStart(0)
+    setInitialTrimStart(0)
+    setPendingTrimEnd(0)
+    setInitialTrimEnd(0)
   }, [])
 
-  // Apply crop if modified (crop, speed, or removeAudio changed), otherwise cancel
+  // Apply crop if modified (crop, speed, removeAudio, or trim changed), otherwise cancel
   const applyOrCancelCrop = useCallback(() => {
     const cropChanged = !cropRectsEqual(pendingCropRect, initialCropRect)
     const speedChanged = pendingSpeed !== initialSpeed
     const removeAudioChanged = pendingRemoveAudio !== initialRemoveAudio
-    if (!cropChanged && !speedChanged && !removeAudioChanged) {
+    const trimChanged = pendingTrim !== initialTrim || pendingTrimStart !== initialTrimStart || pendingTrimEnd !== initialTrimEnd
+    if (!cropChanged && !speedChanged && !removeAudioChanged && !trimChanged) {
       cancelCrop()
     } else {
       applyCrop()
     }
-  }, [pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, cancelCrop, applyCrop])
+  }, [pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, pendingTrim, initialTrim, pendingTrimStart, initialTrimStart, pendingTrimEnd, initialTrimEnd, cancelCrop, applyCrop])
 
   // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
   useEffect(() => {
@@ -192,11 +230,17 @@ export function useVideoCropMode({
     pendingCropRect,
     pendingSpeed,
     pendingRemoveAudio,
+    pendingTrim,
+    pendingTrimStart,
+    pendingTrimEnd,
     processingVideoId,
     startCrop,
     setPendingCropRect,
     setPendingSpeed,
     setPendingRemoveAudio,
+    setPendingTrim,
+    setPendingTrimStart,
+    setPendingTrimEnd,
     applyCrop,
     cancelCrop,
     applyOrCancelCrop,
