@@ -560,6 +560,8 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
               />
             )
           } else if (item.type === 'video') {
+            // Hide the video item when it's being cropped/edited
+            if (croppingVideoId === item.id) return null
             return (
               <VideoItemRenderer
                 key={item.id}
