@@ -183,14 +183,14 @@ router.post('/crop-video', async (req, res) => {
   }
 
   try {
-    const { src, cropRect, speed } = req.body
-    console.log('crop-video request:', { src: src?.substring(0, 50), cropRect, speed })
+    const { src, cropRect, speed, removeAudio } = req.body
+    console.log('crop-video request:', { src: src?.substring(0, 50), cropRect, speed, removeAudio })
     if (!src) {
       return res.status(400).json({ error: 'src is required' })
     }
-    if (!cropRect && (!speed || speed === 1)) {
-      console.log('crop-video rejected: no cropRect and speed is 1 or undefined')
-      return res.status(400).json({ error: 'cropRect or speed change is required' })
+    if (!cropRect && (!speed || speed === 1) && !removeAudio) {
+      console.log('crop-video rejected: no cropRect, speed is 1 or undefined, and removeAudio is false')
+      return res.status(400).json({ error: 'cropRect, speed change, or removeAudio is required' })
     }
 
     // Download video to temp file
@@ -244,14 +244,14 @@ router.post('/crop-video', async (req, res) => {
       if (videoFilters.length > 0) {
         cmd.videoFilter(videoFilters)
       }
-      if (audioFilters.length > 0) {
-        cmd.audioFilter(audioFilters)
-      }
 
       cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
 
-      // If we're changing audio, we need to re-encode it
-      if (audioFilters.length > 0) {
+      // Handle audio: remove, re-encode for speed change, or copy
+      if (removeAudio) {
+        cmd.noAudio()
+      } else if (audioFilters.length > 0) {
+        cmd.audioFilter(audioFilters)
         cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
       } else {
         cmd.outputOptions(['-c:a', 'copy'])

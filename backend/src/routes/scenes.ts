@@ -55,6 +55,8 @@ interface StoredVideoItem extends StoredItemBase {
   loop?: boolean
   muted?: boolean
   playbackRate?: number
+  speedFactor?: number
+  removeAudio?: boolean
 }
 
 interface StoredPromptItem extends StoredItemBase {
@@ -305,6 +307,8 @@ router.post('/:id', async (req, res) => {
             loop: item.loop,
             muted: item.muted,
             playbackRate: item.playbackRate,
+            speedFactor: item.speedFactor,
+            removeAudio: item.removeAudio,
           })
         } else {
           console.error(`Failed to save video ${item.id}, skipping from scene`)
@@ -477,6 +481,8 @@ router.get('/:id', async (req, res) => {
             loop: item.loop,
             muted: item.muted,
             playbackRate: item.playbackRate,
+            speedFactor: item.speedFactor,
+            removeAudio: item.removeAudio,
           }
         } else if (item.type === 'prompt') {
           return {

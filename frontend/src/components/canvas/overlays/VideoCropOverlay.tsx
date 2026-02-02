@@ -5,10 +5,12 @@ interface VideoCropOverlayProps {
   item: VideoItem
   cropRect: CropRect
   speed: number
+  removeAudio: boolean
   stageScale: number
   stagePos: { x: number; y: number }
   onCropChange: (crop: CropRect) => void
   onSpeedChange: (speed: number) => void
+  onRemoveAudioChange: (remove: boolean) => void
 }
 
 const SPEED_OPTIONS = [
@@ -53,10 +55,12 @@ export default function VideoCropOverlay({
   item,
   cropRect,
   speed,
+  removeAudio,
   stageScale,
   stagePos,
   onCropChange,
   onSpeedChange,
+  onRemoveAudioChange,
 }: VideoCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(false)
@@ -589,7 +593,14 @@ export default function VideoCropOverlay({
             <span>Speed:</span>
             <select
               value={speed}
-              onChange={(e) => onSpeedChange(parseFloat(e.target.value))}
+              onChange={(e) => {
+                const newSpeed = parseFloat(e.target.value)
+                onSpeedChange(newSpeed)
+                // Auto-enable removeAudio when speed is not 1x
+                if (newSpeed !== 1) {
+                  onRemoveAudioChange(true)
+                }
+              }}
               style={{
                 backgroundColor: '#333',
                 color: 'white',
@@ -607,6 +618,21 @@ export default function VideoCropOverlay({
               ))}
             </select>
           </label>
+          <button
+            onClick={() => onRemoveAudioChange(!removeAudio)}
+            style={{
+              backgroundColor: removeAudio ? '#4a9eff' : '#333',
+              color: 'white',
+              border: '1px solid #555',
+              borderRadius: 3,
+              padding: '2px 8px',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+            title={removeAudio ? 'Audio will be removed' : 'Audio will be kept'}
+          >
+            Mute
+          </button>
         </div>
         {/* Instructions row */}
         <div style={{ textAlign: 'center', opacity: 0.8 }}>

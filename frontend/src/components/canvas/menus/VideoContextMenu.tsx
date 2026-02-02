@@ -108,6 +108,7 @@ export default function VideoContextMenu({
       cropRect: undefined,
       cropSrc: undefined,
       speedFactor: undefined,
+      removeAudio: undefined,
     })
     onClose()
   }
@@ -222,7 +223,7 @@ export default function VideoContextMenu({
       >
         Edit
       </button>
-      {(videoItem?.cropRect || videoItem?.speedFactor) && (
+      {(videoItem?.cropRect || videoItem?.speedFactor || videoItem?.removeAudio) && (
         <button
           onClick={handleRemoveCrop}
           style={buttonStyle}

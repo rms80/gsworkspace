@@ -115,10 +115,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     croppingVideoId,
     pendingCropRect: videoPendingCropRect,
     pendingSpeed: videoPendingSpeed,
+    pendingRemoveAudio: videoPendingRemoveAudio,
     processingVideoId,
     startCrop: startVideoCrop,
     setPendingCropRect: setVideoPendingCropRect,
     setPendingSpeed: setVideoPendingSpeed,
+    setPendingRemoveAudio: setVideoPendingRemoveAudio,
     applyOrCancelCrop: applyOrCancelVideoCrop,
   } = useVideoCropMode({ items, isOffline, onUpdateItem })
 
@@ -810,10 +812,12 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
             item={videoItem}
             cropRect={videoPendingCropRect}
             speed={videoPendingSpeed}
+            removeAudio={videoPendingRemoveAudio}
             stageScale={stageScale}
             stagePos={stagePos}
             onCropChange={setVideoPendingCropRect}
             onSpeedChange={setVideoPendingSpeed}
+            onRemoveAudioChange={setVideoPendingRemoveAudio}
           />
         )
       })()}
@@ -998,7 +1002,8 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
               // Start with full frame or existing crop
               const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
               const initialSpeed = videoItem.speedFactor ?? 1
-              startVideoCrop(videoId, initialCrop, initialSpeed)
+              const initialRemoveAudio = videoItem.removeAudio ?? false
+              startVideoCrop(videoId, initialCrop, initialSpeed, initialRemoveAudio)
             }
           }}
           onClose={videoContextMenuState.closeMenu}
