@@ -295,7 +295,10 @@ sometimes two passes are needed. This is really good now!
 
 
 
+Feb 2
 
+Asked for AI query support in offline mode. Keys to be stored in localStorage, entered in settings dialog.
+It build all this no problem. Added settings tab for managing localStorage & IndexedDB, no problem.
 
 
 
