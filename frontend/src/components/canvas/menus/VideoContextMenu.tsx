@@ -1,9 +1,11 @@
 import { VideoItem } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
+import { getContentUrl } from '../../../api/scenes'
 
 interface VideoContextMenuProps {
   position: { x: number; y: number }
   videoItem: VideoItem | undefined
+  sceneId: string
   isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
   onCrop: (videoId: string) => void
@@ -35,6 +37,7 @@ function getVideoExtension(src: string): string {
 export default function VideoContextMenu({
   position,
   videoItem,
+  sceneId,
   isOffline,
   onUpdateItem,
   onCrop,
@@ -67,7 +70,7 @@ export default function VideoContextMenu({
     onClose()
   }
 
-  const handleRemoveCrop = () => {
+  const handleRemoveCrop = async () => {
     if (!videoItem) { onClose(); return }
     // Calculate scale factor from cropped display size
     const origW = videoItem.originalWidth ?? videoItem.width
@@ -100,11 +103,23 @@ export default function VideoContextMenu({
       newHeight = origH
     }
 
+    // Get the permanent URL for the original video (not the temp URL)
+    let newSrc = videoItem.src
+    if (!isOffline && sceneId) {
+      try {
+        newSrc = await getContentUrl(sceneId, videoItem.id, 'video', 'mp4', false)
+      } catch (err) {
+        console.error('Failed to get permanent video URL:', err)
+        // Fall back to existing src
+      }
+    }
+
     onUpdateItem(videoItem.id, {
       x: newX,
       y: newY,
       width: newWidth,
       height: newHeight,
+      src: newSrc,
       cropRect: undefined,
       cropSrc: undefined,
       speedFactor: undefined,

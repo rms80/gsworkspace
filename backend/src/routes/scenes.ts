@@ -125,6 +125,40 @@ router.get('/:id/timestamp', async (req, res) => {
   }
 })
 
+// Get content URL for a scene item
+// Constructs the S3 URL for videos, images, or html content
+router.get('/:id/content-url', (req, res) => {
+  try {
+    const { id } = req.params
+    const { contentId, contentType, extension, isEdit } = req.query
+
+    if (!contentId || !contentType) {
+      return res.status(400).json({ error: 'contentId and contentType are required' })
+    }
+
+    const sceneFolder = `${USER_FOLDER}/${id}`
+    let filename: string
+
+    // Determine the file extension
+    const ext = extension || (contentType === 'video' ? 'mp4' : contentType === 'image' ? 'png' : 'html')
+
+    // Build filename based on content type and edit flag
+    if (isEdit === 'true') {
+      // Edited version (e.g., cropped video or image)
+      filename = `${contentId}.crop.${ext}`
+    } else {
+      // Original version
+      filename = `${contentId}.${ext}`
+    }
+
+    const url = getPublicUrl(`${sceneFolder}/${filename}`)
+    res.json({ url })
+  } catch (error) {
+    console.error('Error getting content URL:', error)
+    res.status(500).json({ error: 'Failed to get content URL' })
+  }
+})
+
 // Save a scene
 router.post('/:id', async (req, res) => {
   try {

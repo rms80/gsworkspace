@@ -993,6 +993,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
         <VideoContextMenu
           position={videoContextMenuState.menuPosition}
           videoItem={items.find((i) => i.id === videoContextMenuState.menuData!.videoId && i.type === 'video') as import('../types').VideoItem | undefined}
+          sceneId={sceneId}
           isOffline={isOffline}
           onUpdateItem={onUpdateItem}
           onCrop={(videoId) => {
