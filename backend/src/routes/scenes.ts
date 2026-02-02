@@ -57,6 +57,8 @@ interface StoredVideoItem extends StoredItemBase {
   playbackRate?: number
   speedFactor?: number
   removeAudio?: boolean
+  cropRect?: { x: number; y: number; width: number; height: number }
+  cropSrc?: string
 }
 
 interface StoredPromptItem extends StoredItemBase {
@@ -309,6 +311,8 @@ router.post('/:id', async (req, res) => {
             playbackRate: item.playbackRate,
             speedFactor: item.speedFactor,
             removeAudio: item.removeAudio,
+            cropRect: item.cropRect,
+            cropSrc: item.cropSrc,
           })
         } else {
           console.error(`Failed to save video ${item.id}, skipping from scene`)
@@ -483,6 +487,8 @@ router.get('/:id', async (req, res) => {
             playbackRate: item.playbackRate,
             speedFactor: item.speedFactor,
             removeAudio: item.removeAudio,
+            cropRect: item.cropRect,
+            cropSrc: item.cropSrc,
           }
         } else if (item.type === 'prompt') {
           return {
