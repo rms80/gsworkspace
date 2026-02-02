@@ -276,10 +276,10 @@ export default function VideoCropOverlay({
   }
 
   const formatTime = (seconds: number): string => {
-    if (!isFinite(seconds)) return '0:00'
+    if (!isFinite(seconds)) return '0:00.0'
     const mins = Math.floor(seconds / 60)
-    const secs = Math.floor(seconds % 60)
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+    const secs = (seconds % 60).toFixed(1)
+    return `${mins}:${secs.padStart(4, '0')}`
   }
 
   // Original video dimensions
@@ -780,7 +780,7 @@ export default function VideoCropOverlay({
               color: 'white',
               border: '1px solid #555',
               borderRadius: 3,
-              padding: '2px 6px',
+              padding: '0px 6px',
               fontSize: 11,
               cursor: 'pointer',
             }}
@@ -806,7 +806,7 @@ export default function VideoCropOverlay({
                 color: 'white',
                 border: '1px solid #555',
                 borderRadius: 3,
-                padding: '2px 6px',
+                padding: '0px 6px',
                 fontSize: 12,
                 cursor: 'pointer',
               }}
@@ -930,8 +930,39 @@ export default function VideoCropOverlay({
             [
           </button>
           <div ref={timelineRef} style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+            <style>{`
+              .video-timeline-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                appearance: none;
+                width: 4px;
+                height: 14px;
+                background: white;
+                cursor: pointer;
+                border-radius: 0px;
+                margin-top: -5px;
+              }
+              .video-timeline-slider::-moz-range-thumb {
+                width: 4px;
+                height: 14px;
+                background: white;
+                cursor: pointer;
+                border-radius: 0px;
+                border: none;
+              }
+              .video-timeline-slider::-webkit-slider-runnable-track {
+                height: 4px;
+                background: rgba(255,255,255,0.3);
+                border-radius: 2px;
+              }
+              .video-timeline-slider::-moz-range-track {
+                height: 4px;
+                background: rgba(255,255,255,0.3);
+                border-radius: 2px;
+              }
+            `}</style>
             <input
               type="range"
+              className="video-timeline-slider"
               min={0}
               max={duration || 100}
               step={0.1}
@@ -941,6 +972,10 @@ export default function VideoCropOverlay({
                 width: '100%',
                 height: 4,
                 cursor: 'pointer',
+                WebkitAppearance: 'none',
+                appearance: 'none',
+                background: 'rgba(255,255,255,0.3)',
+                borderRadius: 2,
               }}
             />
             {/* Trim start/end markers */}
@@ -950,10 +985,10 @@ export default function VideoCropOverlay({
                   onMouseDown={handleTrimMarkerMouseDown('start')}
                   style={{
                     position: 'absolute',
-                    left: `${(trimStart / duration) * 100}%`,
-                    top: 12,
+                    left: `calc(2px + ${(trimStart / duration) * 100}% - ${(trimStart / duration) * 4}px)`,
+                    top: 16,
                     transform: 'translateX(-50%)',
-                    padding: '4px 6px',
+                    padding: '0px 6px',
                     cursor: 'ew-resize',
                   }}
                   title={`Trim start: ${trimStart.toFixed(1)}s`}
@@ -972,10 +1007,10 @@ export default function VideoCropOverlay({
                   onMouseDown={handleTrimMarkerMouseDown('end')}
                   style={{
                     position: 'absolute',
-                    left: `${(trimEnd / duration) * 100}%`,
-                    top: 12,
+                    left: `calc(2px + ${(trimEnd / duration) * 100}% - ${(trimEnd / duration) * 4}px)`,
+                    top: 16,
                     transform: 'translateX(-50%)',
-                    padding: '4px 6px',
+                    padding: '0px 6px',
                     cursor: 'ew-resize',
                   }}
                   title={`Trim end: ${trimEnd.toFixed(1)}s`}
@@ -993,8 +1028,8 @@ export default function VideoCropOverlay({
                 <span
                   style={{
                     position: 'absolute',
-                    left: `${((trimStart + trimEnd) / 2 / duration) * 100}%`,
-                    top: 12,
+                    left: `calc(2px + ${((trimStart + trimEnd) / 2 / duration) * 100}% - ${((trimStart + trimEnd) / 2 / duration) * 4}px)`,
+                    top: 13,
                     transform: 'translateX(-50%)',
                     fontSize: 9,
                     color: 'white',
@@ -1002,7 +1037,7 @@ export default function VideoCropOverlay({
                     pointerEvents: 'none',
                   }}
                 >
-                  {(trimEnd - trimStart).toFixed(1)}s
+                  {((trimEnd - trimStart) / speed).toFixed(1)}s
                 </span>
               </>
             )}
