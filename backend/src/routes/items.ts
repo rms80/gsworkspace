@@ -170,6 +170,9 @@ router.post('/crop-image', async (req, res) => {
   }
 })
 
+// User folder - must match scenes.ts
+const USER_FOLDER = 'version0'
+
 // Process a video (crop and/or speed change) and save to S3
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
@@ -183,20 +186,25 @@ router.post('/crop-video', async (req, res) => {
   }
 
   try {
-    const { src, cropRect, speed, removeAudio } = req.body
-    console.log('crop-video request:', { src: src?.substring(0, 50), cropRect, speed, removeAudio })
-    if (!src) {
-      return res.status(400).json({ error: 'src is required' })
+    const { sceneId, videoId, cropRect, speed, removeAudio } = req.body
+    console.log('crop-video request:', { sceneId, videoId, cropRect, speed, removeAudio })
+    if (!sceneId || !videoId) {
+      return res.status(400).json({ error: 'sceneId and videoId are required' })
     }
     if (!cropRect && (!speed || speed === 1) && !removeAudio) {
       console.log('crop-video rejected: no cropRect, speed is 1 or undefined, and removeAudio is false')
       return res.status(400).json({ error: 'cropRect, speed change, or removeAudio is required' })
     }
 
+    // Construct the source video URL from scene and video IDs
+    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const sourceKey = `${sceneFolder}/${videoId}.mp4`
+    const sourceUrl = getPublicUrl(sourceKey)
+
     // Download video to temp file
-    const response = await fetch(src)
+    const response = await fetch(sourceUrl)
     if (!response.ok) {
-      return res.status(400).json({ error: 'Failed to fetch source video' })
+      return res.status(400).json({ error: `Failed to fetch source video: ${sourceUrl}` })
     }
     const arrayBuffer = await response.arrayBuffer()
     fs.writeFileSync(inputPath, Buffer.from(arrayBuffer))
@@ -263,28 +271,13 @@ router.post('/crop-video', async (req, res) => {
         .run()
     })
 
-    // Read cropped video
-    const croppedBuffer = fs.readFileSync(outputPath)
+    // Read processed video
+    const processedBuffer = fs.readFileSync(outputPath)
 
-    // Derive S3 key for the crop file
-    let key: string
-    const bucketName = process.env.S3_BUCKET_NAME
-    const region = process.env.AWS_REGION || 'us-east-1'
-    const s3UrlPrefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
-
-    if (src.startsWith(s3UrlPrefix)) {
-      // For S3 URLs, derive crop key from original key
-      const originalKey = src.slice(s3UrlPrefix.length)
-      const dotIndex = originalKey.lastIndexOf('.')
-      const basePath = dotIndex >= 0 ? originalKey.slice(0, dotIndex) : originalKey
-      key = `${basePath}.crop.mp4`
-    } else {
-      // For other sources, generate a new key
-      key = `videos/${uuidv4()}-crop.mp4`
-    }
-
-    await saveToS3(key, croppedBuffer, 'video/mp4')
-    const url = getPublicUrl(key)
+    // Save to S3 with .crop suffix
+    const outputKey = `${sceneFolder}/${videoId}.crop.mp4`
+    await saveToS3(outputKey, processedBuffer, 'video/mp4')
+    const url = getPublicUrl(outputKey)
 
     cleanup()
     res.json({ success: true, url })

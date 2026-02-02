@@ -1529,6 +1529,7 @@ function App() {
         <InfiniteCanvas
           items={items}
           selectedIds={selectedIds}
+          sceneId={activeSceneId || ''}
           onUpdateItem={updateItem}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}

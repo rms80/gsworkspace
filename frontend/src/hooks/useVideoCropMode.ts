@@ -4,6 +4,7 @@ import { cropVideo } from '../api/videos'
 
 interface UseVideoCropModeParams {
   items: CanvasItem[]
+  sceneId: string
   isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
 }
@@ -30,6 +31,7 @@ function cropRectsEqual(a: CropRect | null, b: CropRect | null): boolean {
 
 export function useVideoCropMode({
   items,
+  sceneId,
   isOffline,
   onUpdateItem,
 }: UseVideoCropModeParams): VideoCropMode {
@@ -135,7 +137,7 @@ export function useVideoCropMode({
     const speedToSend = speedChanged ? pendingSpeed : undefined
     const removeAudioToSend = removeAudioChanged ? pendingRemoveAudio : undefined
 
-    cropVideo(videoItem.src, cropRectToSend, speedToSend, removeAudioToSend)
+    cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend)
       .then((cropUrl) => {
         onUpdateItem(itemId, { cropSrc: cropUrl })
         setProcessingVideoId(null)
@@ -144,7 +146,7 @@ export function useVideoCropMode({
         console.error('Failed to create server-side video processing:', err)
         setProcessingVideoId(null)
       })
-  }, [croppingVideoId, pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, items, isOffline, onUpdateItem])
+  }, [croppingVideoId, pendingCropRect, initialCropRect, pendingSpeed, initialSpeed, pendingRemoveAudio, initialRemoveAudio, items, sceneId, isOffline, onUpdateItem])
 
   const cancelCrop = useCallback(() => {
     setCroppingVideoId(null)

@@ -61,18 +61,30 @@ export interface CropVideoResult {
  * Returns the S3 URL of the processed video.
  */
 export async function cropVideo(
-  src: string,
+  sceneId: string,
+  videoId: string,
   cropRect?: { x: number; y: number; width: number; height: number },
   speed?: number,
   removeAudio?: boolean
 ): Promise<string> {
+  const requestBody = { sceneId, videoId, cropRect, speed, removeAudio }
   const response = await fetch(`${API_BASE}/crop-video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ src, cropRect, speed, removeAudio }),
+    body: JSON.stringify(requestBody),
   })
   if (!response.ok) {
-    throw new Error(`Failed to process video: ${response.statusText}`)
+    let errorDetail = response.statusText
+    try {
+      const errorJson = await response.json()
+      errorDetail = errorJson.error || errorDetail
+    } catch { /* ignore parse error */ }
+    console.error('cropVideo failed:', {
+      status: response.status,
+      error: errorDetail,
+      request: { sceneId, videoId, cropRect, speed, removeAudio },
+    })
+    throw new Error(`Failed to process video: ${errorDetail}`)
   }
   const result: CropVideoResult = await response.json()
   return result.url

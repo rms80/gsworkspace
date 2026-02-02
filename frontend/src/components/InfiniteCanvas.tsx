@@ -45,6 +45,7 @@ import {
 interface InfiniteCanvasProps {
   items: CanvasItem[]
   selectedIds: string[]
+  sceneId: string
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
@@ -64,7 +65,7 @@ interface InfiniteCanvasProps {
   onAddHtmlGenPrompt?: () => void
 }
 
-function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -122,7 +123,7 @@ function InfiniteCanvas({ items, selectedIds, onUpdateItem, onSelectItems, onAdd
     setPendingSpeed: setVideoPendingSpeed,
     setPendingRemoveAudio: setVideoPendingRemoveAudio,
     applyOrCancelCrop: applyOrCancelVideoCrop,
-  } = useVideoCropMode({ items, isOffline, onUpdateItem })
+  } = useVideoCropMode({ items, sceneId, isOffline, onUpdateItem })
 
   // 4. Prompt editing hooks (x3)
   const promptEditing = usePromptEditing({ items, onUpdateItem }, 'prompt')
