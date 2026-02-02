@@ -139,11 +139,7 @@ function ApiKeyField({
   )
 }
 
-interface OfflineModeSettingsTabProps {
-  onKeysChanged?: () => void
-}
-
-export default function OfflineModeSettingsTab({ onKeysChanged }: OfflineModeSettingsTabProps) {
+export default function OfflineModeSettingsTab() {
   const [anthropicKey, setAnthropicKey_] = useState('')
   const [googleKey, setGoogleKey_] = useState('')
   const [anthropicValid, setAnthropicValid] = useState<boolean | null>(null)
@@ -177,7 +173,6 @@ export default function OfflineModeSettingsTab({ onKeysChanged }: OfflineModeSet
     setAnthropicApiKey(anthropicKey.trim())
     setAnthropicValid(true)
     setAnthropicMessage('Key saved')
-    onKeysChanged?.()
   }
 
   const handleClearAnthropic = () => {
@@ -185,7 +180,6 @@ export default function OfflineModeSettingsTab({ onKeysChanged }: OfflineModeSet
     setAnthropicKey_('')
     setAnthropicValid(null)
     setAnthropicMessage('')
-    onKeysChanged?.()
   }
 
   const handleSaveGoogle = () => {
@@ -198,7 +192,6 @@ export default function OfflineModeSettingsTab({ onKeysChanged }: OfflineModeSet
     setGoogleApiKey(googleKey.trim())
     setGoogleValid(true)
     setGoogleMessage('Key saved')
-    onKeysChanged?.()
   }
 
   const handleClearGoogle = () => {
@@ -206,7 +199,6 @@ export default function OfflineModeSettingsTab({ onKeysChanged }: OfflineModeSet
     setGoogleKey_('')
     setGoogleValid(null)
     setGoogleMessage('')
-    onKeysChanged?.()
   }
 
   return (

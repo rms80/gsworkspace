@@ -62,7 +62,6 @@ function App() {
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
-  const [apiKeysVersion, setApiKeysVersion] = useState(0)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const saveTimeoutRef = useRef<number | null>(null)
@@ -1555,7 +1554,6 @@ function App() {
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
         backgroundOperationsCount={backgroundOpsCount}
-        apiKeysVersion={apiKeysVersion}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}
@@ -1577,7 +1575,6 @@ function App() {
       <SettingsDialog
         isOpen={settingsDialogOpen}
         onClose={() => setSettingsDialogOpen(false)}
-        onApiKeysChanged={() => setApiKeysVersion((v) => v + 1)}
       />
     </div>
   )

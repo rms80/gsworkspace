@@ -4,7 +4,6 @@ import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
 interface SettingsDialogProps {
   isOpen: boolean
   onClose: () => void
-  onApiKeysChanged?: () => void
 }
 
 type TabId = 'offline-mode'
@@ -18,7 +17,7 @@ const tabs: TabDef[] = [
   { id: 'offline-mode', label: 'Offline Mode' },
 ]
 
-export default function SettingsDialog({ isOpen, onClose, onApiKeysChanged }: SettingsDialogProps) {
+export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<TabId>('offline-mode')
 
   if (!isOpen) return null
@@ -126,7 +125,7 @@ export default function SettingsDialog({ isOpen, onClose, onApiKeysChanged }: Se
             }}
           >
             {activeTab === 'offline-mode' && (
-              <OfflineModeSettingsTab onKeysChanged={onApiKeysChanged} />
+              <OfflineModeSettingsTab />
             )}
           </div>
         </div>

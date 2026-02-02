@@ -22,6 +22,7 @@ interface PromptItemRendererProps {
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onOpenModelMenu: (id: string, position: { x: number; y: number }) => void
   onRun: (id: string) => void
+  onShowTooltip?: (tooltip: { text: string; x: number; y: number } | null) => void
 }
 
 export default function PromptItemRenderer({
@@ -36,20 +37,28 @@ export default function PromptItemRenderer({
   onUpdateItem,
   onOpenModelMenu,
   onRun,
+  onShowTooltip,
 }: PromptItemRendererProps) {
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
   // Check if we can run based on mode and API keys
-  const canRunOffline = () => {
-    if (item.model.startsWith('claude-')) {
-      return hasAnthropicApiKey()
-    } else if (item.model.startsWith('gemini-')) {
-      return hasGoogleApiKey()
+  const needsAnthropicKey = item.model.startsWith('claude-')
+  const needsGoogleKey = item.model.startsWith('gemini-')
+  const hasRequiredKey = needsAnthropicKey ? hasAnthropicApiKey() : needsGoogleKey ? hasGoogleApiKey() : false
+  const isMissingApiKey = isOffline && !hasRequiredKey
+  const isRunDisabled = isRunning || isMissingApiKey
+
+  // Tooltip message for missing API key
+  const getTooltipMessage = () => {
+    if (!isMissingApiKey) return null
+    if (needsAnthropicKey) {
+      return 'Anthropic API key required. Add it in Edit > Settings.'
+    } else if (needsGoogleKey) {
+      return 'Google API key required. Add it in Edit > Settings.'
     }
-    return false
+    return null
   }
-  const isRunDisabled = isRunning || (isOffline && !canRunOffline())
 
   const borderColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseBorder)
@@ -152,6 +161,17 @@ export default function PromptItemRenderer({
           e.cancelBubble = true
           if (!isRunDisabled) {
             onRun(item.id)
+          }
+        }}
+        onMouseEnter={(e) => {
+          const tooltipMsg = getTooltipMessage()
+          if (tooltipMsg && onShowTooltip) {
+            onShowTooltip({ text: tooltipMsg, x: e.evt.clientX, y: e.evt.clientY })
+          }
+        }}
+        onMouseLeave={() => {
+          if (onShowTooltip) {
+            onShowTooltip(null)
           }
         }}
       >
