@@ -289,7 +289,9 @@ when the server can just tell us. I tell it to explicitly create an API endpoing
 I think this is the first time I have basically had to tell it what code to write.
 That makes it trivial to fix this problem.
 
-
+went back to video editing system. Added a timeline for playback during cropping, and trim support,
+and trim handles on the timeline. worked through various UX issues. Fixed problem with ffmpeg where
+sometimes two passes are needed. This is really good now! 
 
 
 
