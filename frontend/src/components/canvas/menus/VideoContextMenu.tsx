@@ -218,18 +218,18 @@ export default function VideoContextMenu({
         disabled={isOffline}
         onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-        title={isOffline ? 'Crop unavailable in offline mode' : undefined}
+        title={isOffline ? 'Edit unavailable in offline mode' : undefined}
       >
-        Crop
+        Edit
       </button>
-      {videoItem?.cropRect && (
+      {(videoItem?.cropRect || videoItem?.speedFactor) && (
         <button
           onClick={handleRemoveCrop}
           style={buttonStyle}
           onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >
-          Remove Crop
+          Remove Edits
         </button>
       )}
       <button
