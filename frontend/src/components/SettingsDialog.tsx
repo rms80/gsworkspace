@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
+import LocalStorageSettingsTab from './settings/LocalStorageSettingsTab'
 
 interface SettingsDialogProps {
   isOpen: boolean
   onClose: () => void
 }
 
-type TabId = 'offline-mode'
+type TabId = 'offline-mode' | 'local-storage'
 
 interface TabDef {
   id: TabId
@@ -15,6 +16,7 @@ interface TabDef {
 
 const tabs: TabDef[] = [
   { id: 'offline-mode', label: 'Offline Mode' },
+  { id: 'local-storage', label: 'Local Storage' },
 ]
 
 export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
@@ -126,6 +128,9 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
           >
             {activeTab === 'offline-mode' && (
               <OfflineModeSettingsTab />
+            )}
+            {activeTab === 'local-storage' && (
+              <LocalStorageSettingsTab />
             )}
           </div>
         </div>
