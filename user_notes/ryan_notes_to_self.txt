@@ -250,6 +250,56 @@ I agree with this plan except I would like to not have to install ffmpeg myself.
 that installs platform ffmpeg locally. I agree w/ the plan and tell it to continue.
 It's going to town with agents...
 
+It did OK. It forgot about installing ffmpeg-static so the video cropping did not actually work, but when
+it fixed that, then it was functional, with a spinner animation. Various UX issues around menu appearance, fixed.
+It hadn't updated Exporting to use the cropped video, fixed.
+
+Discovered that with large videos, the video is lost if I reload the page because it actually hadn't finished uploading.
+This is not apparent form the UI. Asked it to build a component that keeps track of background operations and shows 
+the count in the status bar. I didn't ask it to make a plan...maybe it is going off the rails? 
+Seems to have wrapped the entire App in this new component?!?
+
+At some point dropping in a video has become somewhat broken - the video object isn't present in the reloaded scene.
+CC adds some debug console output for me to look at. It seems like the upload is OK, the issue is the scene is not saving properly.
+CC thinks the backend is removing the video from the scene for some reason. It's adding logging that I can't see.
+It's saying the server is 404-ing trying to find the video, it's adding more logging. 
+it keeps telling me it has figured out what was wrong, but it has not.
+And now it's compacting....trouble.
+It thinks it has figured it out and it does appear to work. Maybe should have compacted earlier.
+
+ok realized I should have planned out video editing a bit more because I don't just want cropping.
+I could either back it all out and start again, or power through. Decided to power through!
+Asked it to add support for changing video speed. Told it to make a plan and do it.
+It is doing OK. Then I ask for text boxes for cropping, and a constrain-aspect-ratio toggle.
+We have to go back and forth on the UI quite a bit, to make it work nicely, but it does it.
+Then I ask it to add support for removing audio. It grinds through it, seems to have done ok.
+
+Discover that it is not actually saving the crop information in the server-side scene. 
+Tell it to fix this.
+
+Discovered video cropping is not working on initial upload, only after reloading scene.
+Asked it to add some logging, and discovered it is sending URLs for a temp file that doesn't exist anymore.
+Asked it to investigate the upload flow, it explains what it is doing, and suggests gross hacks to fix this issue.
+The real issue is it is using full URLs when the server-side can construct the URL itself, which it doesn't seem to realize.
+I tell it exactly what to do (this is engineering-level stuff, based on our system design).
+This appears to fix the problem...and makes me think we need to revisit most of the API endpoints!
+
+Find another bug that is due to this exact same problem. Again it wants to do messy hacks to track these changing URLs,
+when the server can just tell us. I tell it to explicitly create an API endpoing that does this.
+I think this is the first time I have basically had to tell it what code to write.
+That makes it trivial to fix this problem.
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
