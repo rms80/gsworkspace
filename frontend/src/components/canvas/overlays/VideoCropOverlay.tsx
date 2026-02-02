@@ -66,6 +66,13 @@ export default function VideoCropOverlay({
   const [lockAspectRatio, setLockAspectRatio] = useState(false)
   const aspectRatioRef = useRef(cropRect.width / cropRect.height)
 
+  // Video playback state
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const bgVideoRef = useRef<HTMLVideoElement>(null)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+
   // Local state for input fields - only commit on blur/Enter
   const [inputValues, setInputValues] = useState({
     x: String(Math.round(cropRect.x)),
@@ -83,6 +90,72 @@ export default function VideoCropOverlay({
       height: String(Math.round(cropRect.height)),
     })
   }, [cropRect.x, cropRect.y, cropRect.width, cropRect.height])
+
+  // Video playback event handlers
+  useEffect(() => {
+    const video = videoRef.current
+    const bgVideo = bgVideoRef.current
+    if (!video) return
+
+    const handleTimeUpdate = () => setCurrentTime(video.currentTime)
+    const handleDurationChange = () => setDuration(video.duration)
+    const handlePlay = () => setIsPlaying(true)
+    const handlePause = () => setIsPlaying(false)
+    const handleEnded = () => setIsPlaying(false)
+
+    // Sync background video time with main video
+    const syncBgVideo = () => {
+      if (bgVideo && Math.abs(bgVideo.currentTime - video.currentTime) > 0.1) {
+        bgVideo.currentTime = video.currentTime
+      }
+    }
+
+    video.addEventListener('timeupdate', handleTimeUpdate)
+    video.addEventListener('timeupdate', syncBgVideo)
+    video.addEventListener('durationchange', handleDurationChange)
+    video.addEventListener('play', handlePlay)
+    video.addEventListener('pause', handlePause)
+    video.addEventListener('ended', handleEnded)
+
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate)
+      video.removeEventListener('timeupdate', syncBgVideo)
+      video.removeEventListener('durationchange', handleDurationChange)
+      video.removeEventListener('play', handlePlay)
+      video.removeEventListener('pause', handlePause)
+      video.removeEventListener('ended', handleEnded)
+    }
+  }, [])
+
+  const togglePlay = () => {
+    const video = videoRef.current
+    const bgVideo = bgVideoRef.current
+    if (!video) return
+
+    if (isPlaying) {
+      video.pause()
+      bgVideo?.pause()
+    } else {
+      video.play()
+      bgVideo?.play()
+    }
+  }
+
+  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const video = videoRef.current
+    const bgVideo = bgVideoRef.current
+    if (!video) return
+    const newTime = parseFloat(e.target.value)
+    video.currentTime = newTime
+    if (bgVideo) bgVideo.currentTime = newTime
+  }
+
+  const formatTime = (seconds: number): string => {
+    if (!isFinite(seconds)) return '0:00'
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
 
   // Original video dimensions
   const origW = item.originalWidth ?? item.width
@@ -354,6 +427,7 @@ export default function VideoCropOverlay({
     >
       {/* Video at low opacity */}
       <video
+        ref={bgVideoRef}
         src={item.src}
         style={{
           position: 'absolute',
@@ -430,6 +504,7 @@ export default function VideoCropOverlay({
         }}
       >
         <video
+          ref={videoRef}
           src={item.src}
           style={{
             position: 'absolute',
@@ -494,7 +569,7 @@ export default function VideoCropOverlay({
       <div
         style={{
           position: 'absolute',
-          bottom: -70,
+          bottom: -100,
           left: '50%',
           transform: 'translateX(-50%)',
           backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -633,6 +708,39 @@ export default function VideoCropOverlay({
           >
             Mute
           </button>
+        </div>
+        {/* Playback controls row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={togglePlay}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: 14,
+              padding: '0 4px',
+            }}
+          >
+            {isPlaying ? '⏸' : '▶'}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={duration || 100}
+            step={0.1}
+            value={currentTime}
+            onChange={handleSeek}
+            style={{
+              flex: 1,
+              minWidth: 120,
+              height: 4,
+              cursor: 'pointer',
+            }}
+          />
+          <span style={{ fontSize: 11, fontFamily: 'monospace', minWidth: 75 }}>
+            {formatTime(currentTime)} / {formatTime(duration)}
+          </span>
         </div>
         {/* Instructions row */}
         <div style={{ textAlign: 'center', opacity: 0.8 }}>
