@@ -1,7 +1,19 @@
 import { LLMModel, ImageGenModel } from '../types'
 import type { SpatialBlock } from '../utils/spatialJson'
+import { isOfflineMode } from './scenes'
+import { getAnthropicApiKey, getGoogleApiKey } from '../utils/apiKeyStorage'
+import { generateTextWithAnthropic, generateHtmlWithAnthropic } from './anthropicClient'
+import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini } from './googleClient'
 
 const API_BASE = '/api/llm'
+
+function isClaudeModel(model: string): boolean {
+  return model.startsWith('claude-')
+}
+
+function isGeminiModel(model: string): boolean {
+  return model.startsWith('gemini-')
+}
 
 export interface ContentItem {
   type: 'text' | 'image'
@@ -22,6 +34,25 @@ export async function generateFromPrompt(
   prompt: string,
   model: LLMModel = 'claude-sonnet'
 ): Promise<string> {
+  // Check if we're in offline mode
+  if (isOfflineMode()) {
+    // Route to appropriate client-side API based on model
+    if (isClaudeModel(model)) {
+      if (!getAnthropicApiKey()) {
+        throw new Error('Anthropic API key not configured. Please add your API key in Edit > Settings.')
+      }
+      return generateTextWithAnthropic(items, prompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
+    } else if (isGeminiModel(model)) {
+      if (!getGoogleApiKey()) {
+        throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
+      }
+      return generateTextWithGemini(items, prompt, model as 'gemini-flash' | 'gemini-pro')
+    } else {
+      throw new Error(`Unknown model: ${model}`)
+    }
+  }
+
+  // Online mode: use backend
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,6 +72,17 @@ export async function generateImage(
   prompt: string,
   model: ImageGenModel = 'gemini-imagen'
 ): Promise<string[]> {
+  // Check if we're in offline mode
+  if (isOfflineMode()) {
+    if (!getGoogleApiKey()) {
+      throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
+    }
+    const images = await generateImageWithGemini(items, prompt, model)
+    // Convert to data URLs
+    return images.map((img) => `data:${img.mimeType};base64,${img.data}`)
+  }
+
+  // Online mode: use backend
   const response = await fetch(`${API_BASE}/generate-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -64,6 +106,25 @@ export async function generateHtml(
   userPrompt: string,
   model: LLMModel = 'claude-sonnet'
 ): Promise<string> {
+  // Check if we're in offline mode
+  if (isOfflineMode()) {
+    // Route to appropriate client-side API based on model
+    if (isClaudeModel(model)) {
+      if (!getAnthropicApiKey()) {
+        throw new Error('Anthropic API key not configured. Please add your API key in Edit > Settings.')
+      }
+      return generateHtmlWithAnthropic(spatialItems, userPrompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
+    } else if (isGeminiModel(model)) {
+      if (!getGoogleApiKey()) {
+        throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
+      }
+      return generateHtmlWithGemini(spatialItems, userPrompt, model as 'gemini-flash' | 'gemini-pro')
+    } else {
+      throw new Error(`Unknown model: ${model}`)
+    }
+  }
+
+  // Online mode: use backend
   const response = await fetch(`${API_BASE}/generate-html`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

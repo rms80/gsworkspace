@@ -1,3 +1,5 @@
+import { hasAnthropicApiKey, hasGoogleApiKey } from '../utils/apiKeyStorage'
+
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 
 interface StatusBarProps {
@@ -7,11 +9,16 @@ interface StatusBarProps {
   isOffline: boolean
   onSetOfflineMode: (offline: boolean) => void
   backgroundOperationsCount: number
+  apiKeysVersion?: number // Used to trigger re-render when API keys change
 }
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode, backgroundOperationsCount }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode, backgroundOperationsCount, apiKeysVersion }: StatusBarProps) {
+  // Check API key status (apiKeysVersion triggers re-check when keys change)
+  void apiKeysVersion // Use to suppress unused variable warning
+  const hasAnthropic = hasAnthropicApiKey()
+  const hasGoogle = hasGoogleApiKey()
   const handleSwitchToOnline = async () => {
     try {
       // Check if server is available before switching
@@ -72,21 +79,50 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
       {isOffline ? (
-        <span
-          style={{
-            padding: '2px 8px',
-            backgroundColor: '#6366f1',
-            color: '#fff',
-            borderRadius: 3,
-            fontSize: 11,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-          onClick={handleSwitchToOnline}
-          title="Click to switch to online mode"
-        >
-          Offline Mode
-        </span>
+        <>
+          <span
+            style={{
+              padding: '2px 8px',
+              backgroundColor: '#6366f1',
+              color: '#fff',
+              borderRadius: 3,
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            onClick={handleSwitchToOnline}
+            title="Click to switch to online mode"
+          >
+            Offline Mode
+          </span>
+          {(hasAnthropic || hasGoogle) ? (
+            <span
+              style={{
+                padding: '2px 8px',
+                backgroundColor: '#374151',
+                color: '#9ca3af',
+                borderRadius: 3,
+                fontSize: 11,
+              }}
+              title={`API keys configured: ${[hasAnthropic && 'Anthropic', hasGoogle && 'Google'].filter(Boolean).join(', ')}`}
+            >
+              {hasAnthropic && hasGoogle ? 'API Keys OK' : hasAnthropic ? 'Anthropic Key' : 'Google Key'}
+            </span>
+          ) : (
+            <span
+              style={{
+                padding: '2px 8px',
+                backgroundColor: '#7c2d12',
+                color: '#fca5a5',
+                borderRadius: 3,
+                fontSize: 11,
+              }}
+              title="No API keys configured. AI features won't work. Add keys in Edit > Settings."
+            >
+              No API Keys
+            </span>
+          )}
+        </>
       ) : (
         <span
           style={{

@@ -21,6 +21,7 @@ interface MenuBarProps {
   onGetServerSceneJson?: () => Promise<string>
   onGetHistoryJson?: () => string
   onClearHistory?: () => void
+  onOpenSettings?: () => void
 }
 
 interface MenuItemDef {
@@ -60,6 +61,7 @@ function MenuBar({
   onGetServerSceneJson,
   onGetHistoryJson,
   onClearHistory,
+  onOpenSettings,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -117,6 +119,7 @@ function MenuBar({
       items: [
         { label: 'Undo', onClick: onUndo, disabled: !canUndo, shortcut: 'Ctrl+Z' },
         { label: 'Redo', onClick: onRedo, disabled: !canRedo, shortcut: 'Ctrl+Y' },
+        { label: 'Settings...', onClick: onOpenSettings, shortcut: 'Ctrl+,' },
       ],
     },
     {
@@ -553,6 +556,7 @@ function MenuBar({
                   { shortcut: 'Ctrl+Shift+Z', action: 'Redo' },
                   { shortcut: 'Ctrl+O', action: 'Open Scene' },
                   { shortcut: 'Ctrl+Shift+E', action: 'Export Scene' },
+                  { shortcut: 'Ctrl+,', action: 'Open Settings' },
                   { shortcut: 'Ctrl+C', action: 'Copy selected item' },
                   { shortcut: 'Ctrl+V', action: 'Paste at cursor' },
                   { shortcut: 'T', action: 'New text block at cursor (when nothing selected)' },

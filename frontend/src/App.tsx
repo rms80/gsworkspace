@@ -5,6 +5,7 @@ import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
+import SettingsDialog from './components/SettingsDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
@@ -60,6 +61,8 @@ function App() {
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [apiKeysVersion, setApiKeysVersion] = useState(0)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const saveTimeoutRef = useRef<number | null>(null)
@@ -840,12 +843,6 @@ function App() {
   )
 
   const handleRunPrompt = useCallback(async (promptId: string) => {
-    // Block execution in offline mode
-    if (isOffline) {
-      alert('LLM features are not available in offline mode.')
-      return
-    }
-
     const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
     if (!promptItem || promptItem.type !== 'prompt') return
 
@@ -936,15 +933,9 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
-    // Block execution in offline mode
-    if (isOffline) {
-      alert('LLM features are not available in offline mode.')
-      return
-    }
-
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
     if (!promptItem || promptItem.type !== 'image-gen-prompt') return
 
@@ -1063,15 +1054,9 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
-    // Block execution in offline mode
-    if (isOffline) {
-      alert('LLM features are not available in offline mode.')
-      return
-    }
-
     const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')
     if (!promptItem || promptItem.type !== 'html-gen-prompt') return
 
@@ -1138,7 +1123,7 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline])
+  }, [items, selectedIds, updateActiveSceneItems])
 
   // Export current scene to ZIP
   const handleExportScene = useCallback(async () => {
@@ -1250,6 +1235,9 @@ function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'e' || e.key === 'E')) {
         e.preventDefault()
         handleExportScene()
+      } else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault()
+        setSettingsDialogOpen(true)
       }
     }
 
@@ -1515,6 +1503,7 @@ function App() {
             setHistoryVersion((v) => v + 1)
           }
         }}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
       <TabBar
         scenes={openScenes}
@@ -1566,6 +1555,7 @@ function App() {
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
         backgroundOperationsCount={backgroundOpsCount}
+        apiKeysVersion={apiKeysVersion}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}
@@ -1583,6 +1573,11 @@ function App() {
         onKeepLocal={handleKeepLocal}
         onFork={handleFork}
         onCancel={clearConflict}
+      />
+      <SettingsDialog
+        isOpen={settingsDialogOpen}
+        onClose={() => setSettingsDialogOpen(false)}
+        onApiKeysChanged={() => setApiKeysVersion((v) => v + 1)}
       />
     </div>
   )

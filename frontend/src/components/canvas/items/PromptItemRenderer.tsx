@@ -8,9 +8,10 @@ import {
   PromptThemeColors, getPulseColor,
 } from '../../../constants/canvas'
 import { PromptEditing } from '../../../hooks/usePromptEditing'
+import { hasAnthropicApiKey, hasGoogleApiKey } from '../../../utils/apiKeyStorage'
 
 interface PromptItemRendererProps {
-  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number }
+  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model: string }
   theme: PromptThemeColors
   isSelected: boolean
   isRunning: boolean
@@ -38,7 +39,17 @@ export default function PromptItemRenderer({
 }: PromptItemRendererProps) {
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
-  const isRunDisabled = isOffline || isRunning
+
+  // Check if we can run based on mode and API keys
+  const canRunOffline = () => {
+    if (item.model.startsWith('claude-')) {
+      return hasAnthropicApiKey()
+    } else if (item.model.startsWith('gemini-')) {
+      return hasGoogleApiKey()
+    }
+    return false
+  }
+  const isRunDisabled = isRunning || (isOffline && !canRunOffline())
 
   const borderColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseBorder)
@@ -47,8 +58,8 @@ export default function PromptItemRenderer({
 
   const runButtonColor = isRunning
     ? getPulseColor(pulseIntensity, theme.pulseRunButton)
-    : isOffline
-      ? '#666' // Greyed out when offline
+    : isRunDisabled
+      ? '#666' // Greyed out when disabled
       : theme.runButton
 
   return (
@@ -156,7 +167,7 @@ export default function PromptItemRenderer({
           height={BUTTON_HEIGHT}
           fontSize={12}
           fontStyle="bold"
-          fill={isOffline && !isRunning ? '#999' : '#fff'}
+          fill={isRunDisabled && !isRunning ? '#999' : '#fff'}
           align="center"
           verticalAlign="middle"
         />
