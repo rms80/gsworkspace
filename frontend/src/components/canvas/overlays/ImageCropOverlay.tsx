@@ -407,6 +407,8 @@ export default function ImageCropOverlay({
         height: screenFullH,
         pointerEvents: 'auto',
         zIndex: 1000,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
       {/* Image at low opacity */}
@@ -431,7 +433,7 @@ export default function ImageCropOverlay({
           left: 0,
           top: 0,
           width: screenFullW,
-          height: screenCy,
+          height: Math.max(0, screenCy),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -441,9 +443,9 @@ export default function ImageCropOverlay({
         style={{
           position: 'absolute',
           left: 0,
-          top: screenCy + screenCh,
+          top: Math.max(0, screenCy + screenCh),
           width: screenFullW,
-          height: screenFullH - screenCy - screenCh,
+          height: Math.max(0, screenFullH - screenCy - screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -453,9 +455,9 @@ export default function ImageCropOverlay({
         style={{
           position: 'absolute',
           left: 0,
-          top: screenCy,
-          width: screenCx,
-          height: screenCh,
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenCx),
+          height: Math.max(0, screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -464,10 +466,10 @@ export default function ImageCropOverlay({
       <div
         style={{
           position: 'absolute',
-          left: screenCx + screenCw,
-          top: screenCy,
-          width: screenFullW - screenCx - screenCw,
-          height: screenCh,
+          left: Math.max(0, screenCx + screenCw),
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenFullW - screenCx - screenCw),
+          height: Math.max(0, screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -477,10 +479,10 @@ export default function ImageCropOverlay({
       <div
         style={{
           position: 'absolute',
-          left: screenCx,
-          top: screenCy,
-          width: screenCw,
-          height: screenCh,
+          left: Math.max(0, screenCx),
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenCw),
+          height: Math.max(0, screenCh),
           overflow: 'hidden',
           pointerEvents: 'none',
         }}
@@ -490,8 +492,8 @@ export default function ImageCropOverlay({
           alt=""
           style={{
             position: 'absolute',
-            left: -screenCx,
-            top: -screenCy,
+            left: -Math.max(0, screenCx),
+            top: -Math.max(0, screenCy),
             width: screenFullW,
             height: screenFullH,
             objectFit: 'fill',
