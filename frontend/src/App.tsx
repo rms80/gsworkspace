@@ -123,9 +123,9 @@ function App() {
 
   // Function to load scenes from current storage provider
   // Respects settings for which scenes should be open
-  // Pass currentOfflineMode to ensure we load settings for the correct mode
-  const loadAllScenes = useCallback(async (currentOfflineMode?: boolean) => {
-    const offlineMode = currentOfflineMode ?? isOffline
+  // Pass currentMode to ensure we load settings for the correct mode
+  const loadAllScenes = useCallback(async (currentMode?: StorageMode) => {
+    const mode = currentMode ?? storageMode
     setIsLoading(true)
     // Clear previous saved state tracking when reloading
     lastSavedRef.current.clear()
@@ -134,7 +134,7 @@ function App() {
 
     try {
       const sceneList = await listScenes()
-      const modeSettings = loadModeSettings(offlineMode)
+      const modeSettings = loadModeSettings(mode)
 
       // Determine which scenes to open based on settings
       const availableIds = new Set(sceneList.map((s) => s.id))
@@ -200,44 +200,87 @@ function App() {
     }
   }, [isOffline])
 
-  // Fetch backend storage mode on startup
+  // Fetch backend storage mode on startup and load scenes
   useEffect(() => {
-    if (storageMode !== 'offline') {
-      fetch('/api/config')
-        .then((res) => res.json())
-        .then((config) => {
+    const initializeApp = async () => {
+      let modeToUse = storageMode
+
+      // Fetch backend config if not in offline mode
+      if (storageMode !== 'offline') {
+        try {
+          const res = await fetch('/api/config')
+          const config = await res.json()
           if (config.storageMode && config.storageMode !== storageMode) {
             setStorageMode(config.storageMode)
             setStorageModeState(config.storageMode)
+            modeToUse = config.storageMode
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           console.error('Failed to fetch backend config:', err)
-        })
-    }
-  }, []) // Only run once on mount
+        }
+      }
 
-  // Load scenes on initial mount
-  useEffect(() => {
-    loadAllScenes()
-  }, [loadAllScenes])
+      // Load scenes with the correct mode
+      await loadAllScenes(modeToUse)
+    }
+
+    initializeApp()
+  }, []) // Only run once on mount
 
   // Handler to toggle offline mode
   const handleSetOfflineMode = useCallback(async (offline: boolean) => {
+    const newMode: StorageMode = offline ? 'offline' : 'online'
     setOfflineMode(offline)
     setIsOffline(offline)
-    setStorageModeState(offline ? 'offline' : 'online')
+    setStorageModeState(newMode)
     // Reload scenes from the new storage provider with the new mode
-    await loadAllScenes(offline)
+    await loadAllScenes(newMode)
   }, [loadAllScenes])
 
-  // Handler for storage mode changes from settings
+  // Handler for storage mode changes from settings or status bar menu
   const handleStorageModeChange = useCallback(async (mode: StorageMode) => {
+    const currentMode = getStorageMode()
+    if (mode === currentMode) return
+
+    // If switching between online and local, need to update backend
+    if (mode !== 'offline' && currentMode !== 'offline') {
+      try {
+        const response = await fetch('/api/config/storage-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        })
+        if (!response.ok) {
+          console.error('Failed to change backend storage mode')
+          return
+        }
+      } catch (err) {
+        console.error('Error changing backend storage mode:', err)
+        return
+      }
+    } else if (mode !== 'offline' && currentMode === 'offline') {
+      // Switching from offline to online/local - update backend
+      try {
+        const response = await fetch('/api/config/storage-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode }),
+        })
+        if (!response.ok) {
+          console.error('Failed to change backend storage mode')
+          return
+        }
+      } catch (err) {
+        console.error('Error changing backend storage mode:', err)
+        return
+      }
+    }
+
     setStorageMode(mode)
     setStorageModeState(mode)
     setIsOffline(mode === 'offline')
     // Reload scenes from the new storage provider
-    await loadAllScenes(mode === 'offline')
+    await loadAllScenes(mode)
   }, [loadAllScenes])
 
   // Handler for syncing storage mode when backend reports a different mode
@@ -248,7 +291,7 @@ function App() {
     setStorageModeState(backendMode)
     setIsOffline(backendMode === 'offline')
     // Reload scenes from the backend's storage
-    await loadAllScenes(backendMode === 'offline')
+    await loadAllScenes(backendMode)
   }, [loadAllScenes])
 
   // Auto-save when active scene changes (debounced)
@@ -357,8 +400,8 @@ function App() {
   useEffect(() => {
     if (isLoading) return
     const openIds = openScenes.map((s) => s.id)
-    saveOpenScenesToSettings(openIds, activeSceneId, isOffline)
-  }, [openScenes, activeSceneId, isLoading, isOffline])
+    saveOpenScenesToSettings(openIds, activeSceneId, storageMode)
+  }, [openScenes, activeSceneId, isLoading, storageMode])
 
   // Undo handler
   const handleUndo = useCallback(() => {
@@ -1616,6 +1659,7 @@ function App() {
         storageMode={storageMode}
         onOpenSettings={() => setSettingsDialogOpen(true)}
         onStorageModeSync={handleStorageModeSync}
+        onStorageModeChange={handleStorageModeChange}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}

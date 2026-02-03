@@ -3,6 +3,8 @@
  * Separate from scene data (which uses IndexedDB/S3)
  */
 
+import { StorageMode } from '../api/storage'
+
 const SETTINGS_KEY = 'workspaceapp-settings'
 
 export interface ModeSettings {
@@ -13,9 +15,11 @@ export interface ModeSettings {
 }
 
 export interface Settings {
-  /** Settings for online mode */
+  /** Settings for online (S3) mode */
   online: ModeSettings
-  /** Settings for offline mode */
+  /** Settings for local disk mode */
+  local: ModeSettings
+  /** Settings for offline (browser) mode */
   offline: ModeSettings
   /** Legacy fields for backwards compatibility */
   openSceneIds?: string[]
@@ -29,6 +33,7 @@ const defaultModeSettings: ModeSettings = {
 
 const defaultSettings: Settings = {
   online: { ...defaultModeSettings },
+  local: { ...defaultModeSettings },
   offline: { ...defaultModeSettings },
 }
 
@@ -51,6 +56,7 @@ export function loadSettings(): Settings {
           openSceneIds: parsed.openSceneIds || [],
           activeSceneId: parsed.activeSceneId || null,
         },
+        local: { ...defaultModeSettings },
         offline: { ...defaultModeSettings },
       }
     }
@@ -58,6 +64,7 @@ export function loadSettings(): Settings {
     // Merge with defaults to handle missing fields from older versions
     return {
       online: { ...defaultModeSettings, ...parsed.online },
+      local: { ...defaultModeSettings, ...parsed.local },
       offline: { ...defaultModeSettings, ...parsed.offline },
     }
   } catch (error) {
@@ -67,11 +74,11 @@ export function loadSettings(): Settings {
 }
 
 /**
- * Load settings for a specific mode (online/offline)
+ * Load settings for a specific storage mode
  */
-export function loadModeSettings(isOffline: boolean): ModeSettings {
+export function loadModeSettings(mode: StorageMode): ModeSettings {
   const settings = loadSettings()
-  return isOffline ? settings.offline : settings.online
+  return settings[mode]
 }
 
 /**
@@ -86,34 +93,33 @@ export function saveSettings(settings: Settings): void {
 }
 
 /**
- * Update settings for a specific mode (online/offline)
+ * Update settings for a specific storage mode
  */
-export function updateModeSettings(isOffline: boolean, updates: Partial<ModeSettings>): void {
+export function updateModeSettings(mode: StorageMode, updates: Partial<ModeSettings>): void {
   const current = loadSettings()
-  const modeKey = isOffline ? 'offline' : 'online'
   saveSettings({
     ...current,
-    [modeKey]: { ...current[modeKey], ...updates },
+    [mode]: { ...current[mode], ...updates },
   })
 }
 
 /**
  * Update the list of open scene IDs for a specific mode
  */
-export function setOpenSceneIds(ids: string[], isOffline: boolean): void {
-  updateModeSettings(isOffline, { openSceneIds: ids })
+export function setOpenSceneIds(ids: string[], mode: StorageMode): void {
+  updateModeSettings(mode, { openSceneIds: ids })
 }
 
 /**
  * Update the active scene ID for a specific mode
  */
-export function setActiveSceneId(id: string | null, isOffline: boolean): void {
-  updateModeSettings(isOffline, { activeSceneId: id })
+export function setActiveSceneId(id: string | null, mode: StorageMode): void {
+  updateModeSettings(mode, { activeSceneId: id })
 }
 
 /**
  * Convenience function to update both open scenes and active scene for a specific mode
  */
-export function setOpenScenes(openIds: string[], activeId: string | null, isOffline: boolean): void {
-  updateModeSettings(isOffline, { openSceneIds: openIds, activeSceneId: activeId })
+export function setOpenScenes(openIds: string[], activeId: string | null, mode: StorageMode): void {
+  updateModeSettings(mode, { openSceneIds: openIds, activeSceneId: activeId })
 }

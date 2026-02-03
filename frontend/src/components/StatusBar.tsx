@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { StorageMode } from '../api/storage'
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
@@ -13,6 +13,7 @@ interface StatusBarProps {
   storageMode: StorageMode
   onOpenSettings?: () => void
   onStorageModeSync?: (mode: StorageMode) => void
+  onStorageModeChange?: (mode: StorageMode) => void
 }
 
 const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg: string }> = {
@@ -23,8 +24,24 @@ const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg:
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange }: StatusBarProps) {
   const [serverConnected, setServerConnected] = useState<boolean | null>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!menuOpen) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
 
   useEffect(() => {
     if (isOffline) {
@@ -101,25 +118,91 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
       }}
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
-      <span
-        style={{
-          padding: '2px 8px',
-          backgroundColor: storageModeDisplay[storageMode].bg,
-          color: '#fff',
-          borderRadius: 3,
-          fontSize: 11,
-          fontWeight: 500,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-        }}
-        onClick={onOpenSettings}
-        title="Click to change storage mode"
-      >
-        <span>{storageModeDisplay[storageMode].icon}</span>
-        <span>{storageModeDisplay[storageMode].label}</span>
-      </span>
+      <div ref={menuRef} style={{ position: 'relative' }}>
+        <span
+          style={{
+            padding: '2px 8px',
+            backgroundColor: storageModeDisplay[storageMode].bg,
+            color: '#fff',
+            borderRadius: 3,
+            fontSize: 11,
+            fontWeight: 500,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+          }}
+          onClick={() => setMenuOpen(!menuOpen)}
+          title="Click to change storage mode"
+        >
+          <span>{storageModeDisplay[storageMode].icon}</span>
+          <span>{storageModeDisplay[storageMode].label}</span>
+        </span>
+        {menuOpen && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              marginBottom: 4,
+              backgroundColor: '#3a3a3a',
+              border: '1px solid #555',
+              borderRadius: 4,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+              minWidth: 140,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '6px 12px',
+                cursor: 'pointer',
+                borderBottom: '1px solid #555',
+                color: '#ccc',
+                fontSize: 11,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              onClick={() => {
+                setMenuOpen(false)
+                onOpenSettings?.()
+              }}
+            >
+              Settings...
+            </div>
+            {(['online', 'local', 'offline'] as StorageMode[]).map((mode) => (
+              <div
+                key={mode}
+                style={{
+                  padding: '6px 12px',
+                  cursor: 'pointer',
+                  color: mode === storageMode ? '#fff' : '#ccc',
+                  backgroundColor: mode === storageMode ? '#555' : 'transparent',
+                  fontSize: 11,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+                onMouseEnter={(e) => {
+                  if (mode !== storageMode) e.currentTarget.style.backgroundColor = '#4a4a4a'
+                }}
+                onMouseLeave={(e) => {
+                  if (mode !== storageMode) e.currentTarget.style.backgroundColor = 'transparent'
+                }}
+                onClick={() => {
+                  setMenuOpen(false)
+                  if (mode !== storageMode) {
+                    onStorageModeChange?.(mode)
+                  }
+                }}
+              >
+                <span>{storageModeDisplay[mode].icon}</span>
+                <span>{storageModeDisplay[mode].label}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {!isOffline && serverConnected !== null && (
         <span
           style={{
