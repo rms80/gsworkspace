@@ -19,7 +19,7 @@ async function getStorageInfo(): Promise<StorageInfo> {
   // Count scenes in IndexedDB
   let sceneCount = 0
   try {
-    const index = await localforage.getItem<{ sceneIds: string[] }>('workspaceapp:scenes-index')
+    const index = await localforage.getItem<{ sceneIds: string[] }>('gsworkspace:scenes-index')
     sceneCount = index?.sceneIds?.length ?? 0
   } catch {
     // Ignore errors

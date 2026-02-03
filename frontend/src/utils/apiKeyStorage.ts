@@ -8,7 +8,7 @@
  * access to their browser's developer tools.
  */
 
-const API_KEYS_STORAGE_KEY = 'workspaceapp-api-keys'
+const API_KEYS_STORAGE_KEY = 'gsworkspace-api-keys'
 
 interface StoredApiKeys {
   anthropic?: string

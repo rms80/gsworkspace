@@ -3,13 +3,13 @@ import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
 import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 
-const SCENE_PREFIX = 'workspaceapp:scene:'
-const SCENES_INDEX_KEY = 'workspaceapp:scenes-index'
-const HISTORY_PREFIX = 'workspaceapp:history:'
+const SCENE_PREFIX = 'gsworkspace:scene:'
+const SCENES_INDEX_KEY = 'gsworkspace:scenes-index'
+const HISTORY_PREFIX = 'gsworkspace:history:'
 
 // Configure localforage
 localforage.config({
-  name: 'workspaceapp',
+  name: 'gsworkspace',
   storeName: 'scenes',
 })
 

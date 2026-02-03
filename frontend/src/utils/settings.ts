@@ -5,7 +5,7 @@
 
 import { StorageMode } from '../api/storage'
 
-const SETTINGS_KEY = 'workspaceapp-settings'
+const SETTINGS_KEY = 'gsworkspace-settings'
 
 export interface ModeSettings {
   /** IDs of scenes that should be open on reload */

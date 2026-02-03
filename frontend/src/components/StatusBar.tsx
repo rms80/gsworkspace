@@ -117,7 +117,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         zIndex: 100,
       }}
     >
-      <span style={{ color: '#666' }}>Workspaceapp</span>
+      <span style={{ color: '#666' }}>gsworkspace</span>
       <div ref={menuRef} style={{ position: 'relative' }}>
         <span
           style={{
