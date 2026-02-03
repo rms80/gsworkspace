@@ -367,6 +367,66 @@ export class UpdateModelChange extends BaseChangeRecord {
 }
 
 /**
+ * Record for updating name/label (for image and video items)
+ */
+export class UpdateNameChange extends BaseChangeRecord {
+  type: ChangeRecordType = 'update_name'
+  private oldName: string | undefined
+  private newName: string | undefined
+
+  constructor(
+    objectId: string,
+    oldName: string | undefined,
+    newName: string | undefined,
+    timestamp?: number
+  ) {
+    super(objectId, timestamp)
+    this.oldName = oldName
+    this.newName = newName
+  }
+
+  apply(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'image' && item.type !== 'video') return item
+        return { ...item, name: this.newName } as CanvasItem
+      }),
+    }
+  }
+
+  reverse(state: HistoryState): HistoryState {
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        if (item.id !== this.objectId) return item
+        if (item.type !== 'image' && item.type !== 'video') return item
+        return { ...item, name: this.oldName } as CanvasItem
+      }),
+    }
+  }
+
+  serialize(): SerializedChangeRecord {
+    return {
+      type: this.type,
+      objectId: this.objectId,
+      timestamp: this.timestamp,
+      data: { oldName: this.oldName, newName: this.newName },
+    }
+  }
+
+  static deserialize(record: SerializedChangeRecord): UpdateNameChange {
+    return new UpdateNameChange(
+      record.objectId,
+      record.data.oldName as string | undefined,
+      record.data.newName as string | undefined,
+      record.timestamp
+    )
+  }
+}
+
+/**
  * Record for changing the selection state
  */
 export class SelectionChange extends BaseChangeRecord {
@@ -438,6 +498,8 @@ export function deserializeChangeRecord(
       return UpdatePromptChange.deserialize(record)
     case 'update_model':
       return UpdateModelChange.deserialize(record)
+    case 'update_name':
+      return UpdateNameChange.deserialize(record)
     case 'selection':
       return SelectionChange.deserialize(record)
     default:

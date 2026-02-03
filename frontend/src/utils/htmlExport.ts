@@ -43,6 +43,53 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 }
 
 /**
+ * Map of image src URLs to their display names (from canvas ImageItem.name)
+ */
+export type ImageNameMap = Map<string, string>
+
+/**
+ * Sanitize a name for use as a filename (remove/replace invalid characters)
+ */
+function sanitizeFilename(name: string): string {
+  return name
+    .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid filename characters
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/_+/g, '_') // Collapse multiple underscores
+    .replace(/^_|_$/g, '') // Remove leading/trailing underscores
+    || 'image' // Fallback if empty
+}
+
+/**
+ * Generate a unique filename for an image, using its name from the canvas if available
+ */
+function generateImageFilename(
+  src: string,
+  extension: string,
+  imageNameMap: ImageNameMap | undefined,
+  usedNames: Set<string>
+): string {
+  // Try to get name from map
+  let baseName = imageNameMap?.get(src)
+
+  if (baseName) {
+    baseName = sanitizeFilename(baseName)
+  } else {
+    baseName = 'image'
+  }
+
+  // Ensure uniqueness
+  let filename = `${baseName}.${extension}`
+  let counter = 2
+  while (usedNames.has(filename)) {
+    filename = `${baseName}_${counter}.${extension}`
+    counter++
+  }
+  usedNames.add(filename)
+
+  return filename
+}
+
+/**
  * Get file extension from MIME type
  */
 function getExtensionFromMimeType(mimeType: string): string {
@@ -188,7 +235,7 @@ interface FileSystemWindow {
  * Main export function - exports HTML with images to local files
  * User chooses HTML filename via save dialog, images go in a subfolder named {basename}_images/
  */
-export async function exportHtmlWithImages(html: string, suggestedFilename: string): Promise<void> {
+export async function exportHtmlWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap): Promise<void> {
   // Fallback for browsers without File System Access API
   if (!hasFileSystemAccess()) {
     await downloadEmbeddedHtml(html, `${suggestedFilename}.html`)
@@ -230,11 +277,11 @@ export async function exportHtmlWithImages(html: string, suggestedFilename: stri
     const imagesDirHandle = await dirHandle.getDirectoryHandle(imagesFolderName, { create: true })
 
     // Download and save each image to the subfolder
-    let imageIndex = 0
+    const usedNames = new Set<string>()
     for (const src of sources) {
       try {
         const { blob, extension } = await fetchImageAsBlob(src)
-        const imageFilename = `image_${imageIndex}.${extension}`
+        const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
 
         const imageFileHandle = await imagesDirHandle.getFileHandle(imageFilename, { create: true })
         const writable = await imageFileHandle.createWritable()
@@ -243,7 +290,6 @@ export async function exportHtmlWithImages(html: string, suggestedFilename: stri
 
         // Path relative to HTML file
         imageMap.set(src, `${imagesFolderName}/${imageFilename}`)
-        imageIndex++
       } catch (error) {
         console.warn(`Failed to save image ${src}:`, error)
         // Keep original URL in HTML
@@ -331,7 +377,7 @@ async function downloadEmbeddedMarkdown(html: string, filename: string): Promise
  * Export HTML as Markdown with images to local files
  * User chooses Markdown filename via save dialog, images go in a subfolder named {basename}_images/
  */
-export async function exportMarkdownWithImages(html: string, suggestedFilename: string): Promise<void> {
+export async function exportMarkdownWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap): Promise<void> {
   // Fallback for browsers without File System Access API
   if (!hasFileSystemAccess()) {
     await downloadEmbeddedMarkdown(html, `${suggestedFilename}.md`)
@@ -372,11 +418,11 @@ export async function exportMarkdownWithImages(html: string, suggestedFilename: 
     const imagesDirHandle = await dirHandle.getDirectoryHandle(imagesFolderName, { create: true })
 
     // Download and save each image to the subfolder
-    let imageIndex = 0
+    const usedNames = new Set<string>()
     for (const src of sources) {
       try {
         const { blob, extension } = await fetchImageAsBlob(src)
-        const imageFilename = `image_${imageIndex}.${extension}`
+        const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
 
         const imageFileHandle = await imagesDirHandle.getFileHandle(imageFilename, { create: true })
         const writable = await imageFileHandle.createWritable()
@@ -385,7 +431,6 @@ export async function exportMarkdownWithImages(html: string, suggestedFilename: 
 
         // Path relative to Markdown file
         imageMap.set(src, `${imagesFolderName}/${imageFilename}`)
-        imageIndex++
       } catch (error) {
         console.warn(`Failed to save image ${src}:`, error)
         // Keep original URL in Markdown
@@ -444,7 +489,8 @@ async function downloadZip(zip: JSZip, suggestedFilename: string): Promise<void>
 async function collectImagesForZip(
   html: string,
   imagesFolderName: string,
-  zip: JSZip
+  zip: JSZip,
+  imageNameMap?: ImageNameMap
 ): Promise<Map<string, string>> {
   const sources = extractImageSources(html)
   const imageMap = new Map<string, string>()
@@ -452,14 +498,13 @@ async function collectImagesForZip(
   if (sources.length > 0) {
     const imagesFolder = zip.folder(imagesFolderName)!
 
-    let imageIndex = 0
+    const usedNames = new Set<string>()
     for (const src of sources) {
       try {
         const { blob, extension } = await fetchImageAsBlob(src)
-        const imageFilename = `image_${imageIndex}.${extension}`
+        const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
         imagesFolder.file(imageFilename, blob)
         imageMap.set(src, `${imagesFolderName}/${imageFilename}`)
-        imageIndex++
       } catch (error) {
         console.warn(`Failed to add image ${src} to zip:`, error)
       }
@@ -472,12 +517,12 @@ async function collectImagesForZip(
 /**
  * Export HTML with images as a ZIP file
  */
-export async function exportHtmlZip(html: string, suggestedFilename: string): Promise<void> {
+export async function exportHtmlZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap): Promise<void> {
   const zip = new JSZip()
   const imagesFolderName = `${suggestedFilename}_images`
 
   // Collect images
-  const imageMap = await collectImagesForZip(html, imagesFolderName, zip)
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap)
 
   // Rewrite HTML with local paths
   const rewrittenHtml = rewriteHtmlImagePaths(html, imageMap)
@@ -492,12 +537,12 @@ export async function exportHtmlZip(html: string, suggestedFilename: string): Pr
 /**
  * Export Markdown with images as a ZIP file
  */
-export async function exportMarkdownZip(html: string, suggestedFilename: string): Promise<void> {
+export async function exportMarkdownZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap): Promise<void> {
   const zip = new JSZip()
   const imagesFolderName = `${suggestedFilename}_images`
 
   // Collect images
-  const imageMap = await collectImagesForZip(html, imagesFolderName, zip)
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap)
 
   // Convert HTML to Markdown
   const markdown = htmlToMarkdown(html)

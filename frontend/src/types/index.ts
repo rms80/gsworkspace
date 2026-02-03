@@ -27,8 +27,12 @@ export interface TextItem extends BaseItem {
 export interface ImageItem extends BaseItem {
   type: 'image'
   src: string
+  name?: string           // editable label displayed in header
   width: number
   height: number
+  originalWidth?: number  // original pixel dimensions
+  originalHeight?: number
+  fileSize?: number       // file size in bytes
   scaleX?: number
   scaleY?: number
   rotation?: number

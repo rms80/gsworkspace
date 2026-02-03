@@ -12,7 +12,7 @@ interface UseClipboardParams {
   screenToCanvas: (x: number, y: number) => { x: number; y: number }
   scaleImageToViewport: (w: number, h: number) => { width: number; height: number }
   onAddTextAt: (x: number, y: number, text: string) => string | void
-  onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
+  onAddImageAt: (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onDeleteSelected: () => void
 }
@@ -80,26 +80,32 @@ export function useClipboard({
           const blob = item.getAsFile()
           if (!blob) continue
 
+          // Capture file size for pasted images
+          const fileSize = blob.size
           const reader = new FileReader()
           reader.onload = async (event) => {
             const dataUrl = event.target?.result as string
             const img = new window.Image()
             img.onload = async () => {
               const scaled = scaleImageToViewport(img.width, img.height)
+              const originalWidth = img.naturalWidth
+              const originalHeight = img.naturalHeight
+              // Use "Image" as base name - unique name generator will make it Image1, Image2, etc.
+              const name = 'Image'
               // In offline mode, skip S3 upload and use data URL directly
               if (isOffline) {
-                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
+                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
                 return
               }
               try {
                 startOperation()
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
                 endOperation()
-                onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height)
+                onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               } catch (err) {
                 endOperation()
                 console.error('Failed to upload image, using data URL:', err)
-                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height)
+                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               }
             }
             img.src = dataUrl
@@ -247,26 +253,32 @@ export function useClipboard({
         const imageType = item.types.find((type) => type.startsWith('image/'))
         if (imageType) {
           const blob = await item.getType(imageType)
+          // Capture file size for pasted images
+          const fileSize = blob.size
           const reader = new FileReader()
           reader.onload = async (event) => {
             const dataUrl = event.target?.result as string
             const img = new window.Image()
             img.onload = async () => {
               const scaled = scaleImageToViewport(img.width, img.height)
+              const originalWidth = img.naturalWidth
+              const originalHeight = img.naturalHeight
+              // Use "Image" as base name - unique name generator will make it Image1, Image2, etc.
+              const name = 'Image'
               // In offline mode, skip S3 upload and use data URL directly
               if (isOffline) {
-                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height)
+                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
                 return
               }
               try {
                 startOperation()
                 const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
                 endOperation()
-                onAddImageAt(canvasX, canvasY, s3Url, scaled.width, scaled.height)
+                onAddImageAt(canvasX, canvasY, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               } catch (err) {
                 endOperation()
                 console.error('Failed to upload image, using data URL:', err)
-                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height)
+                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               }
             }
             img.src = dataUrl

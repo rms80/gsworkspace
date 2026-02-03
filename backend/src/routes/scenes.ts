@@ -35,6 +35,10 @@ interface StoredTextItem extends StoredItemBase {
 interface StoredImageItem extends StoredItemBase {
   type: 'image'
   file: string // reference to image file
+  name?: string // editable label
+  originalWidth?: number
+  originalHeight?: number
+  fileSize?: number
   scaleX?: number
   scaleY?: number
   rotation?: number
@@ -248,6 +252,10 @@ router.post('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             file: imageFile,
+            name: item.name,
+            originalWidth: item.originalWidth,
+            originalHeight: item.originalHeight,
+            fileSize: item.fileSize,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,
@@ -498,6 +506,10 @@ router.get('/:id', async (req, res) => {
             width: item.width,
             height: item.height,
             src: imageUrl,
+            name: item.name,
+            originalWidth: item.originalWidth,
+            originalHeight: item.originalHeight,
+            fileSize: item.fileSize,
             scaleX: item.scaleX,
             scaleY: item.scaleY,
             rotation: item.rotation,

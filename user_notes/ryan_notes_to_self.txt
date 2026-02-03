@@ -300,6 +300,10 @@ Feb 2
 Asked for AI query support in offline mode. Keys to be stored in localStorage, entered in settings dialog.
 It build all this no problem. Added settings tab for managing localStorage & IndexedDB, no problem.
 
+Asked it to add label support for images. It makes a detailed plan but forgets that the back-end exists,
+and it forgets about undo/redo. I ask it to update the plan for this, and then implement.
+Seems to do a fine job on the implementation though. Some minor tweaks for exporting and it is done.
+
 
 
 

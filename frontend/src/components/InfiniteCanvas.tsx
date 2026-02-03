@@ -19,6 +19,7 @@ import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
+import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
 import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
@@ -49,7 +50,7 @@ interface InfiniteCanvasProps {
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
-  onAddImageAt: (x: number, y: number, src: string, width: number, height: number) => void
+  onAddImageAt: (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onAddVideoAt: (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
@@ -254,6 +255,8 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
   const [editingVideoLabelId, setEditingVideoLabelId] = useState<string | null>(null)
   const videoLabelInputRef = useRef<HTMLInputElement>(null)
+  const [editingImageLabelId, setEditingImageLabelId] = useState<string | null>(null)
+  const imageLabelInputRef = useRef<HTMLInputElement>(null)
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -303,23 +306,30 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       // Handle image files
       if (file.type.startsWith('image/')) {
         const reader = new FileReader()
+        // Capture file info before async operations
+        const fileName = file.name
+        const fileSize = file.size
         reader.onload = async (event) => {
           const dataUrl = event.target?.result as string
           const img = new window.Image()
           img.onload = async () => {
             const scaled = scaleImageToViewport(img.width, img.height)
+            // Extract filename without extension for the label
+            const name = fileName.replace(/\.[^/.]+$/, '')
+            const originalWidth = img.naturalWidth
+            const originalHeight = img.naturalHeight
             try {
               // Upload to S3 immediately to avoid storing large data URLs in memory
               startOperation()
-              const s3Url = await uploadImage(dataUrl, file.name || `dropped-${Date.now()}.png`)
+              const s3Url = await uploadImage(dataUrl, fileName || `dropped-${Date.now()}.png`)
               endOperation()
               // Offset multiple files so they don't stack exactly
-              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height)
+              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
             } catch (err) {
               endOperation()
               console.error('Failed to upload image, using data URL:', err)
               // Fallback to data URL if upload fails
-              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height)
+              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
             }
           }
           img.src = dataUrl
@@ -460,6 +470,38 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
   }
   const editingVideoItem = getEditingVideoItem()
 
+  // Image item label editing handlers
+  const handleImageLabelDblClick = (id: string) => {
+    setEditingImageLabelId(id)
+    setTimeout(() => {
+      imageLabelInputRef.current?.focus()
+      imageLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleImageLabelBlur = () => {
+    if (editingImageLabelId && imageLabelInputRef.current) {
+      onUpdateItem(editingImageLabelId, { name: imageLabelInputRef.current.value })
+    }
+    setEditingImageLabelId(null)
+  }
+
+  const handleImageLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingImageLabelId(null)
+    } else if (e.key === 'Enter') {
+      handleImageLabelBlur()
+    }
+  }
+
+  const getEditingImageItem = (): ImageItem | null => {
+    if (!editingImageLabelId) return null
+    const item = items.find((i) => i.id === editingImageLabelId)
+    if (!item || item.type !== 'image') return null
+    return item
+  }
+  const editingImageItem = getEditingImageItem()
+
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
     const item = items.find((i) => i.id === editingHtmlLabelId)
@@ -554,6 +596,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 isCropping={croppingImageId === item.id}
                 pendingCropRect={pendingCropRect}
                 stageScale={stageScale}
+                editingImageLabelId={editingImageLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   imageContextMenuState.openMenu(
@@ -563,6 +606,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 }}
                 onUpdateItem={onUpdateItem}
                 onCropChange={setPendingCropRect}
+                onLabelDblClick={handleImageLabelDblClick}
               />
             )
           } else if (item.type === 'video') {
@@ -932,6 +976,18 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
         />
       )}
 
+      {/* Image label editing overlay */}
+      {editingImageItem && (
+        <ImageLabelEditingOverlay
+          item={editingImageItem}
+          inputRef={imageLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleImageLabelBlur}
+          onKeyDown={handleImageLabelKeyDown}
+        />
+      )}
+
       {/* Context menu */}
       {contextMenuState.menuPosition && (
         <CanvasContextMenu
@@ -1042,11 +1098,19 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
         if (!htmlItem || htmlItem.type !== 'html') return null
+        // Build image name map from canvas items for export
+        const imageNameMap = new Map<string, string>()
+        items.forEach((item) => {
+          if (item.type === 'image' && item.name) {
+            imageNameMap.set(item.src, item.name)
+          }
+        })
         return (
           <HtmlExportMenu
             position={exportMenu.menuPosition}
             html={htmlItem.html}
             label={htmlItem.label || 'export'}
+            imageNameMap={imageNameMap}
             onClose={exportMenu.closeMenu}
           />
         )
