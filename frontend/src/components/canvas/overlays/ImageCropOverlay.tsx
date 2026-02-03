@@ -48,6 +48,9 @@ const ASPECT_RATIO_PRESETS = [
   { label: '16:9', value: 16 / 9 },
 ]
 
+// Global variable to store copied crop region
+let copiedCropRect: CropRect | null = null
+
 export default function ImageCropOverlay({
   item,
   image,
@@ -386,6 +389,22 @@ export default function ImageCropOverlay({
     setShowAspectMenu(false)
   }
 
+  const handleCopyCrop = () => {
+    copiedCropRect = { ...cropRect }
+    setShowAspectMenu(false)
+  }
+
+  const handlePasteCrop = () => {
+    if (!copiedCropRect) return
+    // Apply the copied crop, clamped to current image bounds
+    onCropChange(clampCrop({ ...copiedCropRect }, natW, natH))
+    // Update aspect ratio ref if lock is enabled
+    if (lockAspectRatio) {
+      aspectRatioRef.current = copiedCropRect.width / copiedCropRect.height
+    }
+    setShowAspectMenu(false)
+  }
+
   const inputStyle: React.CSSProperties = {
     width: 38,
     backgroundColor: 'white',
@@ -689,6 +708,52 @@ export default function ImageCropOverlay({
                   zIndex: 10,
                 }}
               >
+                {/* Copy */}
+                <button
+                  onClick={handleCopyCrop}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    backgroundColor: 'transparent',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 16px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4a9eff')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  Copy
+                </button>
+                {/* Paste */}
+                <button
+                  onClick={handlePasteCrop}
+                  disabled={!copiedCropRect}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    backgroundColor: 'transparent',
+                    color: copiedCropRect ? 'white' : '#666',
+                    border: 'none',
+                    padding: '6px 16px',
+                    fontSize: 12,
+                    cursor: copiedCropRect ? 'pointer' : 'default',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (copiedCropRect) e.currentTarget.style.backgroundColor = '#4a9eff'
+                  }}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  Paste
+                </button>
+                {/* Separator */}
+                <div style={{ height: 1, backgroundColor: '#555', margin: '4px 0' }} />
+                {/* Aspect ratio presets */}
                 {ASPECT_RATIO_PRESETS.map((preset) => (
                   <button
                     key={preset.label}
