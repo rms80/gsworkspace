@@ -22,6 +22,7 @@ import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay
 import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
+import ImageCropOverlay from './canvas/overlays/ImageCropOverlay'
 import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
@@ -112,8 +113,10 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
   const {
     croppingImageId,
     pendingCropRect,
+    lockAspectRatio,
     setCroppingImageId,
     setPendingCropRect,
+    setLockAspectRatio,
     applyCrop,
     cancelCrop: _cancelCrop,
   } = useCropMode({ items, loadedImages, isOffline, onUpdateItem })
@@ -585,6 +588,8 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
               />
             )
           } else if (item.type === 'image') {
+            // Hide the image item when it's being cropped
+            if (croppingImageId === item.id) return null
             const img = loadedImages.get(item.src)
             if (!img) return null
             return (
@@ -593,9 +598,6 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 item={item}
                 image={img}
                 isSelected={selectedIds.includes(item.id)}
-                isCropping={croppingImageId === item.id}
-                pendingCropRect={pendingCropRect}
-                stageScale={stageScale}
                 editingImageLabelId={editingImageLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
@@ -605,7 +607,6 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                   )
                 }}
                 onUpdateItem={onUpdateItem}
-                onCropChange={setPendingCropRect}
                 onLabelDblClick={handleImageLabelDblClick}
               />
             )
@@ -864,6 +865,26 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             />
           )
         })}
+
+      {/* Image crop overlay */}
+      {croppingImageId && pendingCropRect && (() => {
+        const imageItem = items.find((i) => i.id === croppingImageId && i.type === 'image') as ImageItem | undefined
+        if (!imageItem) return null
+        const img = loadedImages.get(imageItem.src)
+        if (!img) return null
+        return (
+          <ImageCropOverlay
+            item={imageItem}
+            image={img}
+            cropRect={pendingCropRect}
+            stageScale={stageScale}
+            stagePos={stagePos}
+            lockAspectRatio={lockAspectRatio}
+            onCropChange={setPendingCropRect}
+            onLockAspectRatioChange={setLockAspectRatio}
+          />
+        )
+      })()}
 
       {/* Video crop overlay */}
       {croppingVideoId && videoPendingCropRect && (() => {

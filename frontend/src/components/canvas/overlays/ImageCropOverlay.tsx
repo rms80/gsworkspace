@@ -1,49 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { CropRect, VideoItem } from '../../../types'
+import { CropRect, ImageItem } from '../../../types'
 
-interface VideoCropOverlayProps {
-  item: VideoItem
+interface ImageCropOverlayProps {
+  item: ImageItem
+  image: HTMLImageElement
   cropRect: CropRect
-  speed: number
-  removeAudio: boolean
-  trim: boolean
-  trimStart: number
-  trimEnd: number
   stageScale: number
   stagePos: { x: number; y: number }
+  lockAspectRatio: boolean
   onCropChange: (crop: CropRect) => void
-  onSpeedChange: (speed: number) => void
-  onRemoveAudioChange: (remove: boolean) => void
-  onTrimChange: (trim: boolean) => void
-  onTrimStartChange: (start: number) => void
-  onTrimEndChange: (end: number) => void
+  onLockAspectRatioChange: (locked: boolean) => void
 }
-
-const SPEED_OPTIONS = [
-  { value: 0.25, label: '0.25x' },
-  { value: 0.5, label: '0.5x' },
-  { value: 1, label: '1x' },
-  { value: 1.5, label: '1.5x' },
-  { value: 2, label: '2x' },
-  { value: 3, label: '3x' },
-  { value: 4, label: '4x' },
-]
-
-const ASPECT_RATIO_PRESETS = [
-  { label: '1:1', value: 1 },
-  { label: '3:2', value: 3 / 2 },
-  { label: '4:3', value: 4 / 3 },
-  { label: '16:9', value: 16 / 9 },
-]
-
-// Global variable to store copied crop region (shared across image and video crop)
-declare global {
-  interface Window {
-    __copiedCropRect?: CropRect | null
-  }
-}
-const getCopiedCropRect = () => window.__copiedCropRect ?? null
-const setCopiedCropRect = (rect: CropRect | null) => { window.__copiedCropRect = rect }
 
 const MIN_CROP_SIZE = 10
 const HANDLE_SIZE = 10
@@ -70,28 +37,38 @@ interface DragState {
 }
 
 /**
- * HTML-based video crop overlay.
- * Shows the video at low opacity with the crop region at full opacity.
+ * HTML-based image crop overlay.
+ * Shows the image at low opacity with the crop region at full opacity.
+ * Includes a control panel with X, Y, Width, Height fields and aspect ratio lock.
  */
-export default function VideoCropOverlay({
+const ASPECT_RATIO_PRESETS = [
+  { label: '1:1', value: 1 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+]
+
+// Global variable to store copied crop region (shared across image and video crop)
+// Using window to share between components
+declare global {
+  interface Window {
+    __copiedCropRect?: CropRect | null
+  }
+}
+const getCopiedCropRect = () => window.__copiedCropRect ?? null
+const setCopiedCropRect = (rect: CropRect | null) => { window.__copiedCropRect = rect }
+
+export default function ImageCropOverlay({
   item,
+  image,
   cropRect,
-  speed,
-  removeAudio,
-  trim,
-  trimStart,
-  trimEnd,
   stageScale,
   stagePos,
+  lockAspectRatio,
   onCropChange,
-  onSpeedChange,
-  onRemoveAudioChange,
-  onTrimChange,
-  onTrimStartChange,
-  onTrimEndChange,
-}: VideoCropOverlayProps) {
+  onLockAspectRatioChange,
+}: ImageCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
-  const [lockAspectRatio, setLockAspectRatio] = useState(false)
   const aspectRatioRef = useRef(cropRect.width / cropRect.height)
   const [showAspectMenu, setShowAspectMenu] = useState(false)
   const aspectMenuRef = useRef<HTMLDivElement>(null)
@@ -108,29 +85,12 @@ export default function VideoCropOverlay({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showAspectMenu])
 
-  // Video playback state
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const bgVideoRef = useRef<HTMLVideoElement>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [duration, setDuration] = useState(0)
-
-  // Timeline ref for trim marker dragging
-  const timelineRef = useRef<HTMLDivElement>(null)
-  const trimDragRef = useRef<'start' | 'end' | null>(null)
-
   // Local state for input fields - only commit on blur/Enter
   const [inputValues, setInputValues] = useState({
     x: String(Math.round(cropRect.x)),
     y: String(Math.round(cropRect.y)),
     width: String(Math.round(cropRect.width)),
     height: String(Math.round(cropRect.height)),
-  })
-
-  // Local state for trim input fields
-  const [trimInputValues, setTrimInputValues] = useState({
-    start: trimStart.toFixed(1),
-    end: trimEnd.toFixed(1),
   })
 
   // Sync input values when cropRect changes from dragging
@@ -143,192 +103,24 @@ export default function VideoCropOverlay({
     })
   }, [cropRect.x, cropRect.y, cropRect.width, cropRect.height])
 
-  // Sync trim input values when trim times change externally
-  useEffect(() => {
-    setTrimInputValues({
-      start: trimStart.toFixed(1),
-      end: trimEnd.toFixed(1),
-    })
-  }, [trimStart, trimEnd])
+  const natW = image.naturalWidth
+  const natH = image.naturalHeight
 
-  // When trim is enabled and trimEnd is 0, set it to video duration
-  useEffect(() => {
-    if (trim && duration > 0 && trimEnd === 0) {
-      onTrimEndChange(duration)
-    }
-  }, [trim, duration, trimEnd, onTrimEndChange])
-
-  // Trim input handlers
-  const handleTrimInputChange = (field: 'start' | 'end', value: string) => {
-    setTrimInputValues(prev => ({ ...prev, [field]: value }))
-  }
-
-  const commitTrimInput = (field: 'start' | 'end') => {
-    const value = parseFloat(trimInputValues[field])
-    if (!isNaN(value) && value >= 0) {
-      if (field === 'start') {
-        // Ensure start is not greater than end
-        const clampedValue = Math.min(value, trimEnd > 0 ? trimEnd : duration)
-        onTrimStartChange(clampedValue)
-      } else {
-        // Ensure end is not less than start
-        const clampedValue = Math.max(value, trimStart)
-        onTrimEndChange(clampedValue)
-      }
-    }
-  }
-
-  const handleTrimInputKeyDown = (e: React.KeyboardEvent, field: 'start' | 'end') => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      commitTrimInput(field)
-      ;(e.target as HTMLInputElement).blur()
-    }
-  }
-
-  // Set trim start/end from current playback position
-  const setTrimStartFromPlayhead = () => {
-    onTrimStartChange(currentTime)
-  }
-
-  const setTrimEndFromPlayhead = () => {
-    onTrimEndChange(currentTime)
-  }
-
-  // Trim marker drag handlers
-  const handleTrimMarkerMouseDown = (marker: 'start' | 'end') => (e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    trimDragRef.current = marker
-  }
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!trimDragRef.current || !timelineRef.current || !duration) return
-
-      const rect = timelineRef.current.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const percent = Math.max(0, Math.min(1, x / rect.width))
-      const time = percent * duration
-
-      if (trimDragRef.current === 'start') {
-        // Clamp start to not exceed end
-        const clampedTime = Math.min(time, trimEnd)
-        onTrimStartChange(clampedTime)
-      } else {
-        // Clamp end to not be less than start
-        const clampedTime = Math.max(time, trimStart)
-        onTrimEndChange(clampedTime)
-      }
-    }
-
-    const handleMouseUp = () => {
-      trimDragRef.current = null
-    }
-
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [duration, trimStart, trimEnd, onTrimStartChange, onTrimEndChange])
-
-  // Video playback event handlers
-  useEffect(() => {
-    const video = videoRef.current
-    const bgVideo = bgVideoRef.current
-    if (!video) return
-
-    const handleTimeUpdate = () => setCurrentTime(video.currentTime)
-    const handleDurationChange = () => setDuration(video.duration)
-    const handlePlay = () => setIsPlaying(true)
-    const handlePause = () => setIsPlaying(false)
-    const handleEnded = () => setIsPlaying(false)
-
-    // Sync background video time with main video
-    const syncBgVideo = () => {
-      if (bgVideo && Math.abs(bgVideo.currentTime - video.currentTime) > 0.1) {
-        bgVideo.currentTime = video.currentTime
-      }
-    }
-
-    video.addEventListener('timeupdate', handleTimeUpdate)
-    video.addEventListener('timeupdate', syncBgVideo)
-    video.addEventListener('durationchange', handleDurationChange)
-    video.addEventListener('play', handlePlay)
-    video.addEventListener('pause', handlePause)
-    video.addEventListener('ended', handleEnded)
-
-    return () => {
-      video.removeEventListener('timeupdate', handleTimeUpdate)
-      video.removeEventListener('timeupdate', syncBgVideo)
-      video.removeEventListener('durationchange', handleDurationChange)
-      video.removeEventListener('play', handlePlay)
-      video.removeEventListener('pause', handlePause)
-      video.removeEventListener('ended', handleEnded)
-    }
-  }, [])
-
-  const togglePlay = () => {
-    const video = videoRef.current
-    const bgVideo = bgVideoRef.current
-    if (!video) return
-
-    if (isPlaying) {
-      video.pause()
-      bgVideo?.pause()
-    } else {
-      video.play()
-      bgVideo?.play()
-    }
-  }
-
-  const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current
-    const bgVideo = bgVideoRef.current
-    if (!video) return
-    const newTime = parseFloat(e.target.value)
-
-    // // Snap to trim points when within 1 second
-    // if (trim) {
-    //   const snapThreshold = 1
-    //   if (Math.abs(newTime - trimStart) < snapThreshold) {
-    //     newTime = trimStart
-    //   } else if (Math.abs(newTime - trimEnd) < snapThreshold) {
-    //     newTime = trimEnd
-    //   }
-    // }
-
-    video.currentTime = newTime
-    if (bgVideo) bgVideo.currentTime = newTime
-  }
-
-  const formatTime = (seconds: number): string => {
-    if (!isFinite(seconds)) return '0:00.0'
-    const mins = Math.floor(seconds / 60)
-    const secs = (seconds % 60).toFixed(1)
-    return `${mins}:${secs.padStart(4, '0')}`
-  }
-
-  // Original video dimensions
-  const origW = item.originalWidth ?? item.width
-  const origH = item.originalHeight ?? item.height
+  // Get scale factors (default to 1)
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
 
-  // Display scale: how big is one source pixel on screen
-  const currentSourceW = item.cropRect?.width ?? origW
-  const currentSourceH = item.cropRect?.height ?? origH
+  // Display scale: how big is one source pixel on screen (including scaleX/scaleY)
+  const currentSourceW = item.cropRect?.width ?? natW
+  const currentSourceH = item.cropRect?.height ?? natH
   const baseDisplayScaleX = item.width / currentSourceW
   const baseDisplayScaleY = item.height / currentSourceH
   const displayScaleX = baseDisplayScaleX * scaleX
   const displayScaleY = baseDisplayScaleY * scaleY
 
-  // Full video display dimensions
-  const fullDisplayW = origW * displayScaleX
-  const fullDisplayH = origH * displayScaleY
+  // Full image display dimensions
+  const fullDisplayW = natW * displayScaleX
+  const fullDisplayH = natH * displayScaleY
 
   // Offset: position so that current crop region aligns with item position
   const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
@@ -373,8 +165,8 @@ export default function VideoCropOverlay({
     if (ds.type === 'body') {
       let nx = ds.startCrop.x + dx
       let ny = ds.startCrop.y + dy
-      nx = Math.max(0, Math.min(nx, origW - ds.startCrop.width))
-      ny = Math.max(0, Math.min(ny, origH - ds.startCrop.height))
+      nx = Math.max(0, Math.min(nx, natW - ds.startCrop.width))
+      ny = Math.max(0, Math.min(ny, natH - ds.startCrop.height))
       onCropChangeRef.current({ ...ds.startCrop, x: nx, y: ny })
     } else if (ds.type === 'handle' && ds.handlePos) {
       let { x: bx, y: by, width: bw, height: bh } = ds.startCrop
@@ -385,7 +177,6 @@ export default function VideoCropOverlay({
         case 'top-left':
           bw -= dx; bh -= dy
           if (locked) {
-            // Use the larger change to determine new size
             const newW = ds.startCrop.width - dx
             const newH = ds.startCrop.height - dy
             if (Math.abs(dx) > Math.abs(dy)) {
@@ -439,32 +230,28 @@ export default function VideoCropOverlay({
           bh -= dy
           if (locked) bw = bh * ar
           by = ds.startCrop.y + ds.startCrop.height - bh
-          // Center horizontally when locked
           if (locked) bx = ds.startCrop.x + (ds.startCrop.width - bw) / 2
           break
         case 'bottom':
           bh += dy
           if (locked) bw = bh * ar
-          // Center horizontally when locked
           if (locked) bx = ds.startCrop.x + (ds.startCrop.width - bw) / 2
           break
         case 'left':
           bw -= dx
           if (locked) bh = bw / ar
           bx = ds.startCrop.x + ds.startCrop.width - bw
-          // Center vertically when locked
           if (locked) by = ds.startCrop.y + (ds.startCrop.height - bh) / 2
           break
         case 'right':
           bw += dx
           if (locked) bh = bw / ar
-          // Center vertically when locked
           if (locked) by = ds.startCrop.y + (ds.startCrop.height - bh) / 2
           break
       }
-      onCropChangeRef.current(clampCrop({ x: bx, y: by, width: bw, height: bh }, origW, origH))
+      onCropChangeRef.current(clampCrop({ x: bx, y: by, width: bw, height: bh }, natW, natH))
     }
-  }, [origW, origH, stageScale])
+  }, [natW, natH, stageScale])
 
   const handleMouseUp = useCallback(() => {
     dragStateRef.current = null
@@ -536,7 +323,7 @@ export default function VideoCropOverlay({
       newCrop[field] = num
     }
 
-    onCropChange(clampCrop(newCrop, origW, origH))
+    onCropChange(clampCrop(newCrop, natW, natH))
   }
 
   // Handle Enter key in input fields
@@ -554,48 +341,57 @@ export default function VideoCropOverlay({
       // When locking, capture current aspect ratio
       aspectRatioRef.current = cropRect.width / cropRect.height
     }
-    setLockAspectRatio(!lockAspectRatio)
+    onLockAspectRatioChange(!lockAspectRatio)
   }
 
   const applyAspectRatioPreset = (ar: number) => {
+    // Calculate new dimensions that fit within the current crop center
+    // Keep the crop centered and adjust width/height to match the new aspect ratio
     const centerX = cropRect.x + cropRect.width / 2
     const centerY = cropRect.y + cropRect.height / 2
 
     let newWidth: number
     let newHeight: number
 
+    // Determine whether to fit by width or height
     const currentAr = cropRect.width / cropRect.height
     if (ar > currentAr) {
+      // New ratio is wider - keep width, reduce height
       newWidth = cropRect.width
       newHeight = newWidth / ar
     } else {
+      // New ratio is taller - keep height, reduce width
       newHeight = cropRect.height
       newWidth = newHeight * ar
     }
 
+    // Calculate new position to keep centered
     let newX = centerX - newWidth / 2
     let newY = centerY - newHeight / 2
 
-    newX = Math.max(0, Math.min(newX, origW - newWidth))
-    newY = Math.max(0, Math.min(newY, origH - newHeight))
+    // Clamp to image bounds
+    newX = Math.max(0, Math.min(newX, natW - newWidth))
+    newY = Math.max(0, Math.min(newY, natH - newHeight))
 
-    if (newWidth > origW) {
-      newWidth = origW
+    // If dimensions exceed bounds, scale down
+    if (newWidth > natW) {
+      newWidth = natW
       newHeight = newWidth / ar
       newX = 0
-      newY = Math.max(0, Math.min(centerY - newHeight / 2, origH - newHeight))
+      newY = Math.max(0, Math.min(centerY - newHeight / 2, natH - newHeight))
     }
-    if (newHeight > origH) {
-      newHeight = origH
+    if (newHeight > natH) {
+      newHeight = natH
       newWidth = newHeight * ar
       newY = 0
-      newX = Math.max(0, Math.min(centerX - newWidth / 2, origW - newWidth))
+      newX = Math.max(0, Math.min(centerX - newWidth / 2, natW - newWidth))
     }
 
+    // Update the aspect ratio ref and enable lock
     aspectRatioRef.current = ar
-    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, origW, origH))
+    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, natW, natH))
     if (!lockAspectRatio) {
-      setLockAspectRatio(true)
+      onLockAspectRatioChange(true)
     }
     setShowAspectMenu(false)
   }
@@ -608,7 +404,9 @@ export default function VideoCropOverlay({
   const handlePasteCrop = () => {
     const copied = getCopiedCropRect()
     if (!copied) return
-    onCropChange(clampCrop({ ...copied }, origW, origH))
+    // Apply the copied crop, clamped to current image bounds
+    onCropChange(clampCrop({ ...copied }, natW, natH))
+    // Update aspect ratio ref if lock is enabled
     if (lockAspectRatio) {
       aspectRatioRef.current = copied.width / copied.height
     }
@@ -636,12 +434,14 @@ export default function VideoCropOverlay({
         height: screenFullH,
         pointerEvents: 'auto',
         zIndex: 1000,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
-      {/* Video at low opacity */}
-      <video
-        ref={bgVideoRef}
+      {/* Image at low opacity */}
+      <img
         src={item.src}
+        alt=""
         style={{
           position: 'absolute',
           width: '100%',
@@ -650,8 +450,6 @@ export default function VideoCropOverlay({
           opacity: 0.3,
           pointerEvents: 'none',
         }}
-        muted
-        playsInline
       />
 
       {/* Dark overlay for areas outside crop */}
@@ -662,7 +460,7 @@ export default function VideoCropOverlay({
           left: 0,
           top: 0,
           width: screenFullW,
-          height: screenCy,
+          height: Math.max(0, screenCy),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -672,9 +470,9 @@ export default function VideoCropOverlay({
         style={{
           position: 'absolute',
           left: 0,
-          top: screenCy + screenCh,
+          top: Math.max(0, screenCy + screenCh),
           width: screenFullW,
-          height: screenFullH - screenCy - screenCh,
+          height: Math.max(0, screenFullH - screenCy - screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -684,9 +482,9 @@ export default function VideoCropOverlay({
         style={{
           position: 'absolute',
           left: 0,
-          top: screenCy,
-          width: screenCx,
-          height: screenCh,
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenCx),
+          height: Math.max(0, screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
@@ -695,41 +493,39 @@ export default function VideoCropOverlay({
       <div
         style={{
           position: 'absolute',
-          left: screenCx + screenCw,
-          top: screenCy,
-          width: screenFullW - screenCx - screenCw,
-          height: screenCh,
+          left: Math.max(0, screenCx + screenCw),
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenFullW - screenCx - screenCw),
+          height: Math.max(0, screenCh),
           backgroundColor: 'rgba(0, 0, 0, 0.5)',
           pointerEvents: 'none',
         }}
       />
 
-      {/* Video at full opacity inside crop region (clipped) */}
+      {/* Image at full opacity inside crop region (clipped) */}
       <div
         style={{
           position: 'absolute',
-          left: screenCx,
-          top: screenCy,
-          width: screenCw,
-          height: screenCh,
+          left: Math.max(0, screenCx),
+          top: Math.max(0, screenCy),
+          width: Math.max(0, screenCw),
+          height: Math.max(0, screenCh),
           overflow: 'hidden',
           pointerEvents: 'none',
         }}
       >
-        <video
-          ref={videoRef}
+        <img
           src={item.src}
+          alt=""
           style={{
             position: 'absolute',
-            left: -screenCx,
-            top: -screenCy,
+            left: -Math.max(0, screenCx),
+            top: -Math.max(0, screenCy),
             width: screenFullW,
             height: screenFullH,
             objectFit: 'fill',
             pointerEvents: 'none',
           }}
-          muted
-          playsInline
         />
       </div>
 
@@ -782,7 +578,7 @@ export default function VideoCropOverlay({
       <div
         style={{
           position: 'absolute',
-          bottom: -100,
+          bottom: -60,
           left: '50%',
           transform: 'translateX(-50%)',
           backgroundColor: 'rgba(0, 0, 0, 0.85)',
@@ -807,9 +603,9 @@ export default function VideoCropOverlay({
             -moz-appearance: textfield;
           }
         `}</style>
-        {/* All controls in one row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        {/* Controls row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>X:</span>
             <input
               type="number"
@@ -822,7 +618,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>Y:</span>
             <input
               type="number"
@@ -835,7 +631,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>W:</span>
             <input
               type="number"
@@ -848,7 +644,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             <span>H:</span>
             <input
               type="number"
@@ -868,11 +664,11 @@ export default function VideoCropOverlay({
               color: 'white',
               border: '1px solid #555',
               borderRadius: 3,
-              padding: '0px 2px',
-              fontSize: 10,
+              padding: '0px 6px',
+              fontSize: 11,
               cursor: 'pointer',
-              height: 19,
-              width: 24,
+              height: 22,
+              width: 28,
             }}
             title={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
           >
@@ -886,11 +682,11 @@ export default function VideoCropOverlay({
                 color: 'white',
                 border: '1px solid #555',
                 borderRadius: 3,
-                padding: '0px 2px',
-                fontSize: 10,
+                padding: '0px 6px',
+                fontSize: 11,
                 cursor: 'pointer',
-                height: 19,
-                width: 24,
+                height: 22,
+                width: 28,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -991,281 +787,6 @@ export default function VideoCropOverlay({
               </div>
             )}
           </div>
-          <div style={{ width: 1, height: 16, backgroundColor: '#555' }} />
-          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span>Speed:</span>
-            <select
-              value={speed}
-              onChange={(e) => {
-                const newSpeed = parseFloat(e.target.value)
-                onSpeedChange(newSpeed)
-                // Auto-enable removeAudio when speed is not 1x
-                if (newSpeed !== 1) {
-                  onRemoveAudioChange(true)
-                }
-              }}
-              style={{
-                backgroundColor: '#333',
-                color: 'white',
-                border: '1px solid #555',
-                borderRadius: 3,
-                padding: '0px 6px',
-                fontSize: 12,
-                cursor: 'pointer',
-              }}
-            >
-              {SPEED_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            onClick={() => onRemoveAudioChange(!removeAudio)}
-            style={{
-              backgroundColor: removeAudio ? '#4a9eff' : '#333',
-              color: 'white',
-              border: '1px solid #555',
-              borderRadius: 3,
-              padding: '2px 8px',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-            title={removeAudio ? 'Audio will be removed' : 'Audio will be kept'}
-          >
-            Mute
-          </button>
-          <div style={{ width: 1, height: 16, backgroundColor: '#555' }} />
-          <button
-            onClick={() => onTrimChange(!trim)}
-            style={{
-              backgroundColor: trim ? '#4a9eff' : '#333',
-              color: 'white',
-              border: '1px solid #555',
-              borderRadius: 3,
-              padding: '2px 8px',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
-            title={trim ? 'Trim enabled' : 'Trim disabled'}
-          >
-            Trim
-          </button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2, opacity: trim ? 1 : 0.5 }}>
-            <span>Start:</span>
-            <input
-              type="text"
-              className="crop-input"
-              value={trimInputValues.start}
-              onChange={(e) => handleTrimInputChange('start', e.target.value)}
-              onBlur={() => commitTrimInput('start')}
-              onKeyDown={(e) => handleTrimInputKeyDown(e, 'start')}
-              onFocus={(e) => e.target.select()}
-              disabled={!trim}
-              style={{
-                width: 45,
-                padding: '2px 4px',
-                backgroundColor: trim ? 'white' : '#666',
-                color: trim ? 'black' : '#999',
-                border: '1px solid #555',
-                borderRadius: 3,
-                fontSize: 12,
-                textAlign: 'right',
-              }}
-            />
-          </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 2, opacity: trim ? 1 : 0.5 }}>
-            <span>End:</span>
-            <input
-              type="text"
-              className="crop-input"
-              value={trimInputValues.end}
-              onChange={(e) => handleTrimInputChange('end', e.target.value)}
-              onBlur={() => commitTrimInput('end')}
-              onKeyDown={(e) => handleTrimInputKeyDown(e, 'end')}
-              onFocus={(e) => e.target.select()}
-              disabled={!trim}
-              style={{
-                width: 45,
-                padding: '2px 4px',
-                backgroundColor: trim ? 'white' : '#666',
-                color: trim ? 'black' : '#999',
-                border: '1px solid #555',
-                borderRadius: 3,
-                fontSize: 12,
-                textAlign: 'right',
-              }}
-            />
-          </label>
-        </div>
-        {/* Playback controls row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            onClick={togglePlay}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: 14,
-              padding: '0 4px',
-            }}
-          >
-            {isPlaying ? '⏸' : '▶'}
-          </button>
-          <button
-            onClick={setTrimStartFromPlayhead}
-            disabled={!trim}
-            style={{
-              background: 'none',
-              border: '1px solid',
-              borderColor: trim ? '#4a9eff' : '#555',
-              color: trim ? '#4a9eff' : '#666',
-              cursor: trim ? 'pointer' : 'default',
-              fontSize: 10,
-              padding: '2px 4px',
-              borderRadius: 3,
-              opacity: trim ? 1 : 0.5,
-            }}
-            title="Set trim start from current position"
-          >
-            [
-          </button>
-          <div ref={timelineRef} style={{ position: 'relative', flex: 1, minWidth: 120, marginTop: -4 }}>
-            <style>{`
-              .video-timeline-slider::-webkit-slider-thumb {
-                -webkit-appearance: none;
-                appearance: none;
-                width: 4px;
-                height: 14px;
-                background: white;
-                cursor: pointer;
-                border-radius: 0px;
-                margin-top: -5px;
-              }
-              .video-timeline-slider::-moz-range-thumb {
-                width: 4px;
-                height: 14px;
-                background: white;
-                cursor: pointer;
-                border-radius: 0px;
-                border: none;
-              }
-              .video-timeline-slider::-webkit-slider-runnable-track {
-                height: 4px;
-                background: rgba(255,255,255,0.3);
-                border-radius: 2px;
-              }
-              .video-timeline-slider::-moz-range-track {
-                height: 4px;
-                background: rgba(255,255,255,0.3);
-                border-radius: 2px;
-              }
-            `}</style>
-            <input
-              type="range"
-              className="video-timeline-slider"
-              min={0}
-              max={duration || 100}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSeek}
-              style={{
-                width: '100%',
-                height: 4,
-                cursor: 'pointer',
-                WebkitAppearance: 'none',
-                appearance: 'none',
-                background: 'rgba(255,255,255,0.3)',
-                borderRadius: 2,
-              }}
-            />
-            {/* Trim start/end markers */}
-            {trim && duration > 0 && (
-              <>
-                <div
-                  onMouseDown={handleTrimMarkerMouseDown('start')}
-                  style={{
-                    position: 'absolute',
-                    left: `calc(2px + ${(trimStart / duration) * 100}% - ${(trimStart / duration) * 4}px)`,
-                    top: 16,
-                    transform: 'translateX(-50%)',
-                    padding: '0px 6px',
-                    cursor: 'ew-resize',
-                  }}
-                  title={`Trim start: ${trimStart.toFixed(1)}s`}
-                >
-                  <div
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeft: '5px solid transparent',
-                      borderRight: '5px solid transparent',
-                      borderBottom: '6px solid white',
-                    }}
-                  />
-                </div>
-                <div
-                  onMouseDown={handleTrimMarkerMouseDown('end')}
-                  style={{
-                    position: 'absolute',
-                    left: `calc(2px + ${(trimEnd / duration) * 100}% - ${(trimEnd / duration) * 4}px)`,
-                    top: 16,
-                    transform: 'translateX(-50%)',
-                    padding: '0px 6px',
-                    cursor: 'ew-resize',
-                  }}
-                  title={`Trim end: ${trimEnd.toFixed(1)}s`}
-                >
-                  <div
-                    style={{
-                      width: 0,
-                      height: 0,
-                      borderLeft: '5px solid transparent',
-                      borderRight: '5px solid transparent',
-                      borderBottom: '6px solid white',
-                    }}
-                  />
-                </div>
-                <span
-                  style={{
-                    position: 'absolute',
-                    left: `calc(2px + ${((trimStart + trimEnd) / 2 / duration) * 100}% - ${((trimStart + trimEnd) / 2 / duration) * 4}px)`,
-                    top: 13,
-                    transform: 'translateX(-50%)',
-                    fontSize: 9,
-                    color: 'white',
-                    whiteSpace: 'nowrap',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {((trimEnd - trimStart) / speed).toFixed(1)}s
-                </span>
-              </>
-            )}
-          </div>
-          <button
-            onClick={setTrimEndFromPlayhead}
-            disabled={!trim}
-            style={{
-              background: 'none',
-              border: '1px solid',
-              borderColor: trim ? '#4a9eff' : '#555',
-              color: trim ? '#4a9eff' : '#666',
-              cursor: trim ? 'pointer' : 'default',
-              fontSize: 10,
-              padding: '2px 4px',
-              borderRadius: 3,
-              opacity: trim ? 1 : 0.5,
-            }}
-            title="Set trim end from current position"
-          >
-            ]
-          </button>
-          <span style={{ fontSize: 11, fontFamily: 'monospace', minWidth: 75 }}>
-            {formatTime(currentTime)} / {formatTime(duration)}
-          </span>
         </div>
         {/* Instructions row */}
         <div style={{ textAlign: 'center', opacity: 0.8 }}>

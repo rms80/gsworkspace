@@ -1,21 +1,16 @@
 import { Image as KonvaImage, Group, Rect, Text } from 'react-konva'
 import Konva from 'konva'
-import { ImageItem, CropRect } from '../../../types'
-import ImageCropOverlay from '../../ImageCropOverlay'
+import { ImageItem } from '../../../types'
 import { IMAGE_HEADER_HEIGHT, COLOR_SELECTED } from '../../../constants/canvas'
 
 interface ImageItemRendererProps {
   item: ImageItem
   image: HTMLImageElement
   isSelected: boolean
-  isCropping: boolean
-  pendingCropRect: CropRect | null
-  stageScale: number
   editingImageLabelId: string | null
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
-  onCropChange: (rect: CropRect) => void
   onLabelDblClick: (id: string) => void
 }
 
@@ -33,29 +28,12 @@ export default function ImageItemRenderer({
   item,
   image,
   isSelected,
-  isCropping,
-  pendingCropRect,
-  stageScale,
   editingImageLabelId,
   onItemClick,
   onContextMenu,
   onUpdateItem,
-  onCropChange,
   onLabelDblClick,
 }: ImageItemRendererProps) {
-  if (isCropping && pendingCropRect) {
-    return (
-      <ImageCropOverlay
-        key={`crop-${item.id}`}
-        item={item}
-        image={image}
-        cropRect={pendingCropRect}
-        stageScale={stageScale}
-        onCropChange={onCropChange}
-      />
-    )
-  }
-
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
   const displayWidth = item.width * scaleX
