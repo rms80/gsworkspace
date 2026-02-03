@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react'
+
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 
 interface StatusBarProps {
@@ -12,6 +14,36 @@ interface StatusBarProps {
 export const STATUS_BAR_HEIGHT = 28
 
 function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode, backgroundOperationsCount }: StatusBarProps) {
+  const [serverConnected, setServerConnected] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    if (isOffline) {
+      setServerConnected(null)
+      return
+    }
+
+    const checkHealth = async () => {
+      try {
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 3000)
+
+        const response = await fetch('/api/health', {
+          method: 'GET',
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+
+        setServerConnected(response.ok)
+      } catch {
+        setServerConnected(false)
+      }
+    }
+
+    checkHealth()
+    const interval = setInterval(checkHealth, 5000)
+
+    return () => clearInterval(interval)
+  }, [isOffline])
   const handleSwitchToOnline = async () => {
     try {
       // Check if server is available before switching
@@ -88,21 +120,38 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
           Offline Mode
         </span>
       ) : (
-        <span
-          style={{
-            padding: '2px 8px',
-            backgroundColor: '#22c55e',
-            color: '#fff',
-            borderRadius: 3,
-            fontSize: 11,
-            fontWeight: 500,
-            cursor: 'pointer',
-          }}
-          onClick={() => onSetOfflineMode(true)}
-          title="Click to go offline"
-        >
-          Connected
-        </span>
+        <>
+          <span
+            style={{
+              padding: '2px 8px',
+              backgroundColor: '#22c55e',
+              color: '#fff',
+              borderRadius: 3,
+              fontSize: 11,
+              fontWeight: 500,
+              cursor: 'pointer',
+            }}
+            onClick={() => onSetOfflineMode(true)}
+            title="Click to go offline"
+          >
+            Online Mode
+          </span>
+          {serverConnected !== null && (
+            <span
+              style={{
+                padding: '2px 8px',
+                backgroundColor: serverConnected ? '#166534' : '#dc2626',
+                color: '#fff',
+                borderRadius: 3,
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              title={serverConnected ? 'Server is responding' : 'Server is not responding'}
+            >
+              {serverConnected ? 'Server OK' : 'No Connection'}
+            </span>
+          )}
+        </>
       )}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
         {statusDisplay && (
