@@ -45,3 +45,26 @@ export async function getContentUrl(
   const result = await response.json()
   return result.url
 }
+
+/**
+ * Get the actual data for a content item in a scene.
+ * Returns the file as a Blob, avoiding the need for proxy endpoints.
+ */
+export async function getContentData(
+  sceneId: string,
+  contentId: string,
+  contentType: 'video' | 'image' | 'html',
+  isEdit: boolean = false
+): Promise<Blob> {
+  const params = new URLSearchParams({
+    contentId,
+    contentType,
+    isEdit: String(isEdit),
+  })
+
+  const response = await fetch(`${API_BASE}/${sceneId}/content-data?${params}`)
+  if (!response.ok) {
+    throw new Error(`Failed to get content data: ${response.statusText}`)
+  }
+  return response.blob()
+}

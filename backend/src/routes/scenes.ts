@@ -184,6 +184,75 @@ router.get('/:id/content-url', (req, res) => {
   }
 })
 
+// Get content data - returns the actual file data
+// This avoids the need for proxy endpoints and complex URL handling
+router.get('/:id/content-data', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { contentId, contentType, isEdit } = req.query
+
+    if (!contentId || !contentType) {
+      return res.status(400).json({ error: 'contentId and contentType are required' })
+    }
+
+    const sceneFolder = `${USER_FOLDER}/${id}`
+
+    // Define possible extensions for each content type
+    const extensions: Record<string, string[]> = {
+      image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
+      video: ['mp4', 'webm', 'mov', 'avi'],
+      html: ['html'],
+    }
+
+    const contentTypeExts = extensions[contentType as string] || ['png']
+
+    // Try to find the file with various extensions
+    let fileBuffer: Buffer | null = null
+    let foundExt: string | null = null
+
+    for (const ext of contentTypeExts) {
+      // Build filename based on edit flag
+      const filename = isEdit === 'true'
+        ? `${contentId}.crop.${ext}`
+        : `${contentId}.${ext}`
+
+      const key = `${sceneFolder}/${filename}`
+      const buffer = await loadAsBuffer(key)
+
+      if (buffer) {
+        fileBuffer = buffer
+        foundExt = ext
+        break
+      }
+    }
+
+    if (!fileBuffer || !foundExt) {
+      return res.status(404).json({ error: 'Content not found' })
+    }
+
+    // Set appropriate content type
+    const mimeTypes: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      mp4: 'video/mp4',
+      webm: 'video/webm',
+      mov: 'video/quicktime',
+      avi: 'video/x-msvideo',
+      html: 'text/html',
+    }
+
+    res.setHeader('Content-Type', mimeTypes[foundExt] || 'application/octet-stream')
+    res.setHeader('Content-Length', fileBuffer.length)
+    res.send(fileBuffer)
+  } catch (error) {
+    console.error('Error getting content data:', error)
+    res.status(500).json({ error: 'Failed to get content data' })
+  }
+})
+
 // Save a scene
 router.post('/:id', async (req, res) => {
   try {

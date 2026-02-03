@@ -5,6 +5,7 @@ import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLG
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadVideo, getVideoDimensions } from '../api/videos'
+import { duplicateImage, duplicateVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
@@ -290,6 +291,50 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     e.preventDefault()
     e.dataTransfer.dropEffect = 'copy'
   }
+
+  // Handle image duplication
+  const handleDuplicateImage = useCallback(async (imageItem: ImageItem) => {
+    try {
+      startOperation()
+      const result = await duplicateImage(sceneId, imageItem)
+      onAddImageAt(
+        result.positionX,
+        result.positionY,
+        result.url,
+        result.visualWidth,
+        result.visualHeight,
+        result.name,
+        result.pixelWidth,
+        result.pixelHeight,
+        undefined
+      )
+      endOperation()
+    } catch (error) {
+      console.error('Failed to duplicate image:', error)
+      endOperation()
+    }
+  }, [sceneId, onAddImageAt, startOperation, endOperation])
+
+  // Handle video duplication
+  const handleDuplicateVideo = useCallback(async (videoItem: VideoItem) => {
+    try {
+      startOperation()
+      const result = await duplicateVideo(sceneId, videoItem, isOffline)
+      onAddVideoAt(
+        result.positionX,
+        result.positionY,
+        result.url,
+        result.pixelWidth,
+        result.pixelHeight,
+        result.name,
+        undefined
+      )
+      endOperation()
+    } catch (error) {
+      console.error('Failed to duplicate video:', error)
+      endOperation()
+    }
+  }, [sceneId, onAddVideoAt, isOffline, startOperation, endOperation])
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -1079,11 +1124,13 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
           position={imageContextMenuState.menuPosition}
           imageItem={items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined}
           loadedImages={loadedImages}
+          isOffline={isOffline}
           onUpdateItem={onUpdateItem}
           onStartCrop={(id, initialCrop) => {
             setCroppingImageId(id)
             setPendingCropRect(initialCrop)
           }}
+          onDuplicate={handleDuplicateImage}
           onClose={imageContextMenuState.closeMenu}
         />
       )}
@@ -1111,6 +1158,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
               startVideoCrop(videoId, initialCrop, initialSpeed, initialRemoveAudio, initialTrim, initialTrimStart, initialTrimEnd)
             }
           }}
+          onDuplicate={handleDuplicateVideo}
           onClose={videoContextMenuState.closeMenu}
         />
       )}

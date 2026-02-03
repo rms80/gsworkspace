@@ -10,7 +10,7 @@ import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, ImageItem } from './types'
+import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
@@ -20,7 +20,7 @@ import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensions } from './api/videos'
 import { uploadImage } from './api/images'
-import { generateUniqueImageName } from './utils/imageNames'
+import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
@@ -755,10 +755,8 @@ function App() {
   const addImageAt = useCallback(
     (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => {
       // Generate unique name using the utility
-      const existingNames = items
-        .filter((item) => item.type === 'image' && (item as ImageItem).name)
-        .map((item) => (item as ImageItem).name as string)
-      const uniqueName = generateUniqueImageName(name || 'Image', existingNames)
+      const existingNames = getExistingImageNames(items)
+      const uniqueName = generateUniqueName(name || 'Image', existingNames)
 
       const newItem: CanvasItem = {
         id: uuidv4(),
@@ -781,6 +779,10 @@ function App() {
 
   const addVideoAt = useCallback(
     (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
+      // Generate unique name using the utility
+      const existingNames = getExistingVideoNames(items)
+      const uniqueName = generateUniqueName(name || 'Video', existingNames)
+
       // Scale down large videos to reasonable canvas size
       const maxDim = 640
       let w = width
@@ -796,7 +798,7 @@ function App() {
         x: x - w / 2,
         y: y - h / 2,
         src,
-        name,
+        name: uniqueName,
         width: w,
         height: h,
         originalWidth: width,
@@ -808,7 +810,7 @@ function App() {
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
-    [updateActiveSceneItems, pushChange]
+    [updateActiveSceneItems, pushChange, items]
   )
 
   const updateItem = useCallback(

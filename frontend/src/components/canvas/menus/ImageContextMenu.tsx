@@ -5,8 +5,10 @@ interface ImageContextMenuProps {
   position: { x: number; y: number }
   imageItem: ImageItem | undefined
   loadedImages: Map<string, HTMLImageElement>
+  isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
   onStartCrop: (id: string, initialCrop: CropRect) => void
+  onDuplicate: (imageItem: ImageItem) => void
   onClose: () => void
 }
 
@@ -36,8 +38,10 @@ export default function ImageContextMenu({
   position,
   imageItem,
   loadedImages,
+  isOffline,
   onUpdateItem,
   onStartCrop,
+  onDuplicate,
   onClose,
 }: ImageContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -49,6 +53,12 @@ export default function ImageContextMenu({
     textAlign: 'left',
     cursor: 'pointer',
     fontSize: 14,
+  }
+
+  const handleDuplicate = () => {
+    if (!imageItem) { onClose(); return }
+    onDuplicate(imageItem)
+    onClose()
   }
 
   const handleResetTransform = () => {
@@ -196,6 +206,20 @@ export default function ImageContextMenu({
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        onClick={handleDuplicate}
+        style={{
+          ...buttonStyle,
+          opacity: isOffline ? 0.5 : 1,
+          cursor: isOffline ? 'not-allowed' : 'pointer',
+        }}
+        disabled={isOffline}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
+      >
+        Duplicate
+      </button>
       <button
         onClick={handleExport}
         style={buttonStyle}

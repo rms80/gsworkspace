@@ -9,6 +9,7 @@ interface VideoContextMenuProps {
   isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
   onCrop: (videoId: string) => void
+  onDuplicate: (videoItem: VideoItem) => void
   onClose: () => void
 }
 
@@ -41,6 +42,7 @@ export default function VideoContextMenu({
   isOffline,
   onUpdateItem,
   onCrop,
+  onDuplicate,
   onClose,
 }: VideoContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -52,6 +54,12 @@ export default function VideoContextMenu({
     textAlign: 'left',
     cursor: 'pointer',
     fontSize: 14,
+  }
+
+  const handleDuplicate = () => {
+    if (!videoItem) { onClose(); return }
+    onDuplicate(videoItem)
+    onClose()
   }
 
   const handleResetTransform = () => {
@@ -250,6 +258,20 @@ export default function VideoContextMenu({
           Remove Edits
         </button>
       )}
+      <button
+        onClick={handleDuplicate}
+        style={{
+          ...buttonStyle,
+          opacity: isOffline ? 0.5 : 1,
+          cursor: isOffline ? 'not-allowed' : 'pointer',
+        }}
+        disabled={isOffline}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
+      >
+        Duplicate
+      </button>
       <button
         onClick={handleExport}
         style={buttonStyle}

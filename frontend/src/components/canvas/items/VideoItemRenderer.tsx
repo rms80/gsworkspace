@@ -57,7 +57,7 @@ export default function VideoItemRenderer({
   if (item.cropRect) {
     metadataParts.push(`${Math.round(item.cropRect.width)}×${Math.round(item.cropRect.height)}`)
   } else if (item.originalWidth && item.originalHeight) {
-    metadataParts.push(`${item.originalWidth}×${item.originalHeight}`)
+    metadataParts.push(`${Math.round(item.originalWidth)}×${Math.round(item.originalHeight)}`)
   }
   if (item.fileSize) {
     metadataParts.push(formatFileSize(item.fileSize))
