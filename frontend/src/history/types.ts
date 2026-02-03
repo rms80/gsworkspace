@@ -10,6 +10,7 @@ export type ChangeRecordType =
   | 'update_text'
   | 'update_prompt'
   | 'update_model'
+  | 'update_name'
   | 'selection'
 
 /**

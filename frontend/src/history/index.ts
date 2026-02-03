@@ -16,6 +16,7 @@ export {
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
+  UpdateNameChange,
   SelectionChange,
   deserializeChangeRecord,
 } from './changeRecords'

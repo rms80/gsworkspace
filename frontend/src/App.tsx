@@ -10,7 +10,7 @@ import StatusBar, { SaveStatus } from './components/StatusBar'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene } from './types'
+import { CanvasItem, Scene, ImageItem } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
@@ -20,6 +20,7 @@ import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensions } from './api/videos'
 import { uploadImage } from './api/images'
+import { generateUniqueImageName } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
 import {
   HistoryStack,
@@ -30,6 +31,7 @@ import {
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
+  UpdateNameChange,
   SelectionChange,
   ChangeRecord,
 } from './history'
@@ -669,20 +671,30 @@ function App() {
   )
 
   const addImageAt = useCallback(
-    (x: number, y: number, src: string, width: number, height: number) => {
+    (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => {
+      // Generate unique name using the utility
+      const existingNames = items
+        .filter((item) => item.type === 'image' && (item as ImageItem).name)
+        .map((item) => (item as ImageItem).name as string)
+      const uniqueName = generateUniqueImageName(name || 'Image', existingNames)
+
       const newItem: CanvasItem = {
         id: uuidv4(),
         type: 'image',
         x: x - width / 2,
         y: y - height / 2,
         src,
+        name: uniqueName,
         width,
         height,
+        originalWidth,
+        originalHeight,
+        fileSize,
       }
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
-    [updateActiveSceneItems, pushChange]
+    [updateActiveSceneItems, pushChange, items]
   )
 
   const addVideoAt = useCallback(
@@ -731,6 +743,7 @@ function App() {
         (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
       const hasModel = 'model' in changes &&
         (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
+      const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
 
       if (hasText && item.type === 'text') {
         // Only record if text actually changed
@@ -748,6 +761,13 @@ function App() {
         // Only record if model actually changed
         if (item.model !== changes.model) {
           pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+        }
+      } else if (hasName && (item.type === 'image' || item.type === 'video')) {
+        // Only record if name actually changed
+        const oldName = item.name
+        const newName = changes.name as string | undefined
+        if (oldName !== newName) {
+          pushChange(new UpdateNameChange(id, oldName, newName))
         }
       } else if (hasTransform) {
         const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }

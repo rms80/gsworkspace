@@ -18,6 +18,10 @@ export const ZOOM_BUTTON_WIDTH = 24
 
 export const VIDEO_HEADER_HEIGHT = 24
 
+// --- Image item dimensions ---
+
+export const IMAGE_HEADER_HEIGHT = 24
+
 // --- Item constraints ---
 
 export const MIN_PROMPT_WIDTH = 100
