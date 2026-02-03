@@ -314,6 +314,20 @@ Had it copy aspect ratio constraints and crop copy-paste over to video overlay. 
 Did some styling cleanup of video overlay. 
 
 
+Feb 3
+
+major task: add "local storage" mode that saves to local disk via node server, instead of remote S3 storage.
+This lets the app be used on your local computer (but still via client/server).
+Asked CC to investigate doing this and make a plan. It made a very extensive plan, 4 major phases
+with subtasks. Told it to go do implementation. It kind of works...various bugs.
+It has not done a good job of synchronizing between the frontend and server, and it 
+has forgotten about various places this change has an effect. I basically have
+to remind it about each of these things because I have a better memory (!!). 
+
+Various issues came up, we worked through. It is often trapped by bad decisions it 
+made in the past, and I have to get an understanding and tell it how to back out that
+bad decision and replace it w/ a better design. It never does that itself, it always powers through
+regardless of how convoluted the code gets.
 
 
 
