@@ -187,6 +187,29 @@ export default function VideoOverlay({
         preload="metadata"
       />
 
+      {/* Play indicator - shows when video is not playing and not selected */}
+      {!isPlaying && !isSelected && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 0,
+              height: 0,
+              borderTop: `${displayHeight * 0.1}px solid transparent`,
+              borderBottom: `${displayHeight * 0.1}px solid transparent`,
+              borderLeft: `${displayHeight * 0.15}px solid rgba(255, 255, 255, 0.3)`,
+            }}
+          />
+        </div>
+      )}
+
       {/* Controls overlay - only interactive part */}
       {controlsVisible && (
         <div
