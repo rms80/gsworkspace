@@ -41,6 +41,13 @@ interface DragState {
  * Shows the image at low opacity with the crop region at full opacity.
  * Includes a control panel with X, Y, Width, Height fields and aspect ratio lock.
  */
+const ASPECT_RATIO_PRESETS = [
+  { label: '1:1', value: 1 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+]
+
 export default function ImageCropOverlay({
   item,
   image,
@@ -53,6 +60,20 @@ export default function ImageCropOverlay({
 }: ImageCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
   const aspectRatioRef = useRef(cropRect.width / cropRect.height)
+  const [showAspectMenu, setShowAspectMenu] = useState(false)
+  const aspectMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showAspectMenu) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (aspectMenuRef.current && !aspectMenuRef.current.contains(e.target as Node)) {
+        setShowAspectMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAspectMenu])
 
   // Local state for input fields - only commit on blur/Enter
   const [inputValues, setInputValues] = useState({
@@ -313,6 +334,58 @@ export default function ImageCropOverlay({
     onLockAspectRatioChange(!lockAspectRatio)
   }
 
+  const applyAspectRatioPreset = (ar: number) => {
+    // Calculate new dimensions that fit within the current crop center
+    // Keep the crop centered and adjust width/height to match the new aspect ratio
+    const centerX = cropRect.x + cropRect.width / 2
+    const centerY = cropRect.y + cropRect.height / 2
+
+    let newWidth: number
+    let newHeight: number
+
+    // Determine whether to fit by width or height
+    const currentAr = cropRect.width / cropRect.height
+    if (ar > currentAr) {
+      // New ratio is wider - keep width, reduce height
+      newWidth = cropRect.width
+      newHeight = newWidth / ar
+    } else {
+      // New ratio is taller - keep height, reduce width
+      newHeight = cropRect.height
+      newWidth = newHeight * ar
+    }
+
+    // Calculate new position to keep centered
+    let newX = centerX - newWidth / 2
+    let newY = centerY - newHeight / 2
+
+    // Clamp to image bounds
+    newX = Math.max(0, Math.min(newX, natW - newWidth))
+    newY = Math.max(0, Math.min(newY, natH - newHeight))
+
+    // If dimensions exceed bounds, scale down
+    if (newWidth > natW) {
+      newWidth = natW
+      newHeight = newWidth / ar
+      newX = 0
+      newY = Math.max(0, Math.min(centerY - newHeight / 2, natH - newHeight))
+    }
+    if (newHeight > natH) {
+      newHeight = natH
+      newWidth = newHeight * ar
+      newY = 0
+      newX = Math.max(0, Math.min(centerX - newWidth / 2, natW - newWidth))
+    }
+
+    // Update the aspect ratio ref and enable lock
+    aspectRatioRef.current = ar
+    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, natW, natH))
+    if (!lockAspectRatio) {
+      onLockAspectRatioChange(true)
+    }
+    setShowAspectMenu(false)
+  }
+
   const inputStyle: React.CSSProperties = {
     width: 38,
     backgroundColor: 'white',
@@ -565,11 +638,80 @@ export default function ImageCropOverlay({
               padding: '0px 6px',
               fontSize: 11,
               cursor: 'pointer',
+              height: 22,
+              width: 28,
             }}
             title={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
           >
             {lockAspectRatio ? '🔒' : '🔓'}
           </button>
+          <div style={{ position: 'relative' }} ref={aspectMenuRef}>
+            <button
+              onClick={() => setShowAspectMenu(!showAspectMenu)}
+              style={{
+                backgroundColor: '#333',
+                color: 'white',
+                border: '1px solid #555',
+                borderRadius: 3,
+                padding: '0px 6px',
+                fontSize: 11,
+                cursor: 'pointer',
+                height: 22,
+                width: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Aspect ratio presets"
+            >
+              <span style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                border: '1.5px solid white',
+                borderRadius: 1,
+              }} />
+            </button>
+            {showAspectMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: 4,
+                  backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                  border: '1px solid #555',
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  zIndex: 10,
+                }}
+              >
+                {ASPECT_RATIO_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => applyAspectRatioPreset(preset.value)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      backgroundColor: 'transparent',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 16px',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4a9eff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {/* Instructions row */}
         <div style={{ textAlign: 'center', opacity: 0.8 }}>
