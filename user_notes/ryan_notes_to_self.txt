@@ -310,6 +310,8 @@ aspect ratios in a popup menu. No problem. Added special-case copy-paste for cro
 Noticed a flickering issue w/ editing the crop rect. It took a few tries but eventually realized this
 was due to browser selection happening (for some reason). Disabled that and it's fixed.
 
+Had it copy aspect ratio constraints and crop copy-paste over to video overlay. No problem.
+Did some styling cleanup of video overlay. 
 
 
 
