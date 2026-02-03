@@ -4,6 +4,10 @@ import dotenv from 'dotenv'
 import itemsRouter from './routes/items.js'
 import llmRouter from './routes/llm.js'
 import scenesRouter from './routes/scenes.js'
+import localFilesRouter from './routes/localFiles.js'
+import configRouter from './routes/config.js'
+import { getStorageMode } from './services/storage.js'
+import { initializeStorage } from './services/diskStorage.js'
 
 dotenv.config()
 
@@ -16,6 +20,8 @@ app.use(express.json({ limit: '50mb' }))
 app.use('/api/items', itemsRouter)
 app.use('/api/llm', llmRouter)
 app.use('/api/scenes', scenesRouter)
+app.use('/api/local-files', localFilesRouter)
+app.use('/api/config', configRouter)
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok' })
@@ -69,6 +75,19 @@ app.get('/api/proxy-video', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`)
-})
+// Initialize storage and start server
+async function start() {
+  const storageMode = getStorageMode()
+  console.log(`Storage mode: ${storageMode}`)
+
+  // Initialize local storage directory if in local mode
+  if (storageMode === 'local') {
+    await initializeStorage()
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`)
+  })
+}
+
+start().catch(console.error)

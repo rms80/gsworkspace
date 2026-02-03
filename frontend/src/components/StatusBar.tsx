@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { StorageMode } from '../api/storage'
 
 export type SaveStatus = 'idle' | 'unsaved' | 'saving' | 'saved' | 'error'
 
@@ -7,13 +8,21 @@ interface StatusBarProps {
   debugOpen: boolean
   saveStatus: SaveStatus
   isOffline: boolean
-  onSetOfflineMode: (offline: boolean) => void
+  onSetOfflineMode?: (offline: boolean) => void
   backgroundOperationsCount: number
+  storageMode: StorageMode
+  onOpenSettings?: () => void
+}
+
+const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg: string }> = {
+  online: { label: 'Online (S3)', icon: '☁️', bg: '#22c55e' },
+  local: { label: 'Local Disk', icon: '💾', bg: '#3b82f6' },
+  offline: { label: 'Offline', icon: '📴', bg: '#6366f1' },
 }
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOfflineMode, backgroundOperationsCount }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings }: StatusBarProps) {
   const [serverConnected, setServerConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -44,27 +53,6 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
 
     return () => clearInterval(interval)
   }, [isOffline])
-  const handleSwitchToOnline = async () => {
-    try {
-      // Check if server is available before switching
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 3000)
-
-      const response = await fetch('/api/scenes', {
-        method: 'GET',
-        signal: controller.signal
-      })
-      clearTimeout(timeoutId)
-
-      if (response.ok) {
-        onSetOfflineMode(false)
-      } else {
-        alert('Server is not responding correctly. Staying in offline mode.')
-      }
-    } catch {
-      alert('Cannot connect to server. Staying in offline mode.')
-    }
-  }
 
   const getSaveStatusDisplay = () => {
     switch (saveStatus) {
@@ -103,55 +91,39 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, onSetOffli
       }}
     >
       <span style={{ color: '#666' }}>Workspaceapp</span>
-      {isOffline ? (
+      <span
+        style={{
+          padding: '2px 8px',
+          backgroundColor: storageModeDisplay[storageMode].bg,
+          color: '#fff',
+          borderRadius: 3,
+          fontSize: 11,
+          fontWeight: 500,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+        onClick={onOpenSettings}
+        title="Click to change storage mode"
+      >
+        <span>{storageModeDisplay[storageMode].icon}</span>
+        <span>{storageModeDisplay[storageMode].label}</span>
+      </span>
+      {!isOffline && serverConnected !== null && (
         <span
           style={{
             padding: '2px 8px',
-            backgroundColor: '#6366f1',
+            backgroundColor: serverConnected ? '#166534' : '#dc2626',
             color: '#fff',
             borderRadius: 3,
             fontSize: 11,
             fontWeight: 500,
-            cursor: 'pointer',
           }}
-          onClick={handleSwitchToOnline}
-          title="Click to switch to online mode"
+          title={serverConnected ? 'Server is responding' : 'Server is not responding'}
         >
-          Offline Mode
+          {serverConnected ? 'Server OK' : 'No Connection'}
         </span>
-      ) : (
-        <>
-          <span
-            style={{
-              padding: '2px 8px',
-              backgroundColor: '#22c55e',
-              color: '#fff',
-              borderRadius: 3,
-              fontSize: 11,
-              fontWeight: 500,
-              cursor: 'pointer',
-            }}
-            onClick={() => onSetOfflineMode(true)}
-            title="Click to go offline"
-          >
-            Online Mode
-          </span>
-          {serverConnected !== null && (
-            <span
-              style={{
-                padding: '2px 8px',
-                backgroundColor: serverConnected ? '#166534' : '#dc2626',
-                color: '#fff',
-                borderRadius: 3,
-                fontSize: 11,
-                fontWeight: 500,
-              }}
-              title={serverConnected ? 'Server is responding' : 'Server is not responding'}
-            >
-              {serverConnected ? 'Server OK' : 'No Connection'}
-            </span>
-          )}
-        </>
       )}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>
         {statusDisplay && (

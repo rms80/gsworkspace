@@ -1,13 +1,16 @@
 import { useState } from 'react'
 import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
 import LocalStorageSettingsTab from './settings/LocalStorageSettingsTab'
+import StorageModeSettingsTab from './settings/StorageModeSettingsTab'
+import { StorageMode } from '../api/storage'
 
 interface SettingsDialogProps {
   isOpen: boolean
   onClose: () => void
+  onStorageModeChange?: (mode: StorageMode) => void
 }
 
-type TabId = 'offline-mode' | 'local-storage'
+type TabId = 'storage-mode' | 'api-keys' | 'browser-storage'
 
 interface TabDef {
   id: TabId
@@ -15,12 +18,13 @@ interface TabDef {
 }
 
 const tabs: TabDef[] = [
-  { id: 'offline-mode', label: 'Offline Mode' },
-  { id: 'local-storage', label: 'Local Storage' },
+  { id: 'storage-mode', label: 'Storage Mode' },
+  { id: 'api-keys', label: 'API Keys' },
+  { id: 'browser-storage', label: 'Browser Data' },
 ]
 
-export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('offline-mode')
+export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }: SettingsDialogProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('storage-mode')
 
   if (!isOpen) return null
 
@@ -126,10 +130,13 @@ export default function SettingsDialog({ isOpen, onClose }: SettingsDialogProps)
               overflowY: 'auto',
             }}
           >
-            {activeTab === 'offline-mode' && (
+            {activeTab === 'storage-mode' && (
+              <StorageModeSettingsTab onModeChange={onStorageModeChange} />
+            )}
+            {activeTab === 'api-keys' && (
               <OfflineModeSettingsTab />
             )}
-            {activeTab === 'local-storage' && (
+            {activeTab === 'browser-storage' && (
               <LocalStorageSettingsTab />
             )}
           </div>

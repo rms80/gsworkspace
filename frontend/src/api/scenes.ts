@@ -10,9 +10,11 @@ export {
   setOfflineMode,
   storageProvider,
   getSceneTimestamp,
+  getStorageMode,
+  setStorageMode,
 } from './storage'
 
-export type { SceneMetadata, SceneTimestamp } from './storage'
+export type { SceneMetadata, SceneTimestamp, StorageMode } from './storage'
 
 const API_BASE = '/api/scenes'
 

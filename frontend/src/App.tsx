@@ -11,7 +11,7 @@ import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, ImageItem } from './types'
-import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
@@ -59,6 +59,7 @@ function App() {
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
+  const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode())
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
@@ -199,6 +200,23 @@ function App() {
     }
   }, [isOffline])
 
+  // Fetch backend storage mode on startup
+  useEffect(() => {
+    if (storageMode !== 'offline') {
+      fetch('/api/config')
+        .then((res) => res.json())
+        .then((config) => {
+          if (config.storageMode && config.storageMode !== storageMode) {
+            setStorageMode(config.storageMode)
+            setStorageModeState(config.storageMode)
+          }
+        })
+        .catch((err) => {
+          console.error('Failed to fetch backend config:', err)
+        })
+    }
+  }, []) // Only run once on mount
+
   // Load scenes on initial mount
   useEffect(() => {
     loadAllScenes()
@@ -208,8 +226,18 @@ function App() {
   const handleSetOfflineMode = useCallback(async (offline: boolean) => {
     setOfflineMode(offline)
     setIsOffline(offline)
+    setStorageModeState(offline ? 'offline' : 'online')
     // Reload scenes from the new storage provider with the new mode
     await loadAllScenes(offline)
+  }, [loadAllScenes])
+
+  // Handler for storage mode changes from settings
+  const handleStorageModeChange = useCallback(async (mode: StorageMode) => {
+    setStorageMode(mode)
+    setStorageModeState(mode)
+    setIsOffline(mode === 'offline')
+    // Reload scenes from the new storage provider
+    await loadAllScenes(mode === 'offline')
   }, [loadAllScenes])
 
   // Auto-save when active scene changes (debounced)
@@ -1574,6 +1602,8 @@ function App() {
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
         backgroundOperationsCount={backgroundOpsCount}
+        storageMode={storageMode}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}
@@ -1595,6 +1625,7 @@ function App() {
       <SettingsDialog
         isOpen={settingsDialogOpen}
         onClose={() => setSettingsDialogOpen(false)}
+        onStorageModeChange={handleStorageModeChange}
       />
     </div>
   )

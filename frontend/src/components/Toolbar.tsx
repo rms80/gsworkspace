@@ -1,3 +1,5 @@
+import { StorageMode } from '../api/storage'
+
 interface ToolbarProps {
   onAddText: () => void
   onAddImage: (src: string, width: number, height: number) => void
@@ -8,9 +10,18 @@ interface ToolbarProps {
   onRedo: () => void
   canUndo: boolean
   canRedo: boolean
+  storageMode: StorageMode
+  onStorageModeClick?: () => void
 }
 
-function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onUndo, onRedo, canUndo, canRedo }: ToolbarProps) {
+const storageModeInfo: Record<StorageMode, { icon: string; label: string; color: string }> = {
+  online: { icon: '☁️', label: 'Online', color: '#1976d2' },
+  local: { icon: '💾', label: 'Local', color: '#388e3c' },
+  offline: { icon: '📴', label: 'Offline', color: '#f57c00' },
+}
+
+function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onUndo, onRedo, canUndo, canRedo, storageMode, onStorageModeClick }: ToolbarProps) {
+  const modeInfo = storageModeInfo[storageMode]
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -148,6 +159,27 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
         }}
       >
         Redo
+      </button>
+      <div style={{ flex: 1 }} />
+      <button
+        onClick={onStorageModeClick}
+        title={`Storage: ${modeInfo.label} - Click to change`}
+        style={{
+          padding: '4px 12px',
+          backgroundColor: '#fff',
+          border: `1px solid ${modeInfo.color}`,
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 'inherit',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          color: modeInfo.color,
+        }}
+      >
+        <span>{modeInfo.icon}</span>
+        <span>{modeInfo.label}</span>
       </button>
     </div>
   )

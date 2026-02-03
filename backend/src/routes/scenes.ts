@@ -1,19 +1,37 @@
 import { Router } from 'express'
-import { saveToS3, loadFromS3, listFromS3, getPublicUrl, deleteFromS3, existsInS3 } from '../services/s3.js'
+import {
+  save,
+  load,
+  loadAsBuffer,
+  list,
+  del,
+  exists,
+  getPublicUrl,
+  getStorageMode,
+} from '../services/storage.js'
 
 const router = Router()
 
 // User folder - hardcoded for now, will be per-user later
 const USER_FOLDER = 'version0'
 
-// Helper to extract S3 key from a full S3 URL
-function getS3KeyFromUrl(url: string): string | null {
+// Helper to extract storage key from a URL (S3 or local)
+// Checks both formats regardless of current mode since URLs depend on when the file was uploaded
+function getKeyFromUrl(url: string): string | null {
+  // Check for local URLs first
+  const localPrefix = '/api/local-files/'
+  if (url.startsWith(localPrefix)) {
+    return url.slice(localPrefix.length)
+  }
+
+  // Check for S3 URLs
   const bucketName = process.env.S3_BUCKET_NAME
   const region = process.env.AWS_REGION || 'us-east-1'
-  const prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
-  if (url.startsWith(prefix)) {
-    return url.slice(prefix.length)
+  const s3Prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+  if (url.startsWith(s3Prefix)) {
+    return url.slice(s3Prefix.length)
   }
+
   return null
 }
 
@@ -116,7 +134,7 @@ router.get('/:id/timestamp', async (req, res) => {
     const sceneFolder = `${USER_FOLDER}/${id}`
 
     // Load scene.json to get modifiedAt
-    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    const sceneJson = await load(`${sceneFolder}/scene.json`)
     if (!sceneJson) {
       return res.status(404).json({ error: 'Scene not found' })
     }
@@ -199,38 +217,48 @@ router.post('/:id', async (req, res) => {
           if (matches) {
             const contentType = matches[1]
             const base64Data = matches[2]
-            await saveToS3(
+            await save(
               `${sceneFolder}/${imageFile}`,
               Buffer.from(base64Data, 'base64'),
               contentType
             )
             imageSaved = true
           }
-        } else if (item.src.startsWith('http')) {
+        } else if (item.src.startsWith('http') || item.src.startsWith('/api/local-files/')) {
           // Check if the image is already in this scene folder (skip re-upload)
           if (item.src.includes(`/${sceneFolder}/`)) {
             imageSaved = true
           } else {
             // Check if the image file already exists in the scene folder (from a previous save)
             const imageKey = `${sceneFolder}/${imageFile}`
-            const alreadyExists = await existsInS3(imageKey)
+            const alreadyExists = await exists(imageKey)
             if (alreadyExists) {
               imageSaved = true
             } else {
-              // If src is a URL, fetch and save the image to the scene folder
+              // If src is a URL, fetch/load and save the image to the scene folder
               try {
-                const response = await fetch(item.src)
-                if (response.ok) {
-                  const arrayBuffer = await response.arrayBuffer()
-                  const contentType = response.headers.get('content-type') || 'image/png'
-                  await saveToS3(
-                    imageKey,
-                    Buffer.from(arrayBuffer),
-                    contentType
-                  )
+                let buffer: Buffer | null = null
+                let contentType = 'image/png'
+
+                // Handle local URLs by reading directly from storage
+                if (item.src.startsWith('/api/local-files/')) {
+                  const localKey = item.src.slice('/api/local-files/'.length)
+                  buffer = await loadAsBuffer(localKey)
+                } else {
+                  // Fetch from HTTP URL
+                  const response = await fetch(item.src)
+                  if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer()
+                    contentType = response.headers.get('content-type') || 'image/png'
+                    buffer = Buffer.from(arrayBuffer)
+                  }
+                }
+
+                if (buffer) {
+                  await save(imageKey, buffer, contentType)
                   imageSaved = true
                   // Track staging file for cleanup if it's from /temp/images/ folder
-                  const stagingKey = getS3KeyFromUrl(item.src)
+                  const stagingKey = getKeyFromUrl(item.src)
                   if (stagingKey && stagingKey.startsWith('temp/images/')) {
                     stagingKeysToDelete.push(stagingKey)
                   }
@@ -286,43 +314,53 @@ router.post('/:id', async (req, res) => {
           if (matches) {
             const contentType = matches[1]
             const base64Data = matches[2]
-            await saveToS3(
+            await save(
               `${sceneFolder}/${videoFile}`,
               Buffer.from(base64Data, 'base64'),
               contentType
             )
             videoSaved = true
           }
-        } else if (item.src.startsWith('http')) {
+        } else if (item.src.startsWith('http') || item.src.startsWith('/api/local-files/')) {
           // Check if the video is already in this scene folder (skip re-upload)
           if (item.src.includes(`/${sceneFolder}/`)) {
             videoSaved = true
           } else {
             // Check if the video file already exists in the scene folder (from a previous save)
             const videoKey = `${sceneFolder}/${videoFile}`
-            const alreadyExists = await existsInS3(videoKey)
+            const alreadyExists = await exists(videoKey)
             if (alreadyExists) {
               videoSaved = true
             } else {
-              // If src is a URL, fetch and save the video to the scene folder
+              // If src is a URL, fetch/load and save the video to the scene folder
               try {
-                const response = await fetch(item.src)
-                if (response.ok) {
-                  const arrayBuffer = await response.arrayBuffer()
-                  const contentType = response.headers.get('content-type') || 'video/mp4'
-                  await saveToS3(
-                    videoKey,
-                    Buffer.from(arrayBuffer),
-                    contentType
-                  )
+                let buffer: Buffer | null = null
+                let contentType = 'video/mp4'
+
+                // Handle local URLs by reading directly from storage
+                if (item.src.startsWith('/api/local-files/')) {
+                  const localKey = item.src.slice('/api/local-files/'.length)
+                  buffer = await loadAsBuffer(localKey)
+                } else {
+                  // Fetch from HTTP URL
+                  const response = await fetch(item.src)
+                  if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer()
+                    contentType = response.headers.get('content-type') || 'video/mp4'
+                    buffer = Buffer.from(arrayBuffer)
+                  } else {
+                    console.error(`Failed to fetch video ${item.id}: HTTP ${response.status} ${response.statusText}`)
+                  }
+                }
+
+                if (buffer) {
+                  await save(videoKey, buffer, contentType)
                   videoSaved = true
                   // Track staging file for cleanup if it's from /temp/videos/ folder
-                  const stagingKey = getS3KeyFromUrl(item.src)
+                  const stagingKey = getKeyFromUrl(item.src)
                   if (stagingKey && stagingKey.startsWith('temp/videos/')) {
                     stagingKeysToDelete.push(stagingKey)
                   }
-                } else {
-                  console.error(`Failed to fetch video ${item.id}: HTTP ${response.status} ${response.statusText}`)
                 }
               } catch (err) {
                 console.error(`Failed to fetch video from ${item.src}:`, err)
@@ -406,7 +444,7 @@ router.post('/:id', async (req, res) => {
         })
       } else if (item.type === 'html') {
         const htmlFile = `${item.id}.html`
-        await saveToS3(`${sceneFolder}/${htmlFile}`, item.html, 'text/html')
+        await save(`${sceneFolder}/${htmlFile}`, item.html, 'text/html')
         storedItems.push({
           id: item.id,
           type: 'html',
@@ -429,13 +467,13 @@ router.post('/:id', async (req, res) => {
       modifiedAt,
       items: storedItems,
     }
-    await saveToS3(`${sceneFolder}/scene.json`, JSON.stringify(storedScene, null, 2))
+    await save(`${sceneFolder}/scene.json`, JSON.stringify(storedScene, null, 2))
 
     // Clean up staging files (images/ and videos/ folders) after successful save
     if (stagingKeysToDelete.length > 0) {
       await Promise.all(
         stagingKeysToDelete.map(key =>
-          deleteFromS3(key).catch(err =>
+          del(key).catch(err =>
             console.error(`Failed to delete staging file ${key}:`, err)
           )
         )
@@ -455,7 +493,7 @@ router.get('/:id/raw', async (req, res) => {
     const { id } = req.params
     const sceneFolder = `${USER_FOLDER}/${id}`
 
-    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    const sceneJson = await load(`${sceneFolder}/scene.json`)
     if (!sceneJson) {
       return res.status(404).json({ error: 'Scene not found' })
     }
@@ -474,7 +512,7 @@ router.get('/:id', async (req, res) => {
     const sceneFolder = `${USER_FOLDER}/${id}`
 
     // Load scene.json
-    const sceneJson = await loadFromS3(`${sceneFolder}/scene.json`)
+    const sceneJson = await load(`${sceneFolder}/scene.json`)
     if (!sceneJson) {
       return res.status(404).json({ error: 'Scene not found' })
     }
@@ -586,7 +624,7 @@ router.get('/:id', async (req, res) => {
           }
         } else {
           // For HTML items, load the HTML file
-          const html = await loadFromS3(`${sceneFolder}/${item.file}`)
+          const html = await load(`${sceneFolder}/${item.file}`)
           return {
             id: item.id,
             type: 'html' as const,
@@ -619,13 +657,13 @@ router.get('/:id', async (req, res) => {
 router.get('/', async (_req, res) => {
   try {
     // List all scene.json files
-    const allKeys = await listFromS3(`${USER_FOLDER}/`)
+    const allKeys = await list(`${USER_FOLDER}/`)
     const sceneJsonKeys = allKeys.filter((key) => key.endsWith('/scene.json'))
 
     // Load metadata for each scene
     const scenes = await Promise.all(
       sceneJsonKeys.map(async (key) => {
-        const sceneJson = await loadFromS3(key)
+        const sceneJson = await load(key)
         if (!sceneJson) return null
         const scene: StoredScene = JSON.parse(sceneJson)
         return {
@@ -652,10 +690,10 @@ router.delete('/:id', async (req, res) => {
     const sceneFolder = `${USER_FOLDER}/${id}`
 
     // List all files in the scene folder
-    const allKeys = await listFromS3(`${sceneFolder}/`)
+    const allKeys = await list(`${sceneFolder}/`)
 
     // Delete all files in the scene folder
-    await Promise.all(allKeys.map((key) => deleteFromS3(key)))
+    await Promise.all(allKeys.map((key) => del(key)))
 
     res.json({ success: true })
   } catch (error) {
@@ -670,7 +708,7 @@ router.get('/:id/history', async (req, res) => {
     const { id } = req.params
     const sceneFolder = `${USER_FOLDER}/${id}`
 
-    const historyJson = await loadFromS3(`${sceneFolder}/history.json`)
+    const historyJson = await load(`${sceneFolder}/history.json`)
     if (!historyJson) {
       // No history yet, return empty
       return res.json({ records: [], currentIndex: -1 })
@@ -690,7 +728,7 @@ router.post('/:id/history', async (req, res) => {
     const { records, currentIndex } = req.body
     const sceneFolder = `${USER_FOLDER}/${id}`
 
-    await saveToS3(
+    await save(
       `${sceneFolder}/history.json`,
       JSON.stringify({ records, currentIndex }, null, 2)
     )

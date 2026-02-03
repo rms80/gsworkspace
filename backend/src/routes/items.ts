@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { saveToS3, loadFromS3, listFromS3, getPublicUrl } from '../services/s3.js'
+import { save, load, list, getPublicUrl, getStorageMode } from '../services/storage.js'
 import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
@@ -20,7 +20,7 @@ router.post('/save', async (req, res) => {
   try {
     const { items } = req.body
     const id = uuidv4()
-    await saveToS3(`canvas/${id}.json`, JSON.stringify(items))
+    await save(`canvas/${id}.json`, JSON.stringify(items))
     res.json({ success: true, id })
   } catch (error) {
     console.error('Error saving items:', error)
@@ -31,7 +31,7 @@ router.post('/save', async (req, res) => {
 // Load canvas state
 router.get('/load/:id', async (req, res) => {
   try {
-    const data = await loadFromS3(`canvas/${req.params.id}.json`)
+    const data = await load(`canvas/${req.params.id}.json`)
     if (!data) {
       return res.status(404).json({ error: 'Not found' })
     }
@@ -45,7 +45,7 @@ router.get('/load/:id', async (req, res) => {
 // List all saved canvases
 router.get('/list', async (_req, res) => {
   try {
-    const files = await listFromS3('canvas/')
+    const files = await list('canvas/')
     res.json(files)
   } catch (error) {
     console.error('Error listing items:', error)
@@ -62,12 +62,10 @@ router.post('/upload-image', async (req, res) => {
 
     // imageData is base64, convert to buffer
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
-    await saveToS3(key, Buffer.from(base64Data, 'base64'), 'image/png')
+    await save(key, Buffer.from(base64Data, 'base64'), 'image/png')
 
-    // Return the S3 URL (for public bucket)
-    const bucketName = process.env.S3_BUCKET_NAME
-    const region = process.env.AWS_REGION || 'us-east-1'
-    const url = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`
+    // Return the appropriate URL based on storage mode
+    const url = getPublicUrl(key)
 
     res.json({ success: true, url })
   } catch (error) {
@@ -96,14 +94,12 @@ router.post('/upload-video', async (req, res) => {
 
     // videoData is base64 data URL, convert to buffer
     const base64Data = videoData.replace(/^data:video\/\w+;base64,/, '')
-    console.log(`Uploading video to S3: ${key}, size: ${Buffer.from(base64Data, 'base64').length} bytes`)
-    await saveToS3(key, Buffer.from(base64Data, 'base64'), contentType || 'video/mp4')
+    console.log(`Uploading video: ${key}, size: ${Buffer.from(base64Data, 'base64').length} bytes`)
+    await save(key, Buffer.from(base64Data, 'base64'), contentType || 'video/mp4')
     console.log(`Video uploaded successfully: ${key}`)
 
-    // Return the S3 URL (for public bucket)
-    const bucketName = process.env.S3_BUCKET_NAME
-    const region = process.env.AWS_REGION || 'us-east-1'
-    const url = `https://${bucketName}.s3.${region}.amazonaws.com/${key}`
+    // Return the appropriate URL based on storage mode
+    const url = getPublicUrl(key)
 
     res.json({ success: true, url })
   } catch (error) {
@@ -112,7 +108,29 @@ router.post('/upload-video', async (req, res) => {
   }
 })
 
-// Crop an image and save the cropped version to S3
+// Helper to extract storage key from a URL (works for both S3 and local URLs)
+function getKeyFromUrl(url: string): string | null {
+  const storageMode = getStorageMode()
+
+  if (storageMode === 'local') {
+    // Local URLs are like /api/local-files/{key}
+    const localPrefix = '/api/local-files/'
+    if (url.startsWith(localPrefix)) {
+      return url.slice(localPrefix.length)
+    }
+  } else {
+    // S3 URLs
+    const bucketName = process.env.S3_BUCKET_NAME
+    const region = process.env.AWS_REGION || 'us-east-1'
+    const prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+    if (url.startsWith(prefix)) {
+      return url.slice(prefix.length)
+    }
+  }
+  return null
+}
+
+// Crop an image and save the cropped version
 router.post('/crop-image', async (req, res) => {
   try {
     const { src, cropRect } = req.body
@@ -128,8 +146,14 @@ router.post('/crop-image', async (req, res) => {
       const base64Data = src.replace(/^data:image\/\w+;base64,/, '')
       buffer = Buffer.from(base64Data, 'base64')
     } else {
-      // Fetch from URL (S3 or other)
-      const response = await fetch(src)
+      // Fetch from URL (S3, local, or other)
+      // For local URLs, we need to convert them to absolute URLs
+      let fetchUrl = src
+      if (src.startsWith('/api/local-files/')) {
+        // Local file - construct full URL using request host
+        fetchUrl = `http://localhost:${process.env.PORT || 4000}${src}`
+      }
+      const response = await fetch(fetchUrl)
       if (!response.ok) {
         return res.status(400).json({ error: 'Failed to fetch source image' })
       }
@@ -143,15 +167,12 @@ router.post('/crop-image', async (req, res) => {
       .png()
       .toBuffer()
 
-    // Derive S3 key for the crop file
+    // Derive key for the crop file
     let key: string
-    const bucketName = process.env.S3_BUCKET_NAME
-    const region = process.env.AWS_REGION || 'us-east-1'
-    const s3UrlPrefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+    const originalKey = getKeyFromUrl(src)
 
-    if (src.startsWith(s3UrlPrefix)) {
-      // For S3 URLs, derive crop key from original key
-      const originalKey = src.slice(s3UrlPrefix.length)
+    if (originalKey) {
+      // Derive crop key from original key
       const dotIndex = originalKey.lastIndexOf('.')
       const basePath = dotIndex >= 0 ? originalKey.slice(0, dotIndex) : originalKey
       key = `${basePath}.crop.png`
@@ -160,7 +181,7 @@ router.post('/crop-image', async (req, res) => {
       key = `images/${uuidv4()}-crop.png`
     }
 
-    await saveToS3(key, croppedBuffer, 'image/png')
+    await save(key, croppedBuffer, 'image/png')
     const url = getPublicUrl(key)
 
     res.json({ success: true, url })
@@ -173,7 +194,7 @@ router.post('/crop-image', async (req, res) => {
 // User folder - must match scenes.ts
 const USER_FOLDER = 'version0'
 
-// Process a video (crop, speed change, trim) and save to S3
+// Process a video (crop, speed change, trim) and save
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
   const inputPath = path.join(tempDir, `video-input-${uuidv4()}.mp4`)
@@ -202,7 +223,12 @@ router.post('/crop-video', async (req, res) => {
     // Construct the source video URL from scene and video IDs
     const sceneFolder = `${USER_FOLDER}/${sceneId}`
     const sourceKey = `${sceneFolder}/${videoId}.mp4`
-    const sourceUrl = getPublicUrl(sourceKey)
+    let sourceUrl = getPublicUrl(sourceKey)
+
+    // For local URLs, convert to absolute URLs for fetching
+    if (sourceUrl.startsWith('/api/local-files/')) {
+      sourceUrl = `http://localhost:${process.env.PORT || 4000}${sourceUrl}`
+    }
 
     // Download video to temp file
     const response = await fetch(sourceUrl)
@@ -369,7 +395,7 @@ router.post('/crop-video', async (req, res) => {
 
     // Save to S3 with .crop suffix
     const outputKey = `${sceneFolder}/${videoId}.crop.mp4`
-    await saveToS3(outputKey, processedBuffer, 'video/mp4')
+    await save(outputKey, processedBuffer, 'video/mp4')
     const url = getPublicUrl(outputKey)
 
     cleanup()
