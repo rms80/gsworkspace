@@ -12,7 +12,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ### `GET /api/health`
 
-**Description:** Simple health check endpoint to verify the server is running.
+**Description:** Simple health check endpoint to verify the server is running. Used by the frontend to display server connection status in the status bar.
 
 **Arguments:** None
 
@@ -21,7 +21,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 { "status": "ok" }
 ```
 
-**Frontend Usage:** 0 calls
+**Frontend Usage:** 1 call
+- `frontend/src/components/StatusBar.tsx:27` - Polls every 5 seconds to show "Server OK" or "No Connection" indicator
 
 ---
 
@@ -554,7 +555,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 | Endpoint | Method | Frontend Calls |
 |----------|--------|----------------|
-| `/api/health` | GET | 0 |
+| `/api/health` | GET | 1 |
 | `/api/proxy-image` | GET | 5 |
 | `/api/proxy-video` | GET | 2 |
 | `/api/items/save` | POST | 0 (legacy) |
@@ -578,4 +579,4 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 | `/api/scenes/:id/history` | POST | 1 |
 
 **Total Active Endpoints:** 19 (excluding 3 legacy endpoints)
-**Total Frontend API Calls:** 39
+**Total Frontend API Calls:** 40
