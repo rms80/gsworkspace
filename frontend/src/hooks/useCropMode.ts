@@ -61,6 +61,37 @@ export function useCropMode({
     const displayScaleX = baseDisplayScaleX * scaleX
     const displayScaleY = baseDisplayScaleY * scaleY
 
+    const itemId = croppingImageId
+
+    // Check if crop covers the full image (within a small tolerance for floating point)
+    const isFullImage =
+      Math.abs(pendingCropRect.x) < 1 &&
+      Math.abs(pendingCropRect.y) < 1 &&
+      Math.abs(pendingCropRect.width - natW) < 1 &&
+      Math.abs(pendingCropRect.height - natH) < 1
+
+    if (isFullImage) {
+      // Remove crop - restore to full image
+      const newWidth = natW * baseDisplayScaleX
+      const newHeight = natH * baseDisplayScaleY
+      const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
+      const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScaleY
+
+      onUpdateItem(itemId, {
+        x: offsetX,
+        y: offsetY,
+        width: newWidth,
+        height: newHeight,
+        cropRect: undefined,
+        cropSrc: undefined,
+      })
+
+      setCroppingImageId(null)
+      setPendingCropRect(null)
+      setLockAspectRatio(false)
+      return
+    }
+
     const newWidth = pendingCropRect.width * baseDisplayScaleX
     const newHeight = pendingCropRect.height * baseDisplayScaleY
 
@@ -69,7 +100,6 @@ export function useCropMode({
     const newX = offsetX + pendingCropRect.x * displayScaleX
     const newY = offsetY + pendingCropRect.y * displayScaleY
 
-    const itemId = croppingImageId
     const cropRect = pendingCropRect
     onUpdateItem(itemId, {
       x: newX,
