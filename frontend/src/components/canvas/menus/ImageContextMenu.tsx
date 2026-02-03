@@ -102,7 +102,9 @@ export default function ImageContextMenu({
       // Use cropped version if available, otherwise original
       const srcToExport = imageItem.cropSrc || imageItem.src
       const ext = getImageExtension(srcToExport)
-      const filename = `image.${ext}`
+      // Use image label for filename, falling back to 'image'
+      const baseName = imageItem.name || 'image'
+      const filename = `${baseName}.${ext}`
 
       let blob: Blob
 
