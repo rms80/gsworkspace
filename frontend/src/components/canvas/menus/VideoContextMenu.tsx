@@ -104,10 +104,12 @@ export default function VideoContextMenu({
     }
 
     // Get the permanent URL for the original video (not the temp URL)
+    // Use the original video's extension, not hardcoded mp4
     let newSrc = videoItem.src
     if (!isOffline && sceneId) {
       try {
-        newSrc = await getContentUrl(sceneId, videoItem.id, 'video', 'mp4', false)
+        const ext = getVideoExtension(videoItem.src)
+        newSrc = await getContentUrl(sceneId, videoItem.id, 'video', ext, false)
       } catch (err) {
         console.error('Failed to get permanent video URL:', err)
         // Fall back to existing src

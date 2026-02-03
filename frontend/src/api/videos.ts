@@ -52,13 +52,10 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-export interface CropVideoResult {
-  url: string
-}
-
 /**
- * Process a video on the server (crop, speed change, audio removal, and/or trim) and save to S3.
- * Returns the S3 URL of the processed video.
+ * Process a video on the server (crop, speed change, audio removal, and/or trim) and save to storage.
+ * After success, use getContentUrl(sceneId, videoId, 'video', 'mp4', true) to get the processed video URL.
+ * @param extension - The original video file extension (e.g., 'mp4', 'mov', 'webm')
  */
 export async function cropVideo(
   sceneId: string,
@@ -66,9 +63,10 @@ export async function cropVideo(
   cropRect?: { x: number; y: number; width: number; height: number },
   speed?: number,
   removeAudio?: boolean,
-  trim?: { start: number; end: number }
-): Promise<string> {
-  const requestBody = { sceneId, videoId, cropRect, speed, removeAudio, trim }
+  trim?: { start: number; end: number },
+  extension?: string
+): Promise<void> {
+  const requestBody = { sceneId, videoId, cropRect, speed, removeAudio, trim, extension }
   const response = await fetch(`${API_BASE}/crop-video`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -87,8 +85,6 @@ export async function cropVideo(
     })
     throw new Error(`Failed to process video: ${errorDetail}`)
   }
-  const result: CropVideoResult = await response.json()
-  return result.url
 }
 
 /**

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { CanvasItem, CropRect, VideoItem } from '../types'
 import { cropVideo } from '../api/videos'
+import { getContentUrl } from '../api/scenes'
 
 interface UseVideoCropModeParams {
   items: CanvasItem[]
@@ -33,6 +34,28 @@ export interface VideoCropMode {
 function cropRectsEqual(a: CropRect | null, b: CropRect | null): boolean {
   if (!a || !b) return a === b
   return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+}
+
+/**
+ * Extract the file extension from a video src URL
+ */
+function getVideoExtension(src: string): string {
+  // Try to get from URL path
+  if (src.includes('.')) {
+    const match = src.match(/\.(\w+)(?:\?|$)/)
+    if (match && ['mp4', 'webm', 'ogg', 'mov', 'avi', 'mkv'].includes(match[1].toLowerCase())) {
+      return match[1].toLowerCase()
+    }
+  }
+  // Try to get from data URL
+  if (src.startsWith('data:video/')) {
+    const match = src.match(/data:video\/(\w+)/)
+    if (match) {
+      return match[1]
+    }
+  }
+  // Default to mp4
+  return 'mp4'
 }
 
 export function useVideoCropMode({
@@ -167,9 +190,12 @@ export function useVideoCropMode({
     const speedToSend = speedChanged ? pendingSpeed : undefined
     const removeAudioToSend = removeAudioChanged ? pendingRemoveAudio : undefined
     const trimToSend = (trimChanged || trimStartChanged || trimEndChanged) && pendingTrim ? { start: pendingTrimStart, end: pendingTrimEnd } : undefined
+    const extensionToSend = getVideoExtension(videoItem.src)
 
-    cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend, trimToSend)
-      .then((cropUrl) => {
+    cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend, trimToSend, extensionToSend)
+      .then(async () => {
+        // Get the URL for the processed video using the content-url endpoint
+        const cropUrl = await getContentUrl(sceneId, itemId, 'video', 'mp4', true)
         onUpdateItem(itemId, { cropSrc: cropUrl })
         setProcessingVideoId(null)
       })

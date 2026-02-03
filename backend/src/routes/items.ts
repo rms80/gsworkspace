@@ -209,8 +209,8 @@ router.post('/crop-video', async (req, res) => {
   }
 
   try {
-    const { sceneId, videoId, cropRect, speed, removeAudio, trim } = req.body
-    console.log('crop-video request:', { sceneId, videoId, cropRect, speed, removeAudio, trim })
+    const { sceneId, videoId, cropRect, speed, removeAudio, trim, extension } = req.body
+    console.log('crop-video request:', { sceneId, videoId, cropRect, speed, removeAudio, trim, extension })
     if (!sceneId || !videoId) {
       return res.status(400).json({ error: 'sceneId and videoId are required' })
     }
@@ -221,8 +221,10 @@ router.post('/crop-video', async (req, res) => {
     }
 
     // Construct the source video URL from scene and video IDs
+    // Use provided extension or default to mp4
+    const sourceExt = extension || 'mp4'
     const sceneFolder = `${USER_FOLDER}/${sceneId}`
-    const sourceKey = `${sceneFolder}/${videoId}.mp4`
+    const sourceKey = `${sceneFolder}/${videoId}.${sourceExt}`
     let sourceUrl = getPublicUrl(sourceKey)
 
     // For local URLs, convert to absolute URLs for fetching
@@ -393,13 +395,12 @@ router.post('/crop-video', async (req, res) => {
     // Read processed video
     const processedBuffer = fs.readFileSync(outputPath)
 
-    // Save to S3 with .crop suffix
+    // Save to storage with .crop suffix
     const outputKey = `${sceneFolder}/${videoId}.crop.mp4`
     await save(outputKey, processedBuffer, 'video/mp4')
-    const url = getPublicUrl(outputKey)
 
     cleanup()
-    res.json({ success: true, url })
+    res.json({ success: true })
   } catch (error) {
     cleanup()
     console.error('Error processing video:', error)
