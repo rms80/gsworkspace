@@ -275,7 +275,7 @@ export default function VideoOverlay({
                 border: 'none',
                 color: item.loop ? '#4a90d9' : 'white',
                 cursor: 'pointer',
-                fontSize: 12,
+                fontSize: 18,
                 padding: '2px 6px',
                 opacity: item.loop ? 1 : 0.6,
               }}
@@ -292,7 +292,7 @@ export default function VideoOverlay({
                 border: 'none',
                 color: 'white',
                 cursor: 'pointer',
-                fontSize: 14,
+                fontSize: 18,
                 padding: '2px 6px',
               }}
               title={(item.muted ?? true) ? 'Unmute' : 'Mute'}
