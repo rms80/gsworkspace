@@ -808,8 +808,8 @@ export default function VideoCropOverlay({
           }
         `}</style>
         {/* All controls in one row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <span>X:</span>
             <input
               type="number"
@@ -822,7 +822,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <span>Y:</span>
             <input
               type="number"
@@ -835,7 +835,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <span>W:</span>
             <input
               type="number"
@@ -848,7 +848,7 @@ export default function VideoCropOverlay({
               style={inputStyle}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <span>H:</span>
             <input
               type="number"
@@ -868,11 +868,11 @@ export default function VideoCropOverlay({
               color: 'white',
               border: '1px solid #555',
               borderRadius: 3,
-              padding: '0px 6px',
-              fontSize: 11,
+              padding: '0px 2px',
+              fontSize: 10,
               cursor: 'pointer',
-              height: 22,
-              width: 28,
+              height: 19,
+              width: 24,
             }}
             title={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
           >
@@ -886,11 +886,11 @@ export default function VideoCropOverlay({
                 color: 'white',
                 border: '1px solid #555',
                 borderRadius: 3,
-                padding: '0px 6px',
-                fontSize: 11,
+                padding: '0px 2px',
+                fontSize: 10,
                 cursor: 'pointer',
-                height: 22,
-                width: 28,
+                height: 19,
+                width: 24,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -1052,7 +1052,7 @@ export default function VideoCropOverlay({
           >
             Trim
           </button>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: trim ? 1 : 0.5 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, opacity: trim ? 1 : 0.5 }}>
             <span>Start:</span>
             <input
               type="text"
@@ -1075,7 +1075,7 @@ export default function VideoCropOverlay({
               }}
             />
           </label>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 4, opacity: trim ? 1 : 0.5 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 2, opacity: trim ? 1 : 0.5 }}>
             <span>End:</span>
             <input
               type="text"
@@ -1132,7 +1132,7 @@ export default function VideoCropOverlay({
           >
             [
           </button>
-          <div ref={timelineRef} style={{ position: 'relative', flex: 1, minWidth: 120 }}>
+          <div ref={timelineRef} style={{ position: 'relative', flex: 1, minWidth: 120, marginTop: -4 }}>
             <style>{`
               .video-timeline-slider::-webkit-slider-thumb {
                 -webkit-appearance: none;
