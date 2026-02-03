@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { VideoItem } from '../../../types'
 
-const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 10]
+const PLAYBACK_SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 10, 20]
 
 interface VideoOverlayProps {
   item: VideoItem

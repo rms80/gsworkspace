@@ -27,6 +27,8 @@ const SPEED_OPTIONS = [
   { value: 2, label: '2x' },
   { value: 3, label: '3x' },
   { value: 4, label: '4x' },
+  { value: 10, label: '10x' },
+  { value: 20, label: '20x' },
 ]
 
 const ASPECT_RATIO_PRESETS = [
