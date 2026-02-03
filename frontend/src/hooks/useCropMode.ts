@@ -12,8 +12,10 @@ interface UseCropModeParams {
 export interface CropMode {
   croppingImageId: string | null
   pendingCropRect: CropRect | null
+  lockAspectRatio: boolean
   setCroppingImageId: (id: string | null) => void
   setPendingCropRect: (rect: CropRect | null) => void
+  setLockAspectRatio: (locked: boolean) => void
   applyCrop: () => void
   cancelCrop: () => void
 }
@@ -26,6 +28,7 @@ export function useCropMode({
 }: UseCropModeParams): CropMode {
   const [croppingImageId, setCroppingImageId] = useState<string | null>(null)
   const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
+  const [lockAspectRatio, setLockAspectRatio] = useState(false)
 
   const applyCrop = () => {
     if (!croppingImageId || !pendingCropRect) {
@@ -78,6 +81,7 @@ export function useCropMode({
 
     setCroppingImageId(null)
     setPendingCropRect(null)
+    setLockAspectRatio(false)
 
     // Skip server-side crop in offline mode
     if (isOffline) {
@@ -96,6 +100,7 @@ export function useCropMode({
   const cancelCrop = () => {
     setCroppingImageId(null)
     setPendingCropRect(null)
+    setLockAspectRatio(false)
   }
 
   // Keyboard handler for crop mode (Enter to apply, Escape to cancel)
@@ -118,8 +123,10 @@ export function useCropMode({
   return {
     croppingImageId,
     pendingCropRect,
+    lockAspectRatio,
     setCroppingImageId,
     setPendingCropRect,
+    setLockAspectRatio,
     applyCrop,
     cancelCrop,
   }
