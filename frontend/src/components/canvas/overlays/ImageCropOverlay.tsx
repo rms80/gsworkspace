@@ -48,8 +48,15 @@ const ASPECT_RATIO_PRESETS = [
   { label: '16:9', value: 16 / 9 },
 ]
 
-// Global variable to store copied crop region
-let copiedCropRect: CropRect | null = null
+// Global variable to store copied crop region (shared across image and video crop)
+// Using window to share between components
+declare global {
+  interface Window {
+    __copiedCropRect?: CropRect | null
+  }
+}
+const getCopiedCropRect = () => window.__copiedCropRect ?? null
+const setCopiedCropRect = (rect: CropRect | null) => { window.__copiedCropRect = rect }
 
 export default function ImageCropOverlay({
   item,
@@ -390,17 +397,18 @@ export default function ImageCropOverlay({
   }
 
   const handleCopyCrop = () => {
-    copiedCropRect = { ...cropRect }
+    setCopiedCropRect({ ...cropRect })
     setShowAspectMenu(false)
   }
 
   const handlePasteCrop = () => {
-    if (!copiedCropRect) return
+    const copied = getCopiedCropRect()
+    if (!copied) return
     // Apply the copied crop, clamped to current image bounds
-    onCropChange(clampCrop({ ...copiedCropRect }, natW, natH))
+    onCropChange(clampCrop({ ...copied }, natW, natH))
     // Update aspect ratio ref if lock is enabled
     if (lockAspectRatio) {
-      aspectRatioRef.current = copiedCropRect.width / copiedCropRect.height
+      aspectRatioRef.current = copied.width / copied.height
     }
     setShowAspectMenu(false)
   }
@@ -731,21 +739,21 @@ export default function ImageCropOverlay({
                 {/* Paste */}
                 <button
                   onClick={handlePasteCrop}
-                  disabled={!copiedCropRect}
+                  disabled={!getCopiedCropRect()}
                   style={{
                     display: 'block',
                     width: '100%',
                     backgroundColor: 'transparent',
-                    color: copiedCropRect ? 'white' : '#666',
+                    color: getCopiedCropRect() ? 'white' : '#666',
                     border: 'none',
                     padding: '6px 16px',
                     fontSize: 12,
-                    cursor: copiedCropRect ? 'pointer' : 'default',
+                    cursor: getCopiedCropRect() ? 'pointer' : 'default',
                     textAlign: 'left',
                     whiteSpace: 'nowrap',
                   }}
                   onMouseEnter={(e) => {
-                    if (copiedCropRect) e.currentTarget.style.backgroundColor = '#4a9eff'
+                    if (getCopiedCropRect()) e.currentTarget.style.backgroundColor = '#4a9eff'
                   }}
                   onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                 >

@@ -304,6 +304,12 @@ Asked it to add label support for images. It makes a detailed plan but forgets t
 and it forgets about undo/redo. I ask it to update the plan for this, and then implement.
 Seems to do a fine job on the implementation though. Some minor tweaks for exporting and it is done.
 
+Asked it to build a better crop UI based on the video cropping UI. It did it. Added a list of fixed
+aspect ratios in a popup menu. No problem. Added special-case copy-paste for crop region. 
+
+Noticed a flickering issue w/ editing the crop rect. It took a few tries but eventually realized this
+was due to browser selection happening (for some reason). Disabled that and it's fixed.
+
 
 
 

@@ -29,6 +29,22 @@ const SPEED_OPTIONS = [
   { value: 4, label: '4x' },
 ]
 
+const ASPECT_RATIO_PRESETS = [
+  { label: '1:1', value: 1 },
+  { label: '3:2', value: 3 / 2 },
+  { label: '4:3', value: 4 / 3 },
+  { label: '16:9', value: 16 / 9 },
+]
+
+// Global variable to store copied crop region (shared across image and video crop)
+declare global {
+  interface Window {
+    __copiedCropRect?: CropRect | null
+  }
+}
+const getCopiedCropRect = () => window.__copiedCropRect ?? null
+const setCopiedCropRect = (rect: CropRect | null) => { window.__copiedCropRect = rect }
+
 const MIN_CROP_SIZE = 10
 const HANDLE_SIZE = 10
 
@@ -77,6 +93,20 @@ export default function VideoCropOverlay({
   const dragStateRef = useRef<DragState | null>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(false)
   const aspectRatioRef = useRef(cropRect.width / cropRect.height)
+  const [showAspectMenu, setShowAspectMenu] = useState(false)
+  const aspectMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    if (!showAspectMenu) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (aspectMenuRef.current && !aspectMenuRef.current.contains(e.target as Node)) {
+        setShowAspectMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showAspectMenu])
 
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -527,6 +557,64 @@ export default function VideoCropOverlay({
     setLockAspectRatio(!lockAspectRatio)
   }
 
+  const applyAspectRatioPreset = (ar: number) => {
+    const centerX = cropRect.x + cropRect.width / 2
+    const centerY = cropRect.y + cropRect.height / 2
+
+    let newWidth: number
+    let newHeight: number
+
+    const currentAr = cropRect.width / cropRect.height
+    if (ar > currentAr) {
+      newWidth = cropRect.width
+      newHeight = newWidth / ar
+    } else {
+      newHeight = cropRect.height
+      newWidth = newHeight * ar
+    }
+
+    let newX = centerX - newWidth / 2
+    let newY = centerY - newHeight / 2
+
+    newX = Math.max(0, Math.min(newX, origW - newWidth))
+    newY = Math.max(0, Math.min(newY, origH - newHeight))
+
+    if (newWidth > origW) {
+      newWidth = origW
+      newHeight = newWidth / ar
+      newX = 0
+      newY = Math.max(0, Math.min(centerY - newHeight / 2, origH - newHeight))
+    }
+    if (newHeight > origH) {
+      newHeight = origH
+      newWidth = newHeight * ar
+      newY = 0
+      newX = Math.max(0, Math.min(centerX - newWidth / 2, origW - newWidth))
+    }
+
+    aspectRatioRef.current = ar
+    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, origW, origH))
+    if (!lockAspectRatio) {
+      setLockAspectRatio(true)
+    }
+    setShowAspectMenu(false)
+  }
+
+  const handleCopyCrop = () => {
+    setCopiedCropRect({ ...cropRect })
+    setShowAspectMenu(false)
+  }
+
+  const handlePasteCrop = () => {
+    const copied = getCopiedCropRect()
+    if (!copied) return
+    onCropChange(clampCrop({ ...copied }, origW, origH))
+    if (lockAspectRatio) {
+      aspectRatioRef.current = copied.width / copied.height
+    }
+    setShowAspectMenu(false)
+  }
+
   const inputStyle: React.CSSProperties = {
     width: 38,
     backgroundColor: 'white',
@@ -783,11 +871,126 @@ export default function VideoCropOverlay({
               padding: '0px 6px',
               fontSize: 11,
               cursor: 'pointer',
+              height: 22,
+              width: 28,
             }}
             title={lockAspectRatio ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
           >
             {lockAspectRatio ? '🔒' : '🔓'}
           </button>
+          <div style={{ position: 'relative' }} ref={aspectMenuRef}>
+            <button
+              onClick={() => setShowAspectMenu(!showAspectMenu)}
+              style={{
+                backgroundColor: '#333',
+                color: 'white',
+                border: '1px solid #555',
+                borderRadius: 3,
+                padding: '0px 6px',
+                fontSize: 11,
+                cursor: 'pointer',
+                height: 22,
+                width: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              title="Aspect ratio presets"
+            >
+              <span style={{
+                display: 'inline-block',
+                width: 8,
+                height: 8,
+                border: '1.5px solid white',
+                borderRadius: 1,
+              }} />
+            </button>
+            {showAspectMenu && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginBottom: 4,
+                  backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                  border: '1px solid #555',
+                  borderRadius: 4,
+                  overflow: 'hidden',
+                  zIndex: 10,
+                }}
+              >
+                {/* Copy */}
+                <button
+                  onClick={handleCopyCrop}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    backgroundColor: 'transparent',
+                    color: 'white',
+                    border: 'none',
+                    padding: '6px 16px',
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4a9eff')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  Copy
+                </button>
+                {/* Paste */}
+                <button
+                  onClick={handlePasteCrop}
+                  disabled={!getCopiedCropRect()}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    backgroundColor: 'transparent',
+                    color: getCopiedCropRect() ? 'white' : '#666',
+                    border: 'none',
+                    padding: '6px 16px',
+                    fontSize: 12,
+                    cursor: getCopiedCropRect() ? 'pointer' : 'default',
+                    textAlign: 'left',
+                    whiteSpace: 'nowrap',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (getCopiedCropRect()) e.currentTarget.style.backgroundColor = '#4a9eff'
+                  }}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                >
+                  Paste
+                </button>
+                {/* Separator */}
+                <div style={{ height: 1, backgroundColor: '#555', margin: '4px 0' }} />
+                {/* Aspect ratio presets */}
+                {ASPECT_RATIO_PRESETS.map((preset) => (
+                  <button
+                    key={preset.label}
+                    onClick={() => applyAspectRatioPreset(preset.value)}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      backgroundColor: 'transparent',
+                      color: 'white',
+                      border: 'none',
+                      padding: '6px 16px',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#4a9eff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div style={{ width: 1, height: 16, backgroundColor: '#555' }} />
           <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span>Speed:</span>
