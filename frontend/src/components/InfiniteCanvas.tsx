@@ -1098,11 +1098,19 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
         if (!htmlItem || htmlItem.type !== 'html') return null
+        // Build image name map from canvas items for export
+        const imageNameMap = new Map<string, string>()
+        items.forEach((item) => {
+          if (item.type === 'image' && item.name) {
+            imageNameMap.set(item.src, item.name)
+          }
+        })
         return (
           <HtmlExportMenu
             position={exportMenu.menuPosition}
             html={htmlItem.html}
             label={htmlItem.label || 'export'}
+            imageNameMap={imageNameMap}
             onClose={exportMenu.closeMenu}
           />
         )

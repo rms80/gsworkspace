@@ -1,14 +1,15 @@
 import { Z_MENU } from '../../../constants/canvas'
-import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip } from '../../../utils/htmlExport'
+import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip, ImageNameMap } from '../../../utils/htmlExport'
 
 interface HtmlExportMenuProps {
   position: { x: number; y: number }
   html: string
   label: string
+  imageNameMap?: ImageNameMap
   onClose: () => void
 }
 
-export default function HtmlExportMenu({ position, html, label, onClose }: HtmlExportMenuProps) {
+export default function HtmlExportMenu({ position, html, label, imageNameMap, onClose }: HtmlExportMenuProps) {
   const buttonStyle: React.CSSProperties = {
     display: 'block',
     width: '100%',
@@ -20,10 +21,10 @@ export default function HtmlExportMenu({ position, html, label, onClose }: HtmlE
     fontSize: 14,
   }
 
-  const handleExport = async (exportFn: (html: string, label: string) => Promise<void>) => {
+  const handleExport = async (exportFn: (html: string, label: string, imageNameMap?: ImageNameMap) => Promise<void>) => {
     onClose()
     try {
-      await exportFn(html, label)
+      await exportFn(html, label, imageNameMap)
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return
