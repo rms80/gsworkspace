@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
+import multer from 'multer'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
@@ -12,6 +13,12 @@ import * as os from 'os'
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic)
 }
+
+// Configure multer for multipart file uploads (500MB limit)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 500 * 1024 * 1024 }
+})
 
 const router = Router()
 
@@ -74,11 +81,17 @@ router.post('/upload-image', async (req, res) => {
   }
 })
 
-// Upload video
-router.post('/upload-video', async (req, res) => {
+// Upload video (multipart/form-data)
+router.post('/upload-video', upload.single('video'), async (req, res) => {
   try {
-    const { videoData, filename, contentType } = req.body
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ error: 'No video file provided' })
+    }
+
     const id = uuidv4()
+    const filename = file.originalname
+    const contentType = file.mimetype
 
     // Determine file extension from content type or filename
     let ext = 'mp4'
@@ -92,10 +105,8 @@ router.post('/upload-video', async (req, res) => {
 
     const key = `temp/videos/${id}-${filename || `video.${ext}`}`
 
-    // videoData is base64 data URL, convert to buffer
-    const base64Data = videoData.replace(/^data:video\/\w+;base64,/, '')
-    console.log(`Uploading video: ${key}, size: ${Buffer.from(base64Data, 'base64').length} bytes`)
-    await save(key, Buffer.from(base64Data, 'base64'), contentType || 'video/mp4')
+    console.log(`Uploading video: ${key}, size: ${file.buffer.length} bytes`)
+    await save(key, file.buffer, contentType || 'video/mp4')
     console.log(`Video uploaded successfully: ${key}`)
 
     // Return the appropriate URL based on storage mode

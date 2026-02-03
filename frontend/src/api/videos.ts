@@ -6,7 +6,8 @@ export interface UploadVideoResult {
 }
 
 /**
- * Upload a video file to S3 and return the S3 URL.
+ * Upload a video file to storage and return the URL.
+ * Uses multipart/form-data for efficient upload (no base64 overhead).
  * In offline mode, stores in IndexedDB and returns a blob URL.
  */
 export async function uploadVideo(
@@ -19,17 +20,13 @@ export async function uploadVideo(
     return URL.createObjectURL(file)
   }
 
-  // Convert file to base64 for upload
-  const base64 = await fileToBase64(file)
+  const formData = new FormData()
+  formData.append('video', file)
 
   const response = await fetch(`${API_BASE}/upload-video`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      videoData: base64,
-      filename: file.name,
-      contentType: file.type
-    }),
+    body: formData,
+    // Don't set Content-Type header - browser sets it with boundary automatically
   })
 
   if (!response.ok) {
@@ -38,18 +35,6 @@ export async function uploadVideo(
 
   const result: UploadVideoResult = await response.json()
   return result.url
-}
-
-/**
- * Convert a File to base64 data URL
- */
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }
 
 /**
