@@ -12,6 +12,7 @@ interface StatusBarProps {
   backgroundOperationsCount: number
   storageMode: StorageMode
   onOpenSettings?: () => void
+  onStorageModeSync?: (mode: StorageMode) => void
 }
 
 const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg: string }> = {
@@ -22,7 +23,7 @@ const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg:
 
 export const STATUS_BAR_HEIGHT = 28
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync }: StatusBarProps) {
   const [serverConnected, setServerConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -43,6 +44,15 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         clearTimeout(timeoutId)
 
         setServerConnected(response.ok)
+
+        // Check if backend storage mode differs from frontend
+        if (response.ok) {
+          const data = await response.json()
+          if (data.storageMode && data.storageMode !== storageMode && storageMode !== 'offline') {
+            console.log(`Storage mode mismatch detected: frontend=${storageMode}, backend=${data.storageMode}`)
+            onStorageModeSync?.(data.storageMode)
+          }
+        }
       } catch {
         setServerConnected(false)
       }
@@ -52,7 +62,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
     const interval = setInterval(checkHealth, 5000)
 
     return () => clearInterval(interval)
-  }, [isOffline])
+  }, [isOffline, storageMode, onStorageModeSync])
 
   const getSaveStatusDisplay = () => {
     switch (saveStatus) {

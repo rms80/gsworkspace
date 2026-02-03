@@ -240,6 +240,17 @@ function App() {
     await loadAllScenes(mode === 'offline')
   }, [loadAllScenes])
 
+  // Handler for syncing storage mode when backend reports a different mode
+  // This happens when the backend restarts and its persisted mode differs from frontend
+  const handleStorageModeSync = useCallback(async (backendMode: StorageMode) => {
+    console.log(`Syncing frontend storage mode to backend: ${backendMode}`)
+    setStorageMode(backendMode)
+    setStorageModeState(backendMode)
+    setIsOffline(backendMode === 'offline')
+    // Reload scenes from the backend's storage
+    await loadAllScenes(backendMode === 'offline')
+  }, [loadAllScenes])
+
   // Auto-save when active scene changes (debounced)
   useEffect(() => {
     if (!activeScene || isLoading) return
@@ -1604,6 +1615,7 @@ function App() {
         backgroundOperationsCount={backgroundOpsCount}
         storageMode={storageMode}
         onOpenSettings={() => setSettingsDialogOpen(true)}
+        onStorageModeSync={handleStorageModeSync}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}

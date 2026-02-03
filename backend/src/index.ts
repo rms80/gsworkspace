@@ -24,7 +24,7 @@ app.use('/api/local-files', localFilesRouter)
 app.use('/api/config', configRouter)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' })
+  res.json({ status: 'ok', storageMode: getStorageMode() })
 })
 
 // Proxy endpoint for fetching images (avoids CORS issues)

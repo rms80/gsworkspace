@@ -1,4 +1,7 @@
 import dotenv from 'dotenv'
+import * as fs from 'fs'
+import * as path from 'path'
+import * as os from 'os'
 import * as s3 from './s3.js'
 import * as disk from './diskStorage.js'
 
@@ -16,14 +19,68 @@ export interface StorageService {
   getPublicUrl(key: string): string
 }
 
-// Allow runtime changes to storage mode (for future API endpoint)
+// Config file path for persisting storage mode (only used when env var not set)
+const CONFIG_DIR = process.env.LOCAL_STORAGE_PATH || path.join(os.homedir(), '.gsworkspace')
+const CONFIG_FILE = path.join(CONFIG_DIR, '.storage-config.json')
+
+// Check if STORAGE_MODE was explicitly set in environment
+// If set, env var is authoritative (for cloud deployments)
+// If not set, we can use/persist config file (for local development)
+const ENV_STORAGE_MODE = process.env.STORAGE_MODE
+
+// Allow runtime changes to storage mode
 let runtimeStorageMode: StorageMode | null = null
+
+// Load persisted storage mode from config file
+function loadPersistedStorageMode(): StorageMode | null {
+  // Don't load from file if env var is explicitly set
+  if (ENV_STORAGE_MODE) {
+    return null
+  }
+
+  try {
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, 'utf-8')
+      const config = JSON.parse(data)
+      if (config.storageMode === 'local' || config.storageMode === 'online') {
+        console.log(`Loaded persisted storage mode: ${config.storageMode}`)
+        return config.storageMode
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load persisted storage mode:', error)
+  }
+  return null
+}
+
+// Persist storage mode to config file
+function persistStorageMode(mode: StorageMode): void {
+  // Don't persist if env var is set (cloud deployment)
+  if (ENV_STORAGE_MODE) {
+    console.log(`Storage mode set to ${mode} (not persisted - STORAGE_MODE env var is set)`)
+    return
+  }
+
+  try {
+    // Ensure config directory exists
+    if (!fs.existsSync(CONFIG_DIR)) {
+      fs.mkdirSync(CONFIG_DIR, { recursive: true })
+    }
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ storageMode: mode }, null, 2))
+    console.log(`Storage mode persisted: ${mode}`)
+  } catch (error) {
+    console.warn('Failed to persist storage mode:', error)
+  }
+}
+
+// Initialize from persisted config (only if env var not set)
+runtimeStorageMode = loadPersistedStorageMode()
 
 export function getStorageMode(): StorageMode {
   if (runtimeStorageMode) {
     return runtimeStorageMode
   }
-  const mode = process.env.STORAGE_MODE || 'online'
+  const mode = ENV_STORAGE_MODE || 'online'
   if (mode === 'local') {
     return 'local'
   }
@@ -32,6 +89,7 @@ export function getStorageMode(): StorageMode {
 
 export function setStorageMode(mode: StorageMode): void {
   runtimeStorageMode = mode
+  persistStorageMode(mode)
 }
 
 // S3 storage adapter
