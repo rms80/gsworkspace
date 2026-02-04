@@ -51,6 +51,7 @@ function App() {
   const { activeCount: backgroundOpsCount, startOperation, endOperation } = useBackgroundOperations()
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
+  const pendingDropFilesRef = useRef<File[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
@@ -1552,6 +1553,77 @@ function App() {
     }
   }, [activeSceneId, isLoading, checkRemoteChanges])
 
+  // Process pending drop files when a scene becomes active
+  useEffect(() => {
+    if (!activeSceneId || pendingDropFilesRef.current.length === 0) return
+
+    const files = pendingDropFilesRef.current
+    pendingDropFilesRef.current = []
+
+    // Process each file
+    const processFiles = async () => {
+      let offsetIndex = 0
+      const centerX = 400
+      const centerY = 300
+
+      for (const file of files) {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader()
+          const fileName = file.name
+          const fileSize = file.size
+
+          reader.onload = async (event) => {
+            const dataUrl = event.target?.result as string
+            const img = new window.Image()
+            img.onload = async () => {
+              // Scale down large images
+              const maxDim = 800
+              let width = img.width
+              let height = img.height
+              if (width > maxDim || height > maxDim) {
+                const scale = maxDim / Math.max(width, height)
+                width = Math.round(width * scale)
+                height = Math.round(height * scale)
+              }
+              const name = fileName.replace(/\.[^/.]+$/, '')
+              const originalWidth = img.naturalWidth
+              const originalHeight = img.naturalHeight
+
+              try {
+                startOperation()
+                const s3Url = await uploadImage(dataUrl, fileName || `dropped-${Date.now()}.png`)
+                endOperation()
+                addImageAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, width, height, name, originalWidth, originalHeight, fileSize)
+              } catch (err) {
+                endOperation()
+                console.error('Failed to upload image:', err)
+                addImageAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, width, height, name, originalWidth, originalHeight, fileSize)
+              }
+            }
+            img.src = dataUrl
+          }
+          reader.readAsDataURL(file)
+          offsetIndex++
+        } else if (file.type.startsWith('video/')) {
+          try {
+            const dimensions = await getVideoDimensions(file)
+            startOperation()
+            const url = await uploadVideo(file, isOffline)
+            endOperation()
+            const name = file.name.replace(/\.[^/.]+$/, '')
+            addVideoAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+            offsetIndex++
+          } catch (err) {
+            console.error('Video upload failed:', err)
+            endOperation()
+          }
+        }
+      }
+    }
+
+    processFiles()
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, addVideoAt])
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1641,8 +1713,25 @@ function App() {
           onAddHtmlGenPrompt={addHtmlGenPromptItem}
         />
       ) : (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888' }}>
-          No scene open. Use File &gt; Open Scene... to open a scene, or click + to create a new one.
+        <div
+          style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#888' }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.dataTransfer.dropEffect = 'copy'
+          }}
+          onDrop={async (e) => {
+            e.preventDefault()
+            const files = Array.from(e.dataTransfer.files)
+            const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+            if (mediaFiles.length === 0) return
+
+            // Store files and create a new scene
+            pendingDropFilesRef.current = mediaFiles
+            await addScene()
+          }}
+        >
+          <div>No scene open. Use File &gt; Open Scene... to open a scene, or click + to create a new one.</div>
+          <div style={{ fontSize: '0.9em', marginTop: '8px' }}>Or drag and drop images/videos here to create a new scene.</div>
         </div>
       )}
       {debugPanelOpen && (
