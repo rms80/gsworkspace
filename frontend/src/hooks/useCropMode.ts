@@ -4,6 +4,7 @@ import { cropImage } from '../api/images'
 
 interface UseCropModeParams {
   items: CanvasItem[]
+  sceneId: string
   loadedImages: Map<string, HTMLImageElement>
   isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
@@ -22,6 +23,7 @@ export interface CropMode {
 
 export function useCropMode({
   items,
+  sceneId,
   loadedImages,
   isOffline,
   onUpdateItem,
@@ -118,7 +120,7 @@ export function useCropMode({
       return
     }
 
-    cropImage(item.src, cropRect)
+    cropImage(sceneId, itemId, cropRect)
       .then((cropUrl) => {
         onUpdateItem(itemId, { cropSrc: cropUrl })
       })

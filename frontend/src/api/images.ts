@@ -15,17 +15,18 @@ export interface CropImageResult {
 }
 
 /**
- * Crop an image on the server and save the cropped version to S3.
- * Returns the S3 URL of the cropped image.
+ * Crop an image on the server and save the cropped version to storage.
+ * Returns the URL of the cropped image.
  */
 export async function cropImage(
-  src: string,
+  sceneId: string,
+  imageId: string,
   cropRect: { x: number; y: number; width: number; height: number }
 ): Promise<string> {
   const response = await fetch(`${API_BASE}/crop-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ src, cropRect }),
+    body: JSON.stringify({ sceneId, imageId, cropRect }),
   })
   if (!response.ok) {
     throw new Error(`Failed to crop image: ${response.statusText}`)

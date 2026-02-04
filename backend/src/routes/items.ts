@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { save, load, getPublicUrl, getStorageMode } from '../services/storage.js'
+import { save, loadAsBuffer, getPublicUrl } from '../services/storage.js'
 import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
@@ -81,57 +81,34 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
   }
 })
 
-// Helper to extract storage key from a URL (works for both S3 and local URLs)
-function getKeyFromUrl(url: string): string | null {
-  const storageMode = getStorageMode()
-
-  if (storageMode === 'local') {
-    // Local URLs are like /api/local-files/{key}
-    const localPrefix = '/api/local-files/'
-    if (url.startsWith(localPrefix)) {
-      return url.slice(localPrefix.length)
-    }
-  } else {
-    // S3 URLs
-    const bucketName = process.env.S3_BUCKET_NAME
-    const region = process.env.AWS_REGION || 'us-east-1'
-    const prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
-    if (url.startsWith(prefix)) {
-      return url.slice(prefix.length)
-    }
-  }
-  return null
-}
-
 // Crop an image and save the cropped version
 router.post('/crop-image', async (req, res) => {
   try {
-    const { src, cropRect } = req.body
-    if (!src || !cropRect) {
-      return res.status(400).json({ error: 'src and cropRect are required' })
+    const { sceneId, imageId, cropRect } = req.body
+    if (!sceneId || !imageId) {
+      return res.status(400).json({ error: 'sceneId and imageId are required' })
+    }
+    if (!cropRect) {
+      return res.status(400).json({ error: 'cropRect is required' })
     }
 
     const { x, y, width, height } = cropRect
 
-    // Get image buffer from source
-    let buffer: Buffer
-    if (src.startsWith('data:')) {
-      const base64Data = src.replace(/^data:image\/\w+;base64,/, '')
-      buffer = Buffer.from(base64Data, 'base64')
-    } else {
-      // Fetch from URL (S3, local, or other)
-      // For local URLs, we need to convert them to absolute URLs
-      let fetchUrl = src
-      if (src.startsWith('/api/local-files/')) {
-        // Local file - construct full URL using request host
-        fetchUrl = `http://localhost:${process.env.PORT || 4000}${src}`
-      }
-      const response = await fetch(fetchUrl)
-      if (!response.ok) {
-        return res.status(400).json({ error: 'Failed to fetch source image' })
-      }
-      const arrayBuffer = await response.arrayBuffer()
-      buffer = Buffer.from(arrayBuffer)
+    // Construct the source image key from scene and image IDs
+    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+
+    // Try common image extensions
+    const extensions = ['png', 'jpg', 'jpeg', 'gif', 'webp']
+    let buffer: Buffer | null = null
+
+    for (const ext of extensions) {
+      const sourceKey = `${sceneFolder}/${imageId}.${ext}`
+      buffer = await loadAsBuffer(sourceKey)
+      if (buffer) break
+    }
+
+    if (!buffer) {
+      return res.status(404).json({ error: 'Source image not found' })
     }
 
     // Crop with sharp
@@ -140,22 +117,10 @@ router.post('/crop-image', async (req, res) => {
       .png()
       .toBuffer()
 
-    // Derive key for the crop file
-    let key: string
-    const originalKey = getKeyFromUrl(src)
-
-    if (originalKey) {
-      // Derive crop key from original key
-      const dotIndex = originalKey.lastIndexOf('.')
-      const basePath = dotIndex >= 0 ? originalKey.slice(0, dotIndex) : originalKey
-      key = `${basePath}.crop.png`
-    } else {
-      // For data URLs or other sources, generate a new key
-      key = `images/${uuidv4()}-crop.png`
-    }
-
-    await save(key, croppedBuffer, 'image/png')
-    const url = getPublicUrl(key)
+    // Save cropped image with .crop suffix
+    const outputKey = `${sceneFolder}/${imageId}.crop.png`
+    await save(outputKey, croppedBuffer, 'image/png')
+    const url = getPublicUrl(outputKey)
 
     res.json({ success: true, url })
   } catch (error) {

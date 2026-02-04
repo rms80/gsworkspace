@@ -120,7 +120,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     setLockAspectRatio,
     applyCrop,
     cancelCrop: _cancelCrop,
-  } = useCropMode({ items, loadedImages, isOffline, onUpdateItem })
+  } = useCropMode({ items, sceneId, loadedImages, isOffline, onUpdateItem })
 
   // 3b. Video crop mode hook
   const {

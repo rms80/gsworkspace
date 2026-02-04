@@ -255,24 +255,25 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ### `POST /api/items/crop-image`
 
-**Description:** Crops an image on the server using Sharp and saves the cropped version to S3. Supports both data URLs and S3 URLs as source.
+**Description:** Crops an image on the server using Sharp and saves the cropped version to storage. Uses scene and image IDs to locate the source image (tries common extensions: png, jpg, jpeg, gif, webp).
 
 **Request Body:**
 ```json
 {
-  "src": "https://... or data:image/...", // Source image URL or data URL
+  "sceneId": "scene-uuid",  // Scene ID where the image belongs
+  "imageId": "image-uuid",  // Image item ID
   "cropRect": {
-    "x": 0,      // Left offset in pixels
-    "y": 0,      // Top offset in pixels
-    "width": 100,  // Crop width in pixels
-    "height": 100  // Crop height in pixels
+    "x": 0,       // Left offset in pixels
+    "y": 0,       // Top offset in pixels
+    "width": 100, // Crop width in pixels
+    "height": 100 // Crop height in pixels
   }
 }
 ```
 
 **Response:**
 ```json
-{ "success": true, "url": "https://bucket.s3.region.amazonaws.com/..." }
+{ "success": true, "url": "https://..." }
 ```
 
 **Frontend Usage:** 1 call (via `cropImage()` function)
