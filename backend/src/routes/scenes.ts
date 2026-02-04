@@ -341,6 +341,14 @@ router.post('/:id', async (req, res) => {
 
         // Only add to stored items if the image was successfully saved
         if (imageSaved) {
+          // Extract just the filename from cropSrc URL if present
+          let cropFile: string | undefined = undefined
+          if (item.cropSrc) {
+            const cropKey = getKeyFromUrl(item.cropSrc)
+            if (cropKey) {
+              cropFile = cropKey.split('/').pop() // Get just the filename
+            }
+          }
           storedItems.push({
             id: item.id,
             type: 'image',
@@ -357,7 +365,7 @@ router.post('/:id', async (req, res) => {
             scaleY: item.scaleY,
             rotation: item.rotation,
             cropRect: item.cropRect,
-            cropSrc: item.cropSrc,
+            cropSrc: cropFile,
           })
         } else {
           console.error(`Failed to save image ${item.id}, skipping from scene`)
@@ -443,6 +451,14 @@ router.post('/:id', async (req, res) => {
           console.error(`Video ${item.id} not saved. Full src:`, item.src)
         }
         if (videoSaved) {
+          // Extract just the filename from cropSrc URL if present
+          let cropFile: string | undefined = undefined
+          if (item.cropSrc) {
+            const cropKey = getKeyFromUrl(item.cropSrc)
+            if (cropKey) {
+              cropFile = cropKey.split('/').pop() // Get just the filename
+            }
+          }
           storedItems.push({
             id: item.id,
             type: 'video',
@@ -464,7 +480,7 @@ router.post('/:id', async (req, res) => {
             speedFactor: item.speedFactor,
             removeAudio: item.removeAudio,
             cropRect: item.cropRect,
-            cropSrc: item.cropSrc,
+            cropSrc: cropFile,
             trim: item.trim,
             trimStart: item.trimStart,
             trimEnd: item.trimEnd,
@@ -605,6 +621,8 @@ router.get('/:id', async (req, res) => {
         } else if (item.type === 'image') {
           // For images, return the public URL
           const imageUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          // Reconstruct cropSrc URL from filename if present
+          const cropSrcUrl = item.cropSrc ? getPublicUrl(`${sceneFolder}/${item.cropSrc}`) : undefined
           return {
             id: item.id,
             type: 'image' as const,
@@ -621,11 +639,13 @@ router.get('/:id', async (req, res) => {
             scaleY: item.scaleY,
             rotation: item.rotation,
             cropRect: item.cropRect,
-            cropSrc: item.cropSrc,
+            cropSrc: cropSrcUrl,
           }
         } else if (item.type === 'video') {
           // For videos, return the public URL
           const videoUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          // Reconstruct cropSrc URL from filename if present
+          const cropSrcUrl = item.cropSrc ? getPublicUrl(`${sceneFolder}/${item.cropSrc}`) : undefined
           return {
             id: item.id,
             type: 'video' as const,
@@ -647,7 +667,7 @@ router.get('/:id', async (req, res) => {
             speedFactor: item.speedFactor,
             removeAudio: item.removeAudio,
             cropRect: item.cropRect,
-            cropSrc: item.cropSrc,
+            cropSrc: cropSrcUrl,
             trim: item.trim,
             trimStart: item.trimStart,
             trimEnd: item.trimEnd,
