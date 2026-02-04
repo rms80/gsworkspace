@@ -64,11 +64,11 @@ if %ERRORLEVEL% neq 0 (
 echo Frontend dependencies installed successfully.
 echo.
 
-:: Build the frontend
+:: Build the frontend to install/offline/dist
 echo ============================================
 echo Building frontend for offline use...
 echo ============================================
-call npm run build
+call npm run build -- --outDir "%PROJECT_ROOT%\install\offline\dist" --emptyOutDir
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Failed to build frontend.
     pause
@@ -82,12 +82,12 @@ echo   Build Complete!
 echo ============================================
 echo.
 echo The offline build is located at:
-echo   %PROJECT_ROOT%\frontend\dist\
+echo   %PROJECT_ROOT%\install\offline\dist\
 echo.
 echo To test locally, run: test-windows.bat
 echo.
 echo To deploy:
-echo   1. Copy the contents of frontend\dist\ to your web server
+echo   1. Copy the contents of install\offline\dist\ to your web server
 echo   2. Or embed in an Astro site (see DEPLOYMENT.md)
 echo.
 pause

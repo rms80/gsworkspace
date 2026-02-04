@@ -35,7 +35,7 @@ chmod +x build-macos.sh test-macos.sh
 
 After running the build script, the built app is in:
 ```
-frontend/dist/
+install/offline/dist/
 ├── index.html
 └── assets/
     ├── index-*.js
@@ -46,11 +46,11 @@ frontend/dist/
 
 ### 1. Static Web Server
 
-Copy the contents of `frontend/dist/` to any static web server (Apache, Nginx, S3, Netlify, Vercel, GitHub Pages, etc.)
+Copy the contents of `install/offline/dist/` to any static web server (Apache, Nginx, S3, Netlify, Vercel, GitHub Pages, etc.)
 
 ### 2. Embed in Astro Site
 
-Copy `frontend/dist/` contents to `public/gsworkspace/` in your Astro project, then either:
+Copy `install/offline/dist/` contents to `public/gsworkspace/` in your Astro project, then either:
 
 **Option A - Iframe:**
 ```html

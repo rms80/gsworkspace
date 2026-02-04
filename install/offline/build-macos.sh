@@ -50,11 +50,11 @@ fi
 echo "Frontend dependencies installed successfully."
 echo
 
-# Build the frontend
+# Build the frontend to install/offline/dist
 echo "============================================"
 echo "Building frontend for offline use..."
 echo "============================================"
-npm run build
+npm run build -- --outDir "$PROJECT_ROOT/install/offline/dist" --emptyOutDir
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to build frontend."
     exit 1
@@ -67,11 +67,11 @@ echo "  Build Complete!"
 echo "============================================"
 echo
 echo "The offline build is located at:"
-echo "  $PROJECT_ROOT/frontend/dist/"
+echo "  $PROJECT_ROOT/install/offline/dist/"
 echo
 echo "To test locally, run: ./test-macos.sh"
 echo
 echo "To deploy:"
-echo "  1. Copy the contents of frontend/dist/ to your web server"
+echo "  1. Copy the contents of install/offline/dist/ to your web server"
 echo "  2. Or embed in an Astro site (see DEPLOYMENT.md)"
 echo
