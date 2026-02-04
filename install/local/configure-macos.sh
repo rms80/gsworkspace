@@ -37,30 +37,17 @@ NPM_VERSION=$(npm --version)
 echo "Found npm $NPM_VERSION"
 echo
 
-# Install backend dependencies
+# Install all dependencies (root, backend, frontend)
 echo "============================================"
-echo "Installing backend dependencies..."
+echo "Installing dependencies..."
 echo "============================================"
-cd "$PROJECT_ROOT/backend"
-npm install
+cd "$PROJECT_ROOT"
+npm run install:all
 if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install backend dependencies."
+    echo "ERROR: Failed to install dependencies."
     exit 1
 fi
-echo "Backend dependencies installed successfully."
-echo
-
-# Install frontend dependencies
-echo "============================================"
-echo "Installing frontend dependencies..."
-echo "============================================"
-cd "$PROJECT_ROOT/frontend"
-npm install
-if [ $? -ne 0 ]; then
-    echo "ERROR: Failed to install frontend dependencies."
-    exit 1
-fi
-echo "Frontend dependencies installed successfully."
+echo "All dependencies installed successfully."
 echo
 
 # Configure backend .env

@@ -68,8 +68,7 @@ GEMINI_API_KEY=your-key-here
 
 ## Stopping the Servers
 
-- **Windows**: Close the terminal windows that opened
-- **Linux/macOS**: Press `Ctrl+C` in the terminal running the launch script
+Press `Ctrl+C` in the terminal to stop both servers.
 
 ## Troubleshooting
 

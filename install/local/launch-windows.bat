@@ -22,6 +22,13 @@ if not exist "%PROJECT_ROOT%\backend\.env" (
 )
 
 :: Check if node_modules exist
+if not exist "%PROJECT_ROOT%\node_modules" (
+    echo ERROR: Root dependencies not installed.
+    echo Please run configure-windows.bat first.
+    pause
+    exit /b 1
+)
+
 if not exist "%PROJECT_ROOT%\backend\node_modules" (
     echo ERROR: Backend dependencies not installed.
     echo Please run configure-windows.bat first.
@@ -36,28 +43,11 @@ if not exist "%PROJECT_ROOT%\frontend\node_modules" (
     exit /b 1
 )
 
-echo Starting backend server...
-start "gsworkspace Backend" cmd /k "cd /d "%PROJECT_ROOT%\backend" && npm run dev"
-
-:: Wait a moment for backend to start
-timeout /t 2 /nobreak >nul
-
-echo Starting frontend server...
-start "gsworkspace Frontend" cmd /k "cd /d "%PROJECT_ROOT%\frontend" && npm run dev"
-
-:: Wait for frontend to be ready
-timeout /t 3 /nobreak >nul
-
-echo.
-echo ============================================
-echo   Servers are starting...
-echo ============================================
 echo.
 echo   Frontend: http://localhost:3000
 echo   Backend:  http://localhost:4000
 echo.
-echo   Two new terminal windows have opened.
-echo   Close them to stop the servers.
+echo   Press Ctrl+C to stop both servers.
 echo.
 echo   Opening browser in 3 seconds...
 timeout /t 3 /nobreak >nul
@@ -65,5 +55,6 @@ timeout /t 3 /nobreak >nul
 :: Open browser
 start http://localhost:3000
 
-echo.
-echo You can close this window.
+:: Start both servers in this terminal
+cd /d "%PROJECT_ROOT%"
+npm run dev

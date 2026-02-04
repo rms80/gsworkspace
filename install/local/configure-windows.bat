@@ -50,32 +50,18 @@ for /f "tokens=*" %%i in ('npm --version') do set NPM_VERSION=%%i
 echo Found npm %NPM_VERSION%
 echo.
 
-:: Install backend dependencies
+:: Install all dependencies (root, backend, frontend)
 echo ============================================
-echo Installing backend dependencies...
+echo Installing dependencies...
 echo ============================================
-cd /d "%PROJECT_ROOT%\backend"
-call npm install
+cd /d "%PROJECT_ROOT%"
+call npm run install:all
 if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to install backend dependencies.
+    echo ERROR: Failed to install dependencies.
     pause
     exit /b 1
 )
-echo Backend dependencies installed successfully.
-echo.
-
-:: Install frontend dependencies
-echo ============================================
-echo Installing frontend dependencies...
-echo ============================================
-cd /d "%PROJECT_ROOT%\frontend"
-call npm install
-if %ERRORLEVEL% neq 0 (
-    echo ERROR: Failed to install frontend dependencies.
-    pause
-    exit /b 1
-)
-echo Frontend dependencies installed successfully.
+echo All dependencies installed successfully.
 echo.
 
 :: Configure backend .env
