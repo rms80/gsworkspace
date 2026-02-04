@@ -12,7 +12,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # Check if dist folder exists
 if [ ! -d "$PROJECT_ROOT/frontend/dist" ]; then
     echo "ERROR: frontend/dist not found."
-    echo "Please run ./configure-macos.sh first to build the app."
+    echo "Please run ./build-macos.sh first to build the app."
     exit 1
 fi
 

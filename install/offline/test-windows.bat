@@ -16,7 +16,7 @@ popd
 :: Check if dist folder exists
 if not exist "%PROJECT_ROOT%\frontend\dist" (
     echo ERROR: frontend\dist not found.
-    echo Please run configure-windows.bat first to build the app.
+    echo Please run build-windows.bat first to build the app.
     pause
     exit /b 1
 )

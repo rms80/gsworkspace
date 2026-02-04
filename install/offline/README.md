@@ -11,29 +11,29 @@ These scripts build gsworkspace for offline/browser-only deployment. The built a
 ### Windows
 
 ```
-configure-windows.bat    # Install dependencies and build
-test-windows.bat         # Preview the built app locally
+build-windows.bat    # Install dependencies and build
+test-windows.bat     # Preview the built app locally
 ```
 
 ### Linux
 
 ```bash
-chmod +x configure-linux.sh test-linux.sh
-./configure-linux.sh     # Install dependencies and build
-./test-linux.sh          # Preview the built app locally
+chmod +x build-linux.sh test-linux.sh
+./build-linux.sh     # Install dependencies and build
+./test-linux.sh      # Preview the built app locally
 ```
 
 ### macOS
 
 ```bash
-chmod +x configure-macos.sh test-macos.sh
-./configure-macos.sh     # Install dependencies and build
-./test-macos.sh          # Preview the built app locally
+chmod +x build-macos.sh test-macos.sh
+./build-macos.sh     # Install dependencies and build
+./test-macos.sh      # Preview the built app locally
 ```
 
 ## Output
 
-After running the configure script, the built app is in:
+After running the build script, the built app is in:
 ```
 frontend/dist/
 ├── index.html
