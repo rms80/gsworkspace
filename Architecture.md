@@ -189,107 +189,25 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ### `GET /api/health`
 
-**Description:** Simple health check endpoint to verify the server is running. Used by the frontend to display server connection status in the status bar.
+**Description:** Health check endpoint to verify the server is running and properly configured. Returns storage mode and any configuration warnings.
 
 **Arguments:** None
 
 **Response:**
 ```json
-{ "status": "ok" }
+{
+  "status": "ok",              // or "misconfigured"
+  "storageMode": "local",      // "local" or "online"
+  "configWarning": "..."       // Only present if status is "misconfigured"
+}
 ```
 
 **Frontend Usage:** 1 call
-- `frontend/src/components/StatusBar.tsx:27` - Polls every 5 seconds to show "Server OK" or "No Connection" indicator
-
----
-
-## Proxy Endpoints
-
-### `GET /api/proxy-image`
-
-**Description:** Proxies image requests to avoid CORS issues when loading images from external URLs (especially S3). This is essential for canvas operations that need to read pixel data from images.
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | Yes | The URL of the image to fetch |
-
-**Response:** Binary image data with appropriate Content-Type header
-
-**Frontend Usage:** 5 calls
-- `frontend/src/utils/imageCrop.ts:38` - Loading S3 images for cropping
-- `frontend/src/hooks/useClipboard.ts:195` - Copying images to clipboard
-- `frontend/src/utils/htmlExport.ts:122` - Embedding images in HTML export
-- `frontend/src/utils/sceneExport.ts:42` - Exporting scene images
-- `frontend/src/components/canvas/menus/ImageContextMenu.tsx:120` - Download image action
-
----
-
-### `GET /api/proxy-video`
-
-**Description:** Proxies video requests to avoid CORS issues when loading videos from external URLs.
-
-**Query Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `url` | string | Yes | The URL of the video to fetch |
-
-**Response:** Binary video data with appropriate Content-Type header
-
-**Frontend Usage:** 2 calls
-- `frontend/src/utils/sceneExport.ts:61` - Exporting scene videos
-- `frontend/src/components/canvas/menus/VideoContextMenu.tsx:149` - Download video action
+- `frontend/src/components/StatusBar.tsx` - Polls every 5 seconds to show server status
 
 ---
 
 ## Items Endpoints (`/api/items`)
-
-### `POST /api/items/save`
-
-**Description:** Saves canvas state to S3. (Legacy endpoint)
-
-**Request Body:**
-```json
-{
-  "items": [ ... ] // Array of canvas items
-}
-```
-
-**Response:**
-```json
-{ "success": true, "id": "<uuid>" }
-```
-
-**Frontend Usage:** 0 calls (legacy, replaced by scenes API)
-
----
-
-### `GET /api/items/load/:id`
-
-**Description:** Loads canvas state from S3. (Legacy endpoint)
-
-**URL Parameters:**
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `id` | string | Yes | The canvas ID to load |
-
-**Response:** JSON array of canvas items
-
-**Frontend Usage:** 0 calls (legacy, replaced by scenes API)
-
----
-
-### `GET /api/items/list`
-
-**Description:** Lists all saved canvases. (Legacy endpoint)
-
-**Arguments:** None
-
-**Response:** Array of file keys from S3
-
-**Frontend Usage:** 0 calls (legacy, replaced by scenes API)
-
----
 
 ### `POST /api/items/upload-image`
 
@@ -308,35 +226,30 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 { "success": true, "url": "https://bucket.s3.region.amazonaws.com/temp/images/..." }
 ```
 
-**Frontend Usage:** 4 calls (via `uploadImage()` function)
-- `frontend/src/App.tsx:816` - Uploading deleted item for recovery
-- `frontend/src/hooks/useClipboard.ts:102` - Pasting images from clipboard
-- `frontend/src/hooks/useClipboard.ts:275` - Pasting images from clipboard (alternate path)
-- `frontend/src/components/InfiniteCanvas.tsx:327` - Dropping images onto canvas
+**Frontend Usage:** Multiple calls (via `uploadImage()` function)
+- `frontend/src/App.tsx` - Uploading deleted item for recovery
+- `frontend/src/hooks/useClipboard.ts` - Pasting images from clipboard
+- `frontend/src/components/InfiniteCanvas.tsx` - Dropping images onto canvas
 
 ---
 
 ### `POST /api/items/upload-video`
 
-**Description:** Uploads a video (as base64 data URL) to S3 temporary storage. Returns the public S3 URL.
+**Description:** Uploads a video file (multipart form data) to temporary storage. Returns the public URL. Uses multer middleware with 500MB file size limit.
 
-**Request Body:**
-```json
-{
-  "videoData": "data:video/mp4;base64,...", // Base64 video data URL
-  "filename": "video.mp4", // Original filename
-  "contentType": "video/mp4" // MIME type
-}
-```
+**Request:** `multipart/form-data`
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `video` | File | Yes | Video file binary data |
 
 **Response:**
 ```json
-{ "success": true, "url": "https://bucket.s3.region.amazonaws.com/temp/videos/..." }
+{ "success": true, "url": "https://..." }
 ```
 
 **Frontend Usage:** 2 calls (via `uploadVideo()` function)
-- `frontend/src/App.tsx:588` - Uploading video files
-- `frontend/src/components/InfiniteCanvas.tsx:349` - Dropping videos onto canvas
+- `frontend/src/App.tsx` - Uploading video files
+- `frontend/src/components/InfiniteCanvas.tsx` - Dropping videos onto canvas
 
 ---
 
@@ -363,7 +276,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `cropImage()` function)
-- `frontend/src/hooks/useCropMode.ts:121` - Applying image crop from crop panel
+- `frontend/src/hooks/useCropMode.ts` - Applying image crop from crop panel
 
 ---
 
@@ -397,7 +310,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `cropVideo()` function)
-- `frontend/src/hooks/useVideoCropMode.ts:171` - Applying video edits from video crop panel
+- `frontend/src/hooks/useVideoCropMode.ts` - Applying video edits from video crop panel
 
 ---
 
@@ -429,8 +342,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 2 calls (via `generateFromPrompt()` function)
-- `frontend/src/App.tsx:897` - Running LLM prompts on canvas
-- `frontend/src/api/llm.ts:156` - Generating HTML titles (internal use)
+- `frontend/src/App.tsx` - Running LLM prompts on canvas
+- `frontend/src/api/llm.ts` - Generating HTML titles (internal use)
 
 ---
 
@@ -453,7 +366,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `generateImage()` function)
-- `frontend/src/App.tsx:988` - Running image generation prompts
+- `frontend/src/App.tsx` - Running image generation prompts
 
 ---
 
@@ -489,7 +402,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `generateHtml()` function)
-- `frontend/src/App.tsx:1101` - Running HTML generation prompts
+- `frontend/src/App.tsx` - Running HTML generation prompts
 
 ---
 
@@ -515,10 +428,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ]
 ```
 
-**Frontend Usage:** 3 calls (via `listScenes()` function)
-- `frontend/src/App.tsx:135` - Loading scene list on app init
-- `frontend/src/App.tsx:425` - Refreshing scene list after creating new scene
-- `frontend/src/App.tsx:1232` - Refreshing scene list on demand
+**Frontend Usage:** Multiple calls (via `listScenes()` function)
+- `frontend/src/App.tsx` - Loading scene list on app init, refreshing after creating new scene, refreshing on demand
 
 ---
 
@@ -547,11 +458,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 }
 ```
 
-**Frontend Usage:** 4 calls (via `loadScene()` function)
-- `frontend/src/App.tsx:155` - Loading most recent scene on app init
-- `frontend/src/App.tsx:1278` - Loading scene when switching scenes
-- `frontend/src/App.tsx:1324` - Loading remote scene for conflict resolution
-- `frontend/src/App.tsx:1414` - Loading remote scene for merging
+**Frontend Usage:** Multiple calls (via `loadScene()` function)
+- `frontend/src/App.tsx` - Loading scenes on init, switching, and conflict resolution
 
 ---
 
@@ -567,7 +475,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 **Response:** Raw JSON string of the stored scene
 
 **Frontend Usage:** 1 call (direct fetch)
-- `frontend/src/App.tsx:1501` - Debug/export functionality
+- `frontend/src/App.tsx` - Debug/export functionality
 
 ---
 
@@ -600,10 +508,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 { "success": true, "id": "scene-uuid" }
 ```
 
-**Frontend Usage:** 3 calls (via `saveScene()` function)
-- `frontend/src/App.tsx:257` - Auto-save on changes
-- `frontend/src/App.tsx:473` - Saving after creating new scene
-- `frontend/src/App.tsx:1377` - Manual save
+**Frontend Usage:** Multiple calls (via `saveScene()` function)
+- `frontend/src/App.tsx` - Auto-save on changes, saving after creating new scene, manual save
 
 ---
 
@@ -622,7 +528,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `deleteScene()` function)
-- `frontend/src/App.tsx:499` - Deleting a scene
+- `frontend/src/App.tsx` - Deleting a scene
 
 ---
 
@@ -644,8 +550,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 2 calls (via `getSceneTimestamp()` function)
-- `frontend/src/App.tsx:240` - Checking for conflicts before save
-- `frontend/src/hooks/useRemoteChangeDetection.ts:43` - Polling for remote changes
+- `frontend/src/App.tsx` - Checking for conflicts before save
+- `frontend/src/hooks/useRemoteChangeDetection.ts` - Polling for remote changes
 
 ---
 
@@ -672,7 +578,40 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `getContentUrl()` function)
-- `frontend/src/components/canvas/menus/VideoContextMenu.tsx:110` - Getting original video URL
+- `frontend/src/components/canvas/menus/VideoContextMenu.tsx` - Getting original video URL
+
+---
+
+### `GET /api/scenes/:id/content-data`
+
+**Description:** Returns the actual binary content data for a scene item (image, video, or HTML). Automatically detects the file extension by trying common formats. This endpoint replaces the need for proxy endpoints by providing direct access to scene content.
+
+**URL Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | string | Yes | Scene UUID |
+
+**Query Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `contentId` | string | Yes | The item's UUID |
+| `contentType` | string | Yes | One of: `video`, `image`, `html` |
+| `isEdit` | string | No | If "true", returns the `.crop` edited version |
+
+**Supported Extensions:**
+- Images: png, jpg, jpeg, gif, webp
+- Videos: mp4, webm, mov, avi
+- HTML: html
+
+**Response:** Binary file data with appropriate Content-Type header
+
+**Frontend Usage:** Multiple calls (via `getContentData()` function)
+- `frontend/src/utils/sceneExport.ts` - Fetching images/videos for scene export
+- `frontend/src/utils/htmlExport.ts` - Embedding images in HTML export
+- `frontend/src/utils/imageCrop.ts` - Loading images for cropping
+- `frontend/src/hooks/useClipboard.ts` - Copying images to clipboard
+- `frontend/src/components/canvas/menus/ImageContextMenu.tsx` - Exporting images
+- `frontend/src/components/canvas/menus/VideoContextMenu.tsx` - Exporting videos
 
 ---
 
@@ -693,11 +632,8 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 }
 ```
 
-**Frontend Usage:** 4 calls (via `loadHistory()` function)
-- `frontend/src/App.tsx:158` - Loading history on app init
-- `frontend/src/App.tsx:1281` - Loading history when switching scenes
-- `frontend/src/App.tsx:1329` - Loading history for conflict resolution
-- `frontend/src/App.tsx:1417` - Loading history for merging
+**Frontend Usage:** Multiple calls (via `loadHistory()` function)
+- `frontend/src/App.tsx` - Loading history on init, scene switching, and conflict resolution
 
 ---
 
@@ -724,36 +660,95 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```
 
 **Frontend Usage:** 1 call (via `saveHistory()` function)
-- `frontend/src/App.tsx:303` - Saving history with scene changes
+- `frontend/src/App.tsx` - Saving history with scene changes
+
+---
+
+## Local Files Endpoints (`/api/local-files`)
+
+### `GET /api/local-files/*`
+
+**Description:** Serves files from local disk storage when running in local storage mode. The path after `/api/local-files/` maps directly to the storage directory structure. Includes path traversal protection.
+
+**URL Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `*` | string | Yes | File path relative to storage root |
+
+**Response:** Binary file data with appropriate Content-Type header. Media files (images/videos) include 1-year cache headers.
+
+**Frontend Usage:** Indirect - URLs are generated by the backend and used in `<img>` and `<video>` tags when in local storage mode.
+
+---
+
+## Config Endpoints (`/api/config`)
+
+### `GET /api/config`
+
+**Description:** Returns the current server configuration including storage mode and paths.
+
+**Arguments:** None
+
+**Response:**
+```json
+{
+  "storageMode": "local",           // "local" or "online"
+  "localStoragePath": "/path/..."   // Only present when storageMode is "local"
+}
+```
+
+**Frontend Usage:** Called to determine storage mode for UI display.
+
+---
+
+### `POST /api/config/storage-mode`
+
+**Description:** Changes the storage mode at runtime. When switching to local mode, initializes the storage directory if needed.
+
+**Request Body:**
+```json
+{
+  "mode": "local"  // "local" or "online"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "storageMode": "local",
+  "localStoragePath": "/path/..."   // Only present when mode is "local"
+}
+```
+
+**Frontend Usage:** Used by settings UI to switch between storage modes.
 
 ---
 
 ## Summary Table
 
-| Endpoint | Method | Frontend Calls |
-|----------|--------|----------------|
-| `/api/health` | GET | 1 |
-| `/api/proxy-image` | GET | 5 |
-| `/api/proxy-video` | GET | 2 |
-| `/api/items/save` | POST | 0 (legacy) |
-| `/api/items/load/:id` | GET | 0 (legacy) |
-| `/api/items/list` | GET | 0 (legacy) |
-| `/api/items/upload-image` | POST | 4 |
-| `/api/items/upload-video` | POST | 2 |
-| `/api/items/crop-image` | POST | 1 |
-| `/api/items/crop-video` | POST | 1 |
-| `/api/llm/generate` | POST | 2 |
-| `/api/llm/generate-image` | POST | 1 |
-| `/api/llm/generate-html` | POST | 1 |
-| `/api/scenes` | GET | 3 |
-| `/api/scenes/:id` | GET | 4 |
-| `/api/scenes/:id` | POST | 3 |
-| `/api/scenes/:id` | DELETE | 1 |
-| `/api/scenes/:id/raw` | GET | 1 |
-| `/api/scenes/:id/timestamp` | GET | 2 |
-| `/api/scenes/:id/content-url` | GET | 1 |
-| `/api/scenes/:id/history` | GET | 4 |
-| `/api/scenes/:id/history` | POST | 1 |
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Server health and config status |
+| `/api/items/upload-image` | POST | Upload image to staging |
+| `/api/items/upload-video` | POST | Upload video to staging |
+| `/api/items/crop-image` | POST | Crop an image server-side |
+| `/api/items/crop-video` | POST | Process video (crop, speed, trim) |
+| `/api/llm/generate` | POST | Generate text with LLM |
+| `/api/llm/generate-image` | POST | Generate image with AI |
+| `/api/llm/generate-html` | POST | Generate HTML with LLM |
+| `/api/scenes` | GET | List all scenes |
+| `/api/scenes/:id` | GET | Load a scene |
+| `/api/scenes/:id` | POST | Save a scene |
+| `/api/scenes/:id` | DELETE | Delete a scene |
+| `/api/scenes/:id/raw` | GET | Get raw scene.json |
+| `/api/scenes/:id/timestamp` | GET | Get scene modification time |
+| `/api/scenes/:id/content-url` | GET | Get URL for scene content |
+| `/api/scenes/:id/content-data` | GET | Get binary data for scene content |
+| `/api/scenes/:id/history` | GET | Load scene history |
+| `/api/scenes/:id/history` | POST | Save scene history |
+| `/api/local-files/*` | GET | Serve local storage files |
+| `/api/config` | GET | Get server configuration |
+| `/api/config/storage-mode` | POST | Change storage mode |
 
-**Total Active Endpoints:** 19 (excluding 3 legacy endpoints)
-**Total Frontend API Calls:** 40
+**Total Endpoints:** 21
