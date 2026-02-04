@@ -1,11 +1,36 @@
 import { CropRect } from '../types'
+import { getContentData } from '../api/scenes'
 
 /**
  * Loads an image from a source URL, crops it using canvas, and returns a cropped data URL.
- * For S3 URLs, loads via /api/proxy-image to avoid CORS canvas taint.
+ * For S3 URLs, loads via getContentData API to avoid CORS canvas taint.
  * For data URLs, loads directly.
  */
-export function getCroppedImageDataUrl(src: string, cropRect: CropRect): Promise<string> {
+export async function getCroppedImageDataUrl(
+  sceneId: string,
+  itemId: string,
+  src: string,
+  cropRect: CropRect
+): Promise<string> {
+  // For data URLs or blob URLs, we can load directly
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    return cropImageFromSrc(src, cropRect)
+  }
+
+  // For S3 URLs, fetch via getContentData API to avoid CORS issues
+  const blob = await getContentData(sceneId, itemId, 'image', false)
+  const blobUrl = URL.createObjectURL(blob)
+  try {
+    return await cropImageFromSrc(blobUrl, cropRect)
+  } finally {
+    URL.revokeObjectURL(blobUrl)
+  }
+}
+
+/**
+ * Internal helper to crop an image from a src URL
+ */
+function cropImageFromSrc(src: string, cropRect: CropRect): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -30,12 +55,6 @@ export function getCroppedImageDataUrl(src: string, cropRect: CropRect): Promise
       }
     }
     img.onerror = () => reject(new Error('Failed to load image for cropping'))
-
-    // For S3 URLs, proxy through backend to avoid CORS canvas taint
-    if (src.startsWith('data:')) {
-      img.src = src
-    } else {
-      img.src = `/api/proxy-image?url=${encodeURIComponent(src)}`
-    }
+    img.src = src
   })
 }

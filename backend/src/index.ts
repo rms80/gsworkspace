@@ -47,54 +47,6 @@ app.get('/api/health', (_req, res) => {
   res.json(response)
 })
 
-// Proxy endpoint for fetching images (avoids CORS issues)
-app.get('/api/proxy-image', async (req, res) => {
-  const url = req.query.url as string
-  if (!url) {
-    return res.status(400).json({ error: 'URL parameter required' })
-  }
-
-  try {
-    const response = await fetch(url)
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch image' })
-    }
-
-    const contentType = response.headers.get('content-type') || 'application/octet-stream'
-    res.setHeader('Content-Type', contentType)
-
-    const buffer = await response.arrayBuffer()
-    res.send(Buffer.from(buffer))
-  } catch (err) {
-    console.error('Proxy image error:', err)
-    res.status(500).json({ error: 'Failed to proxy image' })
-  }
-})
-
-// Proxy endpoint for fetching videos (avoids CORS issues)
-app.get('/api/proxy-video', async (req, res) => {
-  const url = req.query.url as string
-  if (!url) {
-    return res.status(400).json({ error: 'URL parameter required' })
-  }
-
-  try {
-    const response = await fetch(url)
-    if (!response.ok) {
-      return res.status(response.status).json({ error: 'Failed to fetch video' })
-    }
-
-    const contentType = response.headers.get('content-type') || 'video/mp4'
-    res.setHeader('Content-Type', contentType)
-
-    const buffer = await response.arrayBuffer()
-    res.send(Buffer.from(buffer))
-  } catch (err) {
-    console.error('Proxy video error:', err)
-    res.status(500).json({ error: 'Failed to proxy video' })
-  }
-})
-
 // Initialize storage and start server
 async function start() {
   const storageMode = getStorageMode()

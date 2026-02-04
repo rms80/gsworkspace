@@ -1,6 +1,6 @@
 import { VideoItem } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
-import { getContentUrl } from '../../../api/scenes'
+import { getContentUrl, getContentData } from '../../../api/scenes'
 
 interface VideoContextMenuProps {
   position: { x: number; y: number }
@@ -143,31 +143,21 @@ export default function VideoContextMenu({
 
     try {
       // Use cropped version if available, otherwise original
-      const exportSrc = videoItem.cropSrc ?? videoItem.src
-      const ext = videoItem.cropSrc ? 'mp4' : getVideoExtension(videoItem.src)
+      const hasEdits = !!(videoItem.cropSrc || videoItem.cropRect || videoItem.speedFactor || videoItem.removeAudio || videoItem.trim)
+      const ext = hasEdits ? 'mp4' : getVideoExtension(videoItem.src)
       const baseName = videoItem.name || 'video'
       const filename = `${baseName}.${ext}`
 
       let blob: Blob
 
+      const exportSrc = videoItem.cropSrc ?? videoItem.src
       if (exportSrc.startsWith('data:') || exportSrc.startsWith('blob:')) {
         // Fetch directly for data URLs and blob URLs
         const response = await fetch(exportSrc)
         blob = await response.blob()
       } else {
-        // Use proxy for external URLs to avoid CORS
-        const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(exportSrc)}`
-        const response = await fetch(proxyUrl)
-        if (!response.ok) {
-          // Try direct fetch as fallback
-          const directResponse = await fetch(exportSrc)
-          if (!directResponse.ok) {
-            throw new Error('Failed to fetch video')
-          }
-          blob = await directResponse.blob()
-        } else {
-          blob = await response.blob()
-        }
+        // Use getContentData API for S3 URLs
+        blob = await getContentData(sceneId, videoItem.id, 'video', hasEdits)
       }
 
       // Try to use File System Access API for native save dialog

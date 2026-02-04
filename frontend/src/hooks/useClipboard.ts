@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { CanvasItem } from '../types'
 import { uploadImage } from '../api/images'
+import { getContentData } from '../api/scenes'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 
 interface UseClipboardParams {
   items: CanvasItem[]
   selectedIds: string[]
+  sceneId: string
   isEditing: boolean
   isOffline: boolean
   croppingImageId: string | null
@@ -25,6 +27,7 @@ export interface ClipboardActions {
 export function useClipboard({
   items,
   selectedIds,
+  sceneId,
   isEditing,
   isOffline,
   croppingImageId,
@@ -192,34 +195,38 @@ export function useClipboard({
             new ClipboardItem({ 'image/png': blob })
           ])
         } else {
-          const response = await fetch(`/api/proxy-image?url=${encodeURIComponent(item.src)}`)
-          if (!response.ok) throw new Error('Failed to fetch image through proxy')
-          const blob = await response.blob()
+          // Use getContentData API for S3 URLs
+          const blob = await getContentData(sceneId, item.id, 'image', false)
+          const blobUrl = URL.createObjectURL(blob)
 
-          const pngBlob = await new Promise<Blob>((resolve, reject) => {
-            const img = new window.Image()
-            img.onload = () => {
-              const canvas = document.createElement('canvas')
-              canvas.width = img.naturalWidth
-              canvas.height = img.naturalHeight
-              const ctx = canvas.getContext('2d')
-              if (!ctx) {
-                reject(new Error('Failed to get canvas context'))
-                return
+          try {
+            const pngBlob = await new Promise<Blob>((resolve, reject) => {
+              const img = new window.Image()
+              img.onload = () => {
+                const canvas = document.createElement('canvas')
+                canvas.width = img.naturalWidth
+                canvas.height = img.naturalHeight
+                const ctx = canvas.getContext('2d')
+                if (!ctx) {
+                  reject(new Error('Failed to get canvas context'))
+                  return
+                }
+                ctx.drawImage(img, 0, 0)
+                canvas.toBlob((b) => {
+                  if (b) resolve(b)
+                  else reject(new Error('Failed to create blob'))
+                }, 'image/png')
               }
-              ctx.drawImage(img, 0, 0)
-              canvas.toBlob((b) => {
-                if (b) resolve(b)
-                else reject(new Error('Failed to create blob'))
-              }, 'image/png')
-            }
-            img.onerror = () => reject(new Error('Failed to load image'))
-            img.src = URL.createObjectURL(blob)
-          })
+              img.onerror = () => reject(new Error('Failed to load image'))
+              img.src = blobUrl
+            })
 
-          await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': pngBlob })
-          ])
+            await navigator.clipboard.write([
+              new ClipboardItem({ 'image/png': pngBlob })
+            ])
+          } finally {
+            URL.revokeObjectURL(blobUrl)
+          }
         }
       } catch (err) {
         console.error('Failed to copy image to clipboard:', err)

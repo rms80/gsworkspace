@@ -962,9 +962,9 @@ function App() {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
         let src = item.src
-        if (item.cropRect) {
+        if (item.cropRect && activeSceneId) {
           try {
-            src = await getCroppedImageDataUrl(item.src, item.cropRect)
+            src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
           } catch (err) {
             console.error('Failed to crop image for LLM, using original:', err)
           }
@@ -1055,9 +1055,9 @@ function App() {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
         let src = item.src
-        if (item.cropRect) {
+        if (item.cropRect && activeSceneId) {
           try {
-            src = await getCroppedImageDataUrl(item.src, item.cropRect)
+            src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
           } catch (err) {
             console.error('Failed to crop image for LLM, using original:', err)
           }

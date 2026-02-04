@@ -180,6 +180,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
   const clipboard = useClipboard({
     items,
     selectedIds,
+    sceneId,
     isEditing,
     isOffline,
     croppingImageId,
@@ -1123,6 +1124,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
         <ImageContextMenu
           position={imageContextMenuState.menuPosition}
           imageItem={items.find((i) => i.id === imageContextMenuState.menuData!.imageId && i.type === 'image') as ImageItem | undefined}
+          sceneId={sceneId}
           loadedImages={loadedImages}
           isOffline={isOffline}
           onUpdateItem={onUpdateItem}
@@ -1167,11 +1169,15 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
         if (!htmlItem || htmlItem.type !== 'html') return null
-        // Build image name map from canvas items for export
+        // Build image name map and image id map from canvas items for export
         const imageNameMap = new Map<string, string>()
+        const imageIdMap = new Map<string, string>()
         items.forEach((item) => {
-          if (item.type === 'image' && item.name) {
-            imageNameMap.set(item.src, item.name)
+          if (item.type === 'image') {
+            if (item.name) {
+              imageNameMap.set(item.src, item.name)
+            }
+            imageIdMap.set(item.src, item.id)
           }
         })
         return (
@@ -1180,6 +1186,8 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             html={htmlItem.html}
             label={htmlItem.label || 'export'}
             imageNameMap={imageNameMap}
+            sceneId={sceneId}
+            imageIdMap={imageIdMap}
             onClose={exportMenu.closeMenu}
           />
         )

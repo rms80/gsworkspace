@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { Scene, ImageItem, VideoItem } from '../types'
 import { SerializedHistory } from '../history'
+import { getContentData } from '../api/scenes'
 
 // File System Access API types (not yet in standard TypeScript lib)
 declare global {
@@ -30,45 +31,30 @@ declare global {
 
 /**
  * Fetches an image and returns it as a Blob
- * Handles both data URLs and external URLs (via proxy for CORS)
+ * Handles both data URLs and S3 URLs (via getContentData API)
  */
-async function fetchImageAsBlob(src: string): Promise<Blob> {
-  if (src.startsWith('data:')) {
-    // Convert data URL to blob
+async function fetchImageAsBlob(sceneId: string, itemId: string, src: string): Promise<Blob> {
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    // Convert data URL or blob URL to blob
     const response = await fetch(src)
     return response.blob()
   } else {
-    // External URL - use proxy to avoid CORS issues
-    const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(src)}`
-    const response = await fetch(proxyUrl)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch image: ${response.statusText}`)
-    }
-    return response.blob()
+    // Use getContentData API for S3 URLs
+    return getContentData(sceneId, itemId, 'image', false)
   }
 }
 
 /**
  * Fetches a video and returns it as a Blob
- * Handles both blob URLs, data URLs, and external URLs
+ * Handles both blob URLs, data URLs, and S3 URLs (via getContentData API)
  */
-async function fetchVideoAsBlob(src: string): Promise<Blob> {
+async function fetchVideoAsBlob(sceneId: string, itemId: string, src: string, isEdit: boolean = false): Promise<Blob> {
   if (src.startsWith('data:') || src.startsWith('blob:')) {
     const response = await fetch(src)
     return response.blob()
   } else {
-    // External URL - use proxy to avoid CORS issues
-    const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(src)}`
-    const response = await fetch(proxyUrl)
-    if (!response.ok) {
-      // If proxy fails, try direct fetch (might work for same-origin URLs)
-      const directResponse = await fetch(src)
-      if (!directResponse.ok) {
-        throw new Error(`Failed to fetch video: ${directResponse.statusText}`)
-      }
-      return directResponse.blob()
-    }
-    return response.blob()
+    // Use getContentData API for S3 URLs
+    return getContentData(sceneId, itemId, 'video', isEdit)
   }
 }
 
@@ -151,7 +137,7 @@ export async function exportScene(
   for (const item of imageItems) {
     try {
       // Fetch and save the main image
-      const blob = await fetchImageAsBlob(item.src)
+      const blob = await fetchImageAsBlob(scene.id, item.id, item.src)
       const ext = getImageExtension(item.src, blob)
       const filename = `${item.id}.${ext}`
       zip.file(`images/${filename}`, blob)
@@ -161,7 +147,8 @@ export async function exportScene(
 
       // If there's a cropped version, save it too
       if (item.cropSrc) {
-        const cropBlob = await fetchImageAsBlob(item.cropSrc)
+        // Cropped images are stored with isEdit=true
+        const cropBlob = await fetchImageAsBlob(scene.id, item.id, item.cropSrc)
         const cropExt = getImageExtension(item.cropSrc, cropBlob)
         const cropFilename = `${item.id}_crop.${cropExt}`
         zip.file(`images/${cropFilename}`, cropBlob)
@@ -180,7 +167,9 @@ export async function exportScene(
 
   for (const item of videoItems) {
     try {
-      const blob = await fetchVideoAsBlob(item.src)
+      // Determine if we should fetch the edited/cropped version
+      const hasEdits = !!(item.cropSrc || item.cropRect || item.speedFactor || item.removeAudio || item.trim)
+      const blob = await fetchVideoAsBlob(scene.id, item.id, item.src, hasEdits)
       const ext = getVideoExtension(item.src, blob)
       const filename = `${item.id}.${ext}`
       zip.file(`videos/${filename}`, blob)

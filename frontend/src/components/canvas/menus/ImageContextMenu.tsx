@@ -1,9 +1,11 @@
 import { ImageItem, CropRect } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
+import { getContentData } from '../../../api/scenes'
 
 interface ImageContextMenuProps {
   position: { x: number; y: number }
   imageItem: ImageItem | undefined
+  sceneId: string
   loadedImages: Map<string, HTMLImageElement>
   isOffline: boolean
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
@@ -37,6 +39,7 @@ function getImageExtension(src: string): string {
 export default function ImageContextMenu({
   position,
   imageItem,
+  sceneId,
   loadedImages,
   isOffline,
   onUpdateItem,
@@ -126,19 +129,9 @@ export default function ImageContextMenu({
         const response = await fetch(srcToExport)
         blob = await response.blob()
       } else {
-        // Use proxy for external URLs to avoid CORS
-        const proxyUrl = `/api/proxy-image?url=${encodeURIComponent(srcToExport)}`
-        const response = await fetch(proxyUrl)
-        if (!response.ok) {
-          // Try direct fetch as fallback
-          const directResponse = await fetch(srcToExport)
-          if (!directResponse.ok) {
-            throw new Error('Failed to fetch image')
-          }
-          blob = await directResponse.blob()
-        } else {
-          blob = await response.blob()
-        }
+        // Use getContentData API for S3 URLs
+        // If exporting the cropped version, it might be stored with the original item
+        blob = await getContentData(sceneId, imageItem.id, 'image', !!imageItem.cropSrc)
       }
 
       // Try to use File System Access API for native save dialog

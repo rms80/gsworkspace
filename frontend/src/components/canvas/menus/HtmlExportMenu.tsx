@@ -1,15 +1,17 @@
 import { Z_MENU } from '../../../constants/canvas'
-import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip, ImageNameMap } from '../../../utils/htmlExport'
+import { exportHtmlWithImages, exportMarkdownWithImages, exportHtmlZip, exportMarkdownZip, ImageNameMap, ImageIdMap } from '../../../utils/htmlExport'
 
 interface HtmlExportMenuProps {
   position: { x: number; y: number }
   html: string
   label: string
   imageNameMap?: ImageNameMap
+  sceneId?: string
+  imageIdMap?: ImageIdMap
   onClose: () => void
 }
 
-export default function HtmlExportMenu({ position, html, label, imageNameMap, onClose }: HtmlExportMenuProps) {
+export default function HtmlExportMenu({ position, html, label, imageNameMap, sceneId, imageIdMap, onClose }: HtmlExportMenuProps) {
   const buttonStyle: React.CSSProperties = {
     display: 'block',
     width: '100%',
@@ -21,10 +23,10 @@ export default function HtmlExportMenu({ position, html, label, imageNameMap, on
     fontSize: 14,
   }
 
-  const handleExport = async (exportFn: (html: string, label: string, imageNameMap?: ImageNameMap) => Promise<void>) => {
+  const handleExport = async (exportFn: (html: string, label: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap) => Promise<void>) => {
     onClose()
     try {
-      await exportFn(html, label, imageNameMap)
+      await exportFn(html, label, imageNameMap, sceneId, imageIdMap)
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return
