@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Workspaceapp is an infinite canvas web application where users can:
+Gsworkspace is an infinite canvas web application where users can:
 - Drop text blocks, images, and videos onto an infinite canvas
 - Pan/zoom the canvas freely
 - canvas objects can be selected via click or marquee selection, translated and resized

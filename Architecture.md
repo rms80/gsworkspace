@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes key architectural decisions and patterns in the Workspaceapp codebase.
+This document describes key architectural decisions and patterns in the gsworkspace codebase.
 
 ## Media Storage (Images & Videos)
 
