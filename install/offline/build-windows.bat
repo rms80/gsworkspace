@@ -64,10 +64,15 @@ if %ERRORLEVEL% neq 0 (
 echo Frontend dependencies installed successfully.
 echo.
 
-:: Build the frontend to install/offline/dist
+:: Clean and build the frontend to install/offline/dist
 echo ============================================
 echo Building frontend for offline use...
 echo ============================================
+if exist "%PROJECT_ROOT%\install\offline\dist" (
+    echo Cleaning previous build...
+    rmdir /s /q "%PROJECT_ROOT%\install\offline\dist"
+)
+set VITE_OFFLINE_MODE=true
 call npm run build -- --outDir "%PROJECT_ROOT%\install\offline\dist" --emptyOutDir
 if %ERRORLEVEL% neq 0 (
     echo ERROR: Failed to build frontend.

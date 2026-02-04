@@ -47,7 +47,8 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
   }, [menuOpen])
 
   useEffect(() => {
-    if (isOffline) {
+    // Skip health checks entirely in offline mode
+    if (isOffline || storageMode === 'offline') {
       setServerStatus(null)
       setConfigWarning(null)
       return
@@ -77,7 +78,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
           }
 
           // Check if backend storage mode differs from frontend
-          if (data.storageMode && data.storageMode !== storageMode && storageMode !== 'offline') {
+          if (data.storageMode && data.storageMode !== storageMode) {
             console.log(`Storage mode mismatch detected: frontend=${storageMode}, backend=${data.storageMode}`)
             onStorageModeSync?.(data.storageMode)
           }

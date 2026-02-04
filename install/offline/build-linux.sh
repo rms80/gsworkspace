@@ -53,11 +53,15 @@ fi
 echo "Frontend dependencies installed successfully."
 echo
 
-# Build the frontend to install/offline/dist
+# Clean and build the frontend to install/offline/dist
 echo "============================================"
 echo "Building frontend for offline use..."
 echo "============================================"
-npm run build -- --outDir "$PROJECT_ROOT/install/offline/dist" --emptyOutDir
+if [ -d "$PROJECT_ROOT/install/offline/dist" ]; then
+    echo "Cleaning previous build..."
+    rm -rf "$PROJECT_ROOT/install/offline/dist"
+fi
+VITE_OFFLINE_MODE=true npm run build -- --outDir "$PROJECT_ROOT/install/offline/dist" --emptyOutDir
 if [ $? -ne 0 ]; then
     echo "ERROR: Failed to build frontend."
     exit 1

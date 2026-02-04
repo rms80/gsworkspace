@@ -99,6 +99,11 @@ export function useRemoteChangeDetection({
 
   // Handle tab visibility changes - check when tab becomes visible
   useEffect(() => {
+    // Don't set up visibility listener in offline mode
+    if (isOffline) {
+      return
+    }
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkForChanges()
@@ -109,7 +114,7 @@ export function useRemoteChangeDetection({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [checkForChanges])
+  }, [checkForChanges, isOffline])
 
   const clearConflict = useCallback(() => {
     setHasConflict(false)
