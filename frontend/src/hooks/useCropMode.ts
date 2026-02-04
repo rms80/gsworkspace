@@ -122,7 +122,9 @@ export function useCropMode({
 
     cropImage(sceneId, itemId, cropRect)
       .then((cropUrl) => {
-        onUpdateItem(itemId, { cropSrc: cropUrl })
+        // Add cache-busting timestamp to force browser to fetch fresh image
+        const cacheBustedUrl = `${cropUrl}${cropUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        onUpdateItem(itemId, { cropSrc: cacheBustedUrl })
       })
       .catch((err) => {
         console.error('Failed to create server-side crop, LLM canvas crop still works:', err)

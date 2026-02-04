@@ -18,18 +18,21 @@ const USER_FOLDER = 'version0'
 // Helper to extract storage key from a URL (S3 or local)
 // Checks both formats regardless of current mode since URLs depend on when the file was uploaded
 function getKeyFromUrl(url: string): string | null {
+  // Strip query parameters first (e.g., cache-busting ?t=12345)
+  const urlWithoutQuery = url.split('?')[0]
+
   // Check for local URLs first
   const localPrefix = '/api/local-files/'
-  if (url.startsWith(localPrefix)) {
-    return url.slice(localPrefix.length)
+  if (urlWithoutQuery.startsWith(localPrefix)) {
+    return urlWithoutQuery.slice(localPrefix.length)
   }
 
   // Check for S3 URLs
   const bucketName = process.env.S3_BUCKET_NAME
   const region = process.env.AWS_REGION || 'us-east-1'
   const s3Prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
-  if (url.startsWith(s3Prefix)) {
-    return url.slice(s3Prefix.length)
+  if (urlWithoutQuery.startsWith(s3Prefix)) {
+    return urlWithoutQuery.slice(s3Prefix.length)
   }
 
   return null

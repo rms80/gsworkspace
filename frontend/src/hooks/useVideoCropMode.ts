@@ -185,18 +185,27 @@ export function useVideoCropMode({
     // Show processing spinner and call server
     setProcessingVideoId(itemId)
 
-    // Pass cropRect only if it changed, speed only if not 1
-    const cropRectToSend = cropRectChanged ? cropRect : undefined
-    const speedToSend = speedChanged ? pendingSpeed : undefined
-    const removeAudioToSend = removeAudioChanged ? pendingRemoveAudio : undefined
-    const trimToSend = (trimChanged || trimStartChanged || trimEndChanged) && pendingTrim ? { start: pendingTrimStart, end: pendingTrimEnd } : undefined
+    // Send ALL current settings to server, not just what changed
+    // The server processes the video from scratch each time, so it needs complete state
+    // Check if cropRect represents an actual crop (not full image)
+    const isFullImage =
+      Math.abs(cropRect.x) < 1 &&
+      Math.abs(cropRect.y) < 1 &&
+      Math.abs(cropRect.width - origW) < 1 &&
+      Math.abs(cropRect.height - origH) < 1
+    const cropRectToSend = isFullImage ? undefined : cropRect
+    const speedToSend = pendingSpeed !== 1 ? pendingSpeed : undefined
+    const removeAudioToSend = pendingRemoveAudio || undefined
+    const trimToSend = pendingTrim ? { start: pendingTrimStart, end: pendingTrimEnd } : undefined
     const extensionToSend = getVideoExtension(videoItem.src)
 
     cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend, trimToSend, extensionToSend)
       .then(async () => {
         // Get the URL for the processed video using the content-url endpoint
         const cropUrl = await getContentUrl(sceneId, itemId, 'video', 'mp4', true)
-        onUpdateItem(itemId, { cropSrc: cropUrl })
+        // Add cache-busting timestamp to force browser to fetch fresh video
+        const cacheBustedUrl = `${cropUrl}${cropUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
+        onUpdateItem(itemId, { cropSrc: cacheBustedUrl })
         setProcessingVideoId(null)
       })
       .catch((err) => {

@@ -180,14 +180,18 @@ router.post('/crop-video', async (req, res) => {
 
     const effectiveSpeed = speed && speed !== 1 ? speed : null
 
-    // If both trim and speed are used, we need two passes to avoid timing issues
-    // Pass 1: crop + trim -> intermediate file
-    // Pass 2: speed change -> output file
-    // If no trim, we can do everything in one pass
-    const needsTwoPasses = hasTrim && effectiveSpeed
+    // Use multi-pass approach when we have trim combined with crop or speed
+    // This avoids synchronization issues between input seeking and video filters
+    // Pass 1: crop + trim -> intermediate file (or output if no speed)
+    // Pass 2: speed change -> output file (only if speed is needed)
+    const needsTrimPass = hasTrim && (effectiveSpeed || cropRect)
+    const needsSpeedPass = hasTrim && effectiveSpeed
 
-    if (needsTwoPasses) {
+    if (needsTrimPass) {
       // PASS 1: Crop and trim
+      // Output to intermediate if we need speed pass, otherwise directly to output
+      const pass1Output = needsSpeedPass ? intermediatePath : outputPath
+
       await new Promise<void>((resolve, reject) => {
         const cmd = ffmpeg(inputPath)
 
@@ -220,44 +224,46 @@ router.post('/crop-video', async (req, res) => {
           cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
         }
 
-        cmd.output(intermediatePath)
+        cmd.output(pass1Output)
           .on('end', () => resolve())
           .on('error', (err) => reject(err))
           .run()
       })
 
-      // PASS 2: Apply speed change
-      await new Promise<void>((resolve, reject) => {
-        const cmd = ffmpeg(intermediatePath)
+      // PASS 2: Apply speed change (only if needed)
+      if (needsSpeedPass) {
+        await new Promise<void>((resolve, reject) => {
+          const cmd = ffmpeg(intermediatePath)
 
-        // Video speed filter
-        cmd.videoFilter([`setpts=PTS/${effectiveSpeed}`])
+          // Video speed filter
+          cmd.videoFilter([`setpts=PTS/${effectiveSpeed}`])
 
-        // Audio speed filter (atempo only supports 0.5-2.0, chain for extreme values)
-        if (!removeAudio) {
-          const audioFilters: string[] = []
-          let remainingSpeed = effectiveSpeed
-          while (remainingSpeed > 2.0) {
-            audioFilters.push('atempo=2.0')
-            remainingSpeed /= 2.0
+          // Audio speed filter (atempo only supports 0.5-2.0, chain for extreme values)
+          if (!removeAudio) {
+            const audioFilters: string[] = []
+            let remainingSpeed = effectiveSpeed
+            while (remainingSpeed > 2.0) {
+              audioFilters.push('atempo=2.0')
+              remainingSpeed /= 2.0
+            }
+            while (remainingSpeed < 0.5) {
+              audioFilters.push('atempo=0.5')
+              remainingSpeed /= 0.5
+            }
+            audioFilters.push(`atempo=${remainingSpeed}`)
+            cmd.audioFilter(audioFilters)
+            cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
+          } else {
+            cmd.noAudio()
           }
-          while (remainingSpeed < 0.5) {
-            audioFilters.push('atempo=0.5')
-            remainingSpeed /= 0.5
-          }
-          audioFilters.push(`atempo=${remainingSpeed}`)
-          cmd.audioFilter(audioFilters)
-          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
-        } else {
-          cmd.noAudio()
-        }
 
-        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
-        cmd.output(outputPath)
-          .on('end', () => resolve())
-          .on('error', (err) => reject(err))
-          .run()
-      })
+          cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+          cmd.output(outputPath)
+            .on('end', () => resolve())
+            .on('error', (err) => reject(err))
+            .run()
+        })
+      }
     } else {
       // Single pass: no trim, or no speed change
       const videoFilters: string[] = []
