@@ -328,32 +328,3 @@ Various issues came up, we worked through. It is often trapped by bad decisions 
 made in the past, and I have to get an understanding and tell it how to back out that
 bad decision and replace it w/ a better design. It never does that itself, it always powers through
 regardless of how convoluted the code gets.
-
-
-
-
-
-
-----------------------
-rms80 website migration
-----------------------
-
-Asked CC to migrate my rms80.com website from squarespace to a new Astro site.
-
-Continuously shit the bed.
-
-Refuses to directly copy text, even when I beg it to copy it verbatim without any editing.
-Sometimes works but any large block of text is edited.
-
-Trying to copy large Research page with sections like Papers, Patents, Talks, Service.
-It has changed many of the paper citation blocks (but titles and authors seem to still be correct). 
-It insists on re-ordering things, drops parts of the lists, etc.
-
-As a workaround I used 
-https://euangoddard.github.io/clipboard2markdown/ to convert squarespace text+links to markdown,
-and then ask CC to convert that markdown back to the new format. This works better
-but it still wants to (eg) add in subsections, etc. 
-
-it was able to do some cool stuff, like go through my list of patents and check if each patent
-had been granted and update the description
-
