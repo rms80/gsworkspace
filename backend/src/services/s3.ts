@@ -17,6 +17,29 @@ const REGION = process.env.AWS_REGION || 'us-east-1'
 const hasCredentials =
   process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
 
+// Check if a value looks like a placeholder
+function isPlaceholder(value: string | undefined): boolean {
+  if (!value) return true
+  const lower = value.toLowerCase()
+  return lower.includes('your_') || lower.includes('your-') ||
+         lower === 'xxx' || lower === 'placeholder' ||
+         lower.startsWith('your ') || lower.endsWith('_here')
+}
+
+// Check if S3 is properly configured for online mode
+export function getS3ConfigStatus(): { configured: boolean; message?: string } {
+  if (!BUCKET_NAME || isPlaceholder(BUCKET_NAME)) {
+    return { configured: false, message: 'S3_BUCKET_NAME not configured' }
+  }
+  if (!process.env.AWS_ACCESS_KEY_ID || isPlaceholder(process.env.AWS_ACCESS_KEY_ID)) {
+    return { configured: false, message: 'AWS_ACCESS_KEY_ID not configured' }
+  }
+  if (!process.env.AWS_SECRET_ACCESS_KEY || isPlaceholder(process.env.AWS_SECRET_ACCESS_KEY)) {
+    return { configured: false, message: 'AWS_SECRET_ACCESS_KEY not configured' }
+  }
+  return { configured: true }
+}
+
 // For authenticated requests, use the SDK
 const s3Client = hasCredentials
   ? new S3Client({

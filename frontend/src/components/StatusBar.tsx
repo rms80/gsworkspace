@@ -24,8 +24,11 @@ const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg:
 
 export const STATUS_BAR_HEIGHT = 28
 
+type ServerStatus = 'connected' | 'misconfigured' | 'disconnected' | null
+
 function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange }: StatusBarProps) {
-  const [serverConnected, setServerConnected] = useState<boolean | null>(null)
+  const [serverStatus, setServerStatus] = useState<ServerStatus>(null)
+  const [configWarning, setConfigWarning] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -45,7 +48,8 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
 
   useEffect(() => {
     if (isOffline) {
-      setServerConnected(null)
+      setServerStatus(null)
+      setConfigWarning(null)
       return
     }
 
@@ -60,18 +64,30 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         })
         clearTimeout(timeoutId)
 
-        setServerConnected(response.ok)
-
-        // Check if backend storage mode differs from frontend
         if (response.ok) {
           const data = await response.json()
+
+          // Check server status
+          if (data.status === 'misconfigured') {
+            setServerStatus('misconfigured')
+            setConfigWarning(data.configWarning || 'Configuration issue')
+          } else {
+            setServerStatus('connected')
+            setConfigWarning(null)
+          }
+
+          // Check if backend storage mode differs from frontend
           if (data.storageMode && data.storageMode !== storageMode && storageMode !== 'offline') {
             console.log(`Storage mode mismatch detected: frontend=${storageMode}, backend=${data.storageMode}`)
             onStorageModeSync?.(data.storageMode)
           }
+        } else {
+          setServerStatus('disconnected')
+          setConfigWarning(null)
         }
       } catch {
-        setServerConnected(false)
+        setServerStatus('disconnected')
+        setConfigWarning(null)
       }
     }
 
@@ -203,19 +219,28 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
           </div>
         )}
       </div>
-      {!isOffline && serverConnected !== null && (
+      {!isOffline && serverStatus !== null && (
         <span
           style={{
             padding: '2px 8px',
-            backgroundColor: serverConnected ? '#166534' : '#dc2626',
+            backgroundColor:
+              serverStatus === 'connected' ? '#166534' :
+              serverStatus === 'misconfigured' ? '#d97706' :
+              '#dc2626',
             color: '#fff',
             borderRadius: 3,
             fontSize: 11,
             fontWeight: 500,
           }}
-          title={serverConnected ? 'Server is responding' : 'Server is not responding'}
+          title={
+            serverStatus === 'connected' ? 'Server is responding' :
+            serverStatus === 'misconfigured' ? configWarning || 'Configuration issue' :
+            'Server is not responding'
+          }
         >
-          {serverConnected ? 'Server OK' : 'No Connection'}
+          {serverStatus === 'connected' ? 'Server OK' :
+           serverStatus === 'misconfigured' ? 'Config Issue' :
+           'No Connection'}
         </span>
       )}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center' }}>

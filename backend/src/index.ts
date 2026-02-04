@@ -8,6 +8,7 @@ import localFilesRouter from './routes/localFiles.js'
 import configRouter from './routes/config.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
+import { getS3ConfigStatus } from './services/s3.js'
 
 dotenv.config()
 
@@ -24,7 +25,26 @@ app.use('/api/local-files', localFilesRouter)
 app.use('/api/config', configRouter)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', storageMode: getStorageMode() })
+  const storageMode = getStorageMode()
+  const response: {
+    status: 'ok' | 'misconfigured'
+    storageMode: string
+    configWarning?: string
+  } = {
+    status: 'ok',
+    storageMode,
+  }
+
+  // Check S3 configuration when in online mode
+  if (storageMode === 'online') {
+    const s3Status = getS3ConfigStatus()
+    if (!s3Status.configured) {
+      response.status = 'misconfigured'
+      response.configWarning = s3Status.message
+    }
+  }
+
+  res.json(response)
 })
 
 // Proxy endpoint for fetching images (avoids CORS issues)
