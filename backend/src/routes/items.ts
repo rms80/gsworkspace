@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { save, load, list, getPublicUrl, getStorageMode } from '../services/storage.js'
+import { save, load, getPublicUrl, getStorageMode } from '../services/storage.js'
 import { v4 as uuidv4 } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
@@ -21,44 +21,6 @@ const upload = multer({
 })
 
 const router = Router()
-
-// Save canvas state
-router.post('/save', async (req, res) => {
-  try {
-    const { items } = req.body
-    const id = uuidv4()
-    await save(`canvas/${id}.json`, JSON.stringify(items))
-    res.json({ success: true, id })
-  } catch (error) {
-    console.error('Error saving items:', error)
-    res.status(500).json({ error: 'Failed to save items' })
-  }
-})
-
-// Load canvas state
-router.get('/load/:id', async (req, res) => {
-  try {
-    const data = await load(`canvas/${req.params.id}.json`)
-    if (!data) {
-      return res.status(404).json({ error: 'Not found' })
-    }
-    res.json(JSON.parse(data))
-  } catch (error) {
-    console.error('Error loading items:', error)
-    res.status(500).json({ error: 'Failed to load items' })
-  }
-})
-
-// List all saved canvases
-router.get('/list', async (_req, res) => {
-  try {
-    const files = await list('canvas/')
-    res.json(files)
-  } catch (error) {
-    console.error('Error listing items:', error)
-    res.status(500).json({ error: 'Failed to list items' })
-  }
-})
 
 // Upload image
 router.post('/upload-image', async (req, res) => {
