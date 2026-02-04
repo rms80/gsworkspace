@@ -32,4 +32,4 @@ start /b cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:3000"
 
 :: Start static server
 cd /d "%SCRIPT_DIR%"
-call npx serve dist -l 3000
+call npx -y serve dist -l 3000

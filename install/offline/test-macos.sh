@@ -27,4 +27,4 @@ echo
 
 # Start static server
 cd "$SCRIPT_DIR"
-npx serve dist -l 3000
+npx -y serve dist -l 3000
