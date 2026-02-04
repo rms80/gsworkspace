@@ -83,6 +83,6 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 
 - Major work (eg a top-level TODO task) should always be done in a feature branch
 - Never merge a feature branch back into main automatically, always ask me for confirmation
-- Do not push the master branch unless I tell you to
+- Do not push the main branch unless I tell you to
 
 
