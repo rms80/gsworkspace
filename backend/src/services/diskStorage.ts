@@ -192,5 +192,12 @@ export async function initializeStorage(): Promise<void> {
   console.log(`Local storage initialized at: ${storagePath}`)
 }
 
+// Resolve a key to a validated file path (for streaming in routes)
+export function resolveFilePath(key: string): string {
+  const filePath = resolvePath(key)
+  validatePath(filePath)
+  return filePath
+}
+
 // Export storage path getter for use in routes
 export { getStoragePath }

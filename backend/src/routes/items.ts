@@ -264,7 +264,7 @@ router.post('/crop-video', async (req, res) => {
           cmd.videoFilter([`crop=${width}:${height}:${x}:${y}`])
         }
 
-        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
 
         if (removeAudio) {
           cmd.noAudio()
@@ -305,7 +305,7 @@ router.post('/crop-video', async (req, res) => {
             cmd.noAudio()
           }
 
-          cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+          cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
           cmd.output(outputPath)
             .on('end', () => resolve())
             .on('error', (err) => reject(err))
@@ -363,7 +363,7 @@ router.post('/crop-video', async (req, res) => {
           cmd.videoFilter(videoFilters)
         }
 
-        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23'])
+        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
 
         // Handle audio: remove, re-encode for speed change, or copy
         if (removeAudio) {
