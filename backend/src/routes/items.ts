@@ -14,6 +14,27 @@ if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic)
 }
 
+// Browser-native video formats that don't need transcoding
+const BROWSER_NATIVE_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'ogv'])
+
+/**
+ * Transcode a video file to MP4 (H.264/AAC) with faststart for streaming.
+ */
+function transcodeToMp4(inputPath: string, outputPath: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    ffmpeg(inputPath)
+      .outputOptions([
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+      ])
+      .output(outputPath)
+      .on('end', () => resolve())
+      .on('error', (err) => reject(err))
+      .run()
+  })
+}
+
 // Configure multer for multipart file uploads (500MB limit)
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -43,8 +64,18 @@ router.post('/upload-image', async (req, res) => {
   }
 })
 
-// Upload video (multipart/form-data)
+// Upload video (multipart/form-data) — transcodes non-browser-native formats to MP4
 router.post('/upload-video', upload.single('video'), async (req, res) => {
+  const tempDir = os.tmpdir()
+  const tempId = uuidv4()
+  const inputPath = path.join(tempDir, `upload-input-${tempId}`)
+  const outputPath = path.join(tempDir, `upload-output-${tempId}.mp4`)
+
+  const cleanup = () => {
+    try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath) } catch { /* ignore */ }
+  }
+
   try {
     const file = req.file
     if (!file) {
@@ -53,29 +84,46 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
 
     const id = uuidv4()
     const filename = file.originalname
-    const contentType = file.mimetype
 
-    // Determine file extension from content type or filename
+    // Determine file extension from filename
     let ext = 'mp4'
-    if (contentType) {
-      const match = contentType.match(/video\/(\w+)/)
-      if (match) ext = match[1]
-    } else if (filename) {
+    if (filename) {
       const dotIndex = filename.lastIndexOf('.')
-      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1)
+      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
     }
 
-    const key = `temp/videos/${id}-${filename || `video.${ext}`}`
+    const needsTranscode = !BROWSER_NATIVE_EXTENSIONS.has(ext)
 
-    console.log(`Uploading video: ${key}, size: ${file.buffer.length} bytes`)
-    await save(key, file.buffer, contentType || 'video/mp4')
-    console.log(`Video uploaded successfully: ${key}`)
+    if (needsTranscode) {
+      // Write buffer to temp file, transcode to MP4, then save
+      console.log(`Transcoding video (${ext} -> mp4): ${filename}, size: ${file.buffer.length} bytes`)
+      fs.writeFileSync(inputPath, file.buffer)
+      await transcodeToMp4(inputPath, outputPath)
 
-    // Return the appropriate URL based on storage mode
-    const url = getPublicUrl(key)
+      const transcodedBuffer = fs.readFileSync(outputPath)
+      // Save under .mp4 extension
+      const baseName = filename ? filename.replace(/\.[^/.]+$/, '') : 'video'
+      const key = `temp/videos/${id}-${baseName}.mp4`
+      await save(key, transcodedBuffer, 'video/mp4')
+      console.log(`Video transcoded and uploaded: ${key}`)
 
-    res.json({ success: true, url })
+      const url = getPublicUrl(key)
+      cleanup()
+      res.json({ success: true, url, transcoded: true })
+    } else {
+      // Browser-native format — save as-is
+      const contentType = file.mimetype
+      const key = `temp/videos/${id}-${filename || `video.${ext}`}`
+
+      console.log(`Uploading video: ${key}, size: ${file.buffer.length} bytes`)
+      await save(key, file.buffer, contentType || 'video/mp4')
+      console.log(`Video uploaded successfully: ${key}`)
+
+      const url = getPublicUrl(key)
+      res.json({ success: true, url })
+    }
   } catch (error) {
+    cleanup()
     console.error('Error uploading video:', error)
     res.status(500).json({ error: 'Failed to upload video' })
   }

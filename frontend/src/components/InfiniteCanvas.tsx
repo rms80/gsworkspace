@@ -4,7 +4,7 @@ import Konva from 'konva'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
-import { uploadVideo, getVideoDimensions } from '../api/videos'
+import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
@@ -387,17 +387,28 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
         offsetIndex++
       }
       // Handle video files (if video support is enabled)
-      else if (file.type.startsWith('video/') && config.features.videoSupport) {
+      else if (isVideoFile(file) && config.features.videoSupport) {
         try {
-          const dimensions = await getVideoDimensions(file)
+          let dimensions = await getVideoDimensionsSafe(file)
+
+          if (!dimensions && isOffline) {
+            console.warn('Skipping unsupported video format in offline mode:', file.name)
+            continue
+          }
+
           startOperation()
           console.log('Video upload started:', file.name, 'size:', (file.size / 1024 / 1024).toFixed(1) + 'MB')
-          const url = await uploadVideo(file, isOffline)
-          console.log('Video upload completed:', file.name)
+          const result = await uploadVideo(file, isOffline)
+          console.log('Video upload completed:', file.name, result.transcoded ? '(transcoded)' : '')
           endOperation()
-          // Extract filename without extension for the label
+
+          if (!dimensions) {
+            const urlDims = await getVideoDimensionsFromUrl(result.url)
+            dimensions = { ...urlDims, fileSize: file.size }
+          }
+
           const name = file.name.replace(/\.[^/.]+$/, '')
-          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
           offsetIndex++
         } catch (err) {
           console.error('Video upload failed:', file.name, err)

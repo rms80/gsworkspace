@@ -18,7 +18,7 @@ import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
-import { uploadVideo, getVideoDimensions } from './api/videos'
+import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
@@ -666,13 +666,26 @@ function App() {
 
   const handleAddVideo = useCallback(async (file: File) => {
     try {
-      const dimensions = await getVideoDimensions(file)
+      // Try to get dimensions client-side (fails for non-browser-native formats like MKV)
+      let dimensions = await getVideoDimensionsSafe(file)
+
+      if (!dimensions && isOffline) {
+        alert('This video format is not supported in offline mode. Please use MP4 or WebM.')
+        return
+      }
+
       startOperation()
-      const url = await uploadVideo(file, isOffline)
+      const result = await uploadVideo(file, isOffline)
       endOperation()
-      // Extract filename without extension for the label
+
+      // If client-side dims failed (e.g. MKV), get them from the transcoded URL
+      if (!dimensions) {
+        const urlDims = await getVideoDimensionsFromUrl(result.url)
+        dimensions = { ...urlDims, fileSize: file.size }
+      }
+
       const name = file.name.replace(/\.[^/.]+$/, '')
-      addVideoItem(url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+      addVideoItem(result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
     } catch (error) {
       endOperation()
       console.error('Failed to add video:', error)
@@ -1604,14 +1617,26 @@ function App() {
           }
           reader.readAsDataURL(file)
           offsetIndex++
-        } else if (file.type.startsWith('video/')) {
+        } else if (isVideoFile(file)) {
           try {
-            const dimensions = await getVideoDimensions(file)
+            let dimensions = await getVideoDimensionsSafe(file)
+
+            if (!dimensions && isOffline) {
+              console.warn('Skipping unsupported video format in offline mode:', file.name)
+              continue
+            }
+
             startOperation()
-            const url = await uploadVideo(file, isOffline)
+            const result = await uploadVideo(file, isOffline)
             endOperation()
+
+            if (!dimensions) {
+              const urlDims = await getVideoDimensionsFromUrl(result.url)
+              dimensions = { ...urlDims, fileSize: file.size }
+            }
+
             const name = file.name.replace(/\.[^/.]+$/, '')
-            addVideoAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+            addVideoAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
             offsetIndex++
           } catch (err) {
             console.error('Video upload failed:', err)
@@ -1722,7 +1747,7 @@ function App() {
           onDrop={async (e) => {
             e.preventDefault()
             const files = Array.from(e.dataTransfer.files)
-            const mediaFiles = files.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/'))
+            const mediaFiles = files.filter(f => f.type.startsWith('image/') || isVideoFile(f))
             if (mediaFiles.length === 0) return
 
             // Store files and create a new scene

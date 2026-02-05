@@ -110,7 +110,8 @@ export async function duplicateVideo(
   const file = new File([blob], `${videoItem.name || 'video'}.${ext}`, { type: `video/${ext}` })
 
   // Upload as new file
-  const url = await uploadVideo(file, isOffline)
+  const uploadResult = await uploadVideo(file, isOffline)
+  const url = uploadResult.url
 
   // Calculate the visual size the original is displayed at
   const scaleX = videoItem.scaleX ?? 1

@@ -3,21 +3,22 @@ const API_BASE = '/api/items'
 export interface UploadVideoResult {
   success: boolean
   url: string
+  transcoded?: boolean
 }
 
 /**
- * Upload a video file to storage and return the URL.
+ * Upload a video file to storage and return the result.
  * Uses multipart/form-data for efficient upload (no base64 overhead).
  * In offline mode, stores in IndexedDB and returns a blob URL.
+ * Non-browser-native formats (e.g. MKV) are transcoded to MP4 on the server.
  */
 export async function uploadVideo(
   file: File,
   isOffline: boolean = false
-): Promise<string> {
+): Promise<UploadVideoResult> {
   if (isOffline) {
     // In offline mode, create a blob URL for local playback
-    // The video will be stored with the scene data
-    return URL.createObjectURL(file)
+    return { success: true, url: URL.createObjectURL(file) }
   }
 
   const formData = new FormData()
@@ -34,7 +35,7 @@ export async function uploadVideo(
   }
 
   const result: UploadVideoResult = await response.json()
-  return result.url
+  return result
 }
 
 /**
@@ -96,4 +97,58 @@ export function getVideoDimensions(file: File): Promise<{ width: number; height:
 
     video.src = URL.createObjectURL(file)
   })
+}
+
+/**
+ * Try to get video dimensions from a file. Returns null on failure
+ * (e.g. for MKV or other formats the browser can't parse).
+ */
+export async function getVideoDimensionsSafe(file: File): Promise<{ width: number; height: number; fileSize: number } | null> {
+  try {
+    return await getVideoDimensions(file)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get video dimensions from a URL (works for transcoded MP4s with faststart).
+ * Creates a temporary <video> element and waits for loadedmetadata.
+ */
+export function getVideoDimensionsFromUrl(url: string): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.crossOrigin = 'anonymous'
+
+    video.onloadedmetadata = () => {
+      resolve({
+        width: video.videoWidth,
+        height: video.videoHeight,
+      })
+      video.src = ''
+    }
+
+    video.onerror = () => {
+      reject(new Error('Failed to load video metadata from URL'))
+      video.src = ''
+    }
+
+    video.src = url
+  })
+}
+
+/** Video extensions recognized beyond MIME type detection */
+const VIDEO_EXTENSIONS = new Set([
+  'mp4', 'webm', 'ogg', 'ogv', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'm4v', 'ts', 'mts',
+])
+
+/**
+ * Check if a file is a video, using both MIME type and file extension.
+ * Needed because .mkv files may get an empty or generic MIME type in some browsers.
+ */
+export function isVideoFile(file: File): boolean {
+  if (file.type.startsWith('video/')) return true
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  return ext ? VIDEO_EXTENSIONS.has(ext) : false
 }
