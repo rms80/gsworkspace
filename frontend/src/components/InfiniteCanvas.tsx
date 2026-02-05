@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Stage, Layer, Rect, Transformer } from 'react-konva'
+import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
-import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from '../api/videos'
+import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
@@ -66,9 +66,11 @@ interface InfiniteCanvasProps {
   onAddPrompt?: () => void
   onAddImageGenPrompt?: () => void
   onAddHtmlGenPrompt?: () => void
+  videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
+  onUploadVideoAt?: (file: File, x: number, y: number) => void
 }
 
-function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt }: InfiniteCanvasProps) {
+function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt }: InfiniteCanvasProps) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -388,32 +390,10 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       }
       // Handle video files (if video support is enabled)
       else if (isVideoFile(file) && config.features.videoSupport) {
-        try {
-          let dimensions = await getVideoDimensionsSafe(file)
-
-          if (!dimensions && isOffline) {
-            console.warn('Skipping unsupported video format in offline mode:', file.name)
-            continue
-          }
-
-          startOperation()
-          console.log('Video upload started:', file.name, 'size:', (file.size / 1024 / 1024).toFixed(1) + 'MB')
-          const result = await uploadVideo(file, isOffline)
-          console.log('Video upload completed:', file.name, result.transcoded ? '(transcoded)' : '')
-          endOperation()
-
-          if (!dimensions) {
-            const urlDims = await getVideoDimensionsFromUrl(result.url)
-            dimensions = { ...urlDims, fileSize: file.size }
-          }
-
-          const name = file.name.replace(/\.[^/.]+$/, '')
-          onAddVideoAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
-          offsetIndex++
-        } catch (err) {
-          console.error('Video upload failed:', file.name, err)
-          endOperation()
+        if (onUploadVideoAt) {
+          onUploadVideoAt(file, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20)
         }
+        offsetIndex++
       }
     }
   }
@@ -760,6 +740,30 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
           }
           return null
         })}
+
+        {/* Video upload placeholders */}
+        {videoPlaceholders?.map((ph) => (
+          <Group key={`placeholder-${ph.id}`} x={ph.x} y={ph.y}>
+            <Rect
+              width={ph.width}
+              height={ph.height}
+              fill="#1a1a2e"
+              stroke="#666"
+              strokeWidth={2}
+              dash={[10, 5]}
+              cornerRadius={4}
+            />
+            <Text
+              text={`Uploading ${ph.name}...`}
+              width={ph.width}
+              height={ph.height}
+              align="center"
+              verticalAlign="middle"
+              fill="#888"
+              fontSize={16}
+            />
+          </Group>
+        ))}
 
         {/* Selection rectangle */}
         {selectionRect && (

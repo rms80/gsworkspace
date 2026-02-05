@@ -67,6 +67,7 @@ function App() {
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
+  const [videoPlaceholders, setVideoPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
   const [isSaving, setIsSaving] = useState(false)
   const saveTimeoutRef = useRef<number | null>(null)
   const historySaveTimeoutRef = useRef<number | null>(null)
@@ -674,20 +675,36 @@ function App() {
         return
       }
 
+      // Show placeholder while uploading (assume 1920x1280, scaled to 640x427)
+      const placeholderId = uuidv4()
+      const placeholderW = 640
+      const placeholderH = 427
+      const placeholderX = 100 + Math.random() * 200
+      const placeholderY = 100 + Math.random() * 200
+      const placeholderName = file.name.replace(/\.[^/.]+$/, '')
+      setVideoPlaceholders(prev => [...prev, { id: placeholderId, x: placeholderX, y: placeholderY, width: placeholderW, height: placeholderH, name: placeholderName }])
+
       startOperation()
-      const result = await uploadVideo(file, isOffline)
-      endOperation()
+      try {
+        const result = await uploadVideo(file, isOffline)
+        endOperation()
 
-      // If client-side dims failed (e.g. MKV), get them from the transcoded URL
-      if (!dimensions) {
-        const urlDims = await getVideoDimensionsFromUrl(result.url)
-        dimensions = { ...urlDims, fileSize: file.size }
+        // If client-side dims failed (e.g. MKV), get them from the transcoded URL
+        if (!dimensions) {
+          const urlDims = await getVideoDimensionsFromUrl(result.url)
+          dimensions = { ...urlDims, fileSize: file.size }
+        }
+
+        const name = file.name.replace(/\.[^/.]+$/, '')
+        addVideoItem(result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+      } catch (error) {
+        endOperation()
+        console.error('Failed to add video:', error)
+        alert('Failed to add video. Please try again.')
+      } finally {
+        setVideoPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
       }
-
-      const name = file.name.replace(/\.[^/.]+$/, '')
-      addVideoItem(result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
     } catch (error) {
-      endOperation()
       console.error('Failed to add video:', error)
       alert('Failed to add video. Please try again.')
     }
@@ -826,6 +843,46 @@ function App() {
     },
     [updateActiveSceneItems, pushChange, items]
   )
+
+  // Upload a video at a specific canvas position (called by InfiniteCanvas drop handler)
+  const handleUploadVideoAt = useCallback(async (file: File, x: number, y: number) => {
+    try {
+      let dimensions = await getVideoDimensionsSafe(file)
+
+      if (!dimensions && isOffline) {
+        console.warn('Skipping unsupported video format in offline mode:', file.name)
+        return
+      }
+
+      // Show placeholder while uploading (assume 1920x1280, scaled to 640x427)
+      const placeholderId = uuidv4()
+      const placeholderW = 640
+      const placeholderH = 427
+      const placeholderName = file.name.replace(/\.[^/.]+$/, '')
+      setVideoPlaceholders(prev => [...prev, { id: placeholderId, x: x - placeholderW / 2, y: y - placeholderH / 2, width: placeholderW, height: placeholderH, name: placeholderName }])
+
+      startOperation()
+      try {
+        const result = await uploadVideo(file, isOffline)
+        endOperation()
+
+        if (!dimensions) {
+          const urlDims = await getVideoDimensionsFromUrl(result.url)
+          dimensions = { ...urlDims, fileSize: file.size }
+        }
+
+        const name = file.name.replace(/\.[^/.]+$/, '')
+        addVideoAt(x, y, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+      } catch (err) {
+        console.error('Video upload failed:', file.name, err)
+        endOperation()
+      } finally {
+        setVideoPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
+      }
+    } catch (error) {
+      console.error('Failed to process video:', error)
+    }
+  }, [isOffline, addVideoAt, startOperation, endOperation])
 
   const updateItem = useCallback(
     (id: string, changes: Partial<CanvasItem>) => {
@@ -1618,36 +1675,15 @@ function App() {
           reader.readAsDataURL(file)
           offsetIndex++
         } else if (isVideoFile(file)) {
-          try {
-            let dimensions = await getVideoDimensionsSafe(file)
-
-            if (!dimensions && isOffline) {
-              console.warn('Skipping unsupported video format in offline mode:', file.name)
-              continue
-            }
-
-            startOperation()
-            const result = await uploadVideo(file, isOffline)
-            endOperation()
-
-            if (!dimensions) {
-              const urlDims = await getVideoDimensionsFromUrl(result.url)
-              dimensions = { ...urlDims, fileSize: file.size }
-            }
-
-            const name = file.name.replace(/\.[^/.]+$/, '')
-            addVideoAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
-            offsetIndex++
-          } catch (err) {
-            console.error('Video upload failed:', err)
-            endOperation()
-          }
+          // Delegate to handleUploadVideoAt which handles placeholders
+          handleUploadVideoAt(file, centerX + offsetIndex * 20, centerY + offsetIndex * 20)
+          offsetIndex++
         }
       }
     }
 
     processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, addVideoAt])
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt])
 
   if (isLoading) {
     return (
@@ -1736,6 +1772,8 @@ function App() {
           onAddPrompt={addPromptItem}
           onAddImageGenPrompt={addImageGenPromptItem}
           onAddHtmlGenPrompt={addHtmlGenPromptItem}
+          videoPlaceholders={videoPlaceholders}
+          onUploadVideoAt={handleUploadVideoAt}
         />
       ) : (
         <div
