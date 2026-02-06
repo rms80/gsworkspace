@@ -9,7 +9,7 @@ import { LLMRequestItem, ResolvedContentItem, resolveImageData } from '../servic
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const router = Router()
+const router = Router({ mergeParams: true })
 
 /**
  * Extract a user-friendly error message from various error types
@@ -71,13 +71,13 @@ type LLMModel = ClaudeModel | GeminiModel
 /**
  * Resolve LLMRequestItems into ResolvedContentItems by loading image data from storage.
  */
-async function resolveItems(items: LLMRequestItem[]): Promise<ResolvedContentItem[]> {
+async function resolveItems(workspace: string, items: LLMRequestItem[]): Promise<ResolvedContentItem[]> {
   const resolved: ResolvedContentItem[] = []
   for (const item of items) {
     if (item.type === 'text') {
       resolved.push({ type: 'text', text: item.text })
     } else if (item.type === 'image' && item.id && item.sceneId) {
-      const imageData = await resolveImageData(item.sceneId, item.id, !!item.useEdited)
+      const imageData = await resolveImageData(workspace, item.sceneId, item.id, !!item.useEdited)
       if (imageData) {
         resolved.push({ type: 'image', imageData })
       } else {
@@ -105,7 +105,7 @@ router.post('/generate', async (req, res) => {
     }
 
     const selectedModel = model || 'claude-sonnet'
-    const resolved = await resolveItems(items)
+    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
     let result: string
 
     if (isGeminiModel(selectedModel)) {
@@ -133,7 +133,7 @@ router.post('/generate-image', async (req, res) => {
     }
 
     const selectedModel = model || 'gemini-imagen'
-    const resolved = await resolveItems(items)
+    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
     const images = await generateImageWithGemini(resolved, prompt, selectedModel)
 
     // Return array of generated images as data URLs

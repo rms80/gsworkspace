@@ -1,6 +1,7 @@
 import { validateUuid } from '../utils/validation'
+import { ACTIVE_WORKSPACE } from './workspace'
 
-const API_BASE = '/api/items'
+const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/items`
 
 export interface UploadImageResult {
   success: boolean

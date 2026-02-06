@@ -123,14 +123,27 @@ const uploadLimiter = rateLimit({
   message: { error: 'Too many upload requests. Please try again later.' },
 })
 
-app.use('/api/', generalLimiter)
-app.use('/api/llm', llmLimiter)
-app.use('/api/items/upload-image', uploadLimiter)
-app.use('/api/items/upload-video', uploadLimiter)
+// Workspace param validation middleware
+const WORKSPACE_RE = /^[a-zA-Z0-9_-]{1,64}$/
+app.param('workspace', (req, res, next, value) => {
+  if (!WORKSPACE_RE.test(value)) {
+    return res.status(400).json({ error: 'Invalid workspace name. Must be 1-64 alphanumeric, hyphen, or underscore characters.' })
+  }
+  next()
+})
 
-app.use('/api/items', itemsRouter)
-app.use('/api/llm', llmRouter)
-app.use('/api/scenes', scenesRouter)
+// Rate limiters on workspace-prefixed paths
+app.use('/api/w/:workspace/', generalLimiter)
+app.use('/api/w/:workspace/llm', llmLimiter)
+app.use('/api/w/:workspace/items/upload-image', uploadLimiter)
+app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
+
+// App routers mounted under workspace prefix
+app.use('/api/w/:workspace/items', itemsRouter)
+app.use('/api/w/:workspace/llm', llmRouter)
+app.use('/api/w/:workspace/scenes', scenesRouter)
+
+// Non-workspace routes
 app.use('/api/local-files', localFilesRouter)
 app.use('/api/config', configRouter)
 

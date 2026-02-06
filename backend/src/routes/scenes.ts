@@ -11,7 +11,7 @@ import {
   getStorageMode,
 } from '../services/storage.js'
 
-const router = Router()
+const router = Router({ mergeParams: true })
 
 // Validate :id param is a valid UUID on all routes
 router.param('id', (req, res, next, id) => {
@@ -20,8 +20,6 @@ router.param('id', (req, res, next, id) => {
   }
   next()
 })
-
-const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
 
 /**
  * Validate that a URL is safe to fetch from.
@@ -177,7 +175,7 @@ interface StoredScene {
 router.get('/:id/timestamp', async (req, res) => {
   try {
     const { id } = req.params
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     // Load scene.json to get modifiedAt
     const sceneJson = await load(`${sceneFolder}/scene.json`)
@@ -212,7 +210,7 @@ router.get('/:id/content-url', (req, res) => {
       return res.status(400).json({ error: 'contentId and contentType are required' })
     }
 
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
     let filename: string
 
     // Determine the file extension
@@ -246,7 +244,7 @@ router.get('/:id/content-data', async (req, res) => {
       return res.status(400).json({ error: 'contentId and contentType are required' })
     }
 
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     // Define possible extensions for each content type
     const extensions: Record<string, string[]> = {
@@ -310,7 +308,7 @@ router.post('/:id', async (req, res) => {
     const { id } = req.params
     const { name, createdAt, modifiedAt, items } = req.body
 
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
     const storedItems: StoredItem[] = []
     const stagingKeysToDelete: string[] = [] // Track staging files to clean up
 
@@ -651,7 +649,7 @@ router.post('/:id', async (req, res) => {
 router.get('/:id/raw', async (req, res) => {
   try {
     const { id } = req.params
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     const sceneJson = await load(`${sceneFolder}/scene.json`)
     if (!sceneJson) {
@@ -669,7 +667,7 @@ router.get('/:id/raw', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     // Load scene.json
     const sceneJson = await load(`${sceneFolder}/scene.json`)
@@ -823,10 +821,10 @@ router.get('/:id', async (req, res) => {
 })
 
 // List all scenes (returns metadata only)
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
   try {
     // List all scene.json files
-    const allKeys = await list(`${USER_FOLDER}/`)
+    const allKeys = await list(`${(req.params as Record<string, string>).workspace}/`)
     const sceneJsonKeys = allKeys.filter((key) => key.endsWith('/scene.json'))
 
     // Load metadata for each scene
@@ -861,7 +859,7 @@ router.get('/', async (_req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     // List all files in the scene folder
     const allKeys = await list(`${sceneFolder}/`)
@@ -880,7 +878,7 @@ router.delete('/:id', async (req, res) => {
 router.get('/:id/history', async (req, res) => {
   try {
     const { id } = req.params
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     const historyJson = await load(`${sceneFolder}/history.json`)
     if (!historyJson) {
@@ -906,7 +904,7 @@ router.post('/:id/history', async (req, res) => {
   try {
     const { id } = req.params
     const { records, currentIndex } = req.body
-    const sceneFolder = `${USER_FOLDER}/${id}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
 
     await save(
       `${sceneFolder}/history.json`,

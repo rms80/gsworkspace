@@ -1,7 +1,5 @@
 import { loadAsBuffer } from './storage.js'
 
-const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
-
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 
 const MIME_TYPES: Record<string, string> = {
@@ -34,11 +32,12 @@ export interface ResolvedContentItem {
  * When useEdited is true, looks for the .crop.{ext} version first.
  */
 export async function resolveImageData(
+  workspace: string,
   sceneId: string,
   itemId: string,
   useEdited: boolean
 ): Promise<{ base64: string; mimeType: string } | null> {
-  const sceneFolder = `${USER_FOLDER}/${sceneId}`
+  const sceneFolder = `${workspace}/${sceneId}`
 
   // If useEdited, try cropped versions first
   if (useEdited) {

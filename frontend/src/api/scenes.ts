@@ -17,8 +17,9 @@ export {
 export type { SceneMetadata, SceneTimestamp, StorageMode } from './storage'
 
 import { validateUuid } from '../utils/validation'
+import { ACTIVE_WORKSPACE } from './workspace'
 
-const API_BASE = '/api/scenes'
+const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/scenes`
 
 /**
  * Get the URL for a content item in a scene.

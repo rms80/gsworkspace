@@ -2,8 +2,9 @@ import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
 import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
 import { validateUuid } from '../../utils/validation'
+import { ACTIVE_WORKSPACE } from '../workspace'
 
-const API_BASE = '/api/scenes'
+const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/scenes`
 
 export class ApiStorageProvider implements StorageProvider {
   async saveScene(scene: Scene): Promise<void> {

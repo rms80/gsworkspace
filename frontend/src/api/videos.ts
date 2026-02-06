@@ -1,4 +1,6 @@
-const API_BASE = '/api/items'
+import { ACTIVE_WORKSPACE } from './workspace'
+
+const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/items`
 
 export interface UploadVideoResult {
   success: boolean

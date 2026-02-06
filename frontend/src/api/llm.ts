@@ -5,7 +5,9 @@ import { getAnthropicApiKey, getGoogleApiKey } from '../utils/apiKeyStorage'
 import { generateTextWithAnthropic, generateHtmlWithAnthropic } from './anthropicClient'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini } from './googleClient'
 
-const API_BASE = '/api/llm'
+import { ACTIVE_WORKSPACE } from './workspace'
+
+const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/llm`
 
 function isClaudeModel(model: string): boolean {
   return model.startsWith('claude-')

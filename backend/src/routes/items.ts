@@ -41,7 +41,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }
 })
 
-const router = Router()
+const router = Router({ mergeParams: true })
 
 // Upload image
 router.post('/upload-image', async (req, res) => {
@@ -62,7 +62,7 @@ router.post('/upload-image', async (req, res) => {
     }
 
     // Save directly to scene folder with itemId
-    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const key = `${sceneFolder}/${itemId}.${ext}`
 
     // imageData is base64, convert to buffer
@@ -107,7 +107,7 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
       return res.status(400).json({ error: 'Invalid scene ID format' })
     }
 
-    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const filename = file.originalname
 
     // Determine file extension from filename
@@ -168,7 +168,7 @@ router.post('/crop-image', async (req, res) => {
     const { x, y, width, height } = cropRect
 
     // Construct the source image key from scene and image IDs
-    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
 
     // Try common image extensions
     const extensions = ['png', 'jpg', 'jpeg', 'gif', 'webp']
@@ -202,9 +202,6 @@ router.post('/crop-image', async (req, res) => {
   }
 })
 
-// User folder - must match scenes.ts
-const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
-
 // Process a video (crop, speed change, trim) and save
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
@@ -234,7 +231,7 @@ router.post('/crop-video', async (req, res) => {
     // Construct the source video URL from scene and video IDs
     // Use provided extension or default to mp4
     const sourceExt = extension || 'mp4'
-    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const sourceKey = `${sceneFolder}/${videoId}.${sourceExt}`
     let sourceUrl = getPublicUrl(sourceKey)
 
