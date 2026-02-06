@@ -53,7 +53,7 @@ app.use(express.json({ limit: '50mb' }))
 app.use(cookieSession({
   name: 'gsworkspace_session',
   keys: [SESSION_SECRET],
-  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+  maxAge: parseInt(process.env.SESSION_MAX_AGE_DAYS || '7') * 24 * 60 * 60 * 1000,
   httpOnly: true,
   sameSite: 'lax',
 }))

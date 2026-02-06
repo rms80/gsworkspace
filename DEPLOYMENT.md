@@ -93,6 +93,7 @@ SESSION_SECRET=a_long_random_string
 
 - **`AUTH_PASSWORD`** — The login password. If unset or empty, auth is disabled entirely (useful for local dev).
 - **`SESSION_SECRET`** — Signs the session cookie. If unset, a random secret is generated on each startup (meaning sessions are invalidated on restart). Set this to a stable value in production.
+- **`SESSION_MAX_AGE_DAYS`** — How long the session cookie stays valid, in days. Defaults to `7`. Set to `1` for stricter environments or `30` for convenience.
 
 When auth is enabled:
 - The frontend shows a login screen before loading the app
