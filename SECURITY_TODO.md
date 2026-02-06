@@ -1,6 +1,23 @@
 # Security Audit TODO
 
-Security audit performed on 2026-01-23. Issues organized by severity with remediation plans.
+Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organized by severity with remediation plans.
+
+---
+
+## Changes Since Last Audit
+
+### Fixed Issues (Removed)
+- **~~SSRF in Image Proxy Endpoint~~** - The `/api/proxy-image` endpoint has been removed entirely.
+- **~~Iframe Allows Script Execution~~** - `allow-scripts` removed from iframe sandbox (commit 702e742). Now uses `sandbox="allow-same-origin"` only.
+- **~~Path Traversal in S3 File References~~** - URL validation added via `validateItemSrcUrl()` in `scenes.ts` (commit a4e41d5). Only allows data URLs, S3 URLs from the configured bucket, and local storage URLs.
+- **~~Unsafe Filename in S3 Key~~** - Upload endpoints now use `itemId.ext` for S3 keys instead of raw filenames. Extension is extracted safely.
+- **~~No Content-Type Validation in Proxy~~** - Proxy endpoint removed; no longer applicable.
+
+### New Issues Found
+- SSRF via LLM services (Gemini/Claude fetch unvalidated URLs) - #5
+- Video fetch without size limits in items.ts - #8
+- API keys stored with weak obfuscation in localStorage - #13
+- Error messages in items.ts leak internal URLs - added to #11
 
 ---
 
@@ -8,55 +25,18 @@ Security audit performed on 2026-01-23. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| Critical | 3 | 0 | 3 |
-| High | 7 | 3 | 10 |
-| Medium | 6 | 5 | 11 |
-| Low | 4 | 3 | 7 |
-| **Total** | **20** | **11** | **31** |
+| Critical | 1 | 0 | 1 |
+| High | 5 | 2 | 7 |
+| Medium | 5 | 3 | 8 |
+| Low | 3 | 3 | 6 |
+| **Total** | **14** | **8** | **22** |
 
 ---
 
 ## CRITICAL
 
-### 1. [Backend] SSRF in Image Proxy Endpoint
-**File:** `backend/src/index.ts:25-46`
-
-**Issue:** The `/api/proxy-image` endpoint accepts arbitrary URLs and fetches them server-side without validation. Can access internal resources, AWS metadata, local files.
-
-```typescript
-// Current (vulnerable)
-const url = req.query.url as string
-const response = await fetch(url)
-```
-
-**Attack vectors:**
-- `GET /api/proxy-image?url=http://169.254.169.254/latest/meta-data` (AWS credentials)
-- `GET /api/proxy-image?url=http://localhost:4000/api/scenes` (internal API)
-- `GET /api/proxy-image?url=file:///etc/passwd` (local files)
-
-**Remediation:**
-- [ ] Implement URL allowlist (only allow S3 bucket domain)
-- [ ] Validate URL scheme is https only
-- [ ] Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x, 169.254.x)
-- [ ] Add request timeout
-- [ ] Validate Content-Type is image/*
-
-```typescript
-// Fixed
-const ALLOWED_HOSTS = [process.env.S3_BUCKET_NAME + '.s3.amazonaws.com'];
-const parsedUrl = new URL(url);
-if (!ALLOWED_HOSTS.includes(parsedUrl.host)) {
-  return res.status(403).json({ error: 'Domain not allowed' });
-}
-if (parsedUrl.protocol !== 'https:') {
-  return res.status(403).json({ error: 'HTTPS required' });
-}
-```
-
----
-
-### 2. [Backend] Overly Permissive CORS
-**File:** `backend/src/index.ts:13`
+### 1. [Backend] Overly Permissive CORS
+**File:** `backend/src/index.ts:18`
 
 **Issue:** CORS allows requests from any origin.
 
@@ -65,11 +45,12 @@ if (parsedUrl.protocol !== 'https:') {
 app.use(cors())
 ```
 
+**Attack vector:** Any website can make cross-origin API requests to the backend, enabling data exfiltration, unauthorized scene manipulation, and triggering expensive LLM calls from malicious third-party pages.
+
 **Remediation:**
 - [ ] Restrict to specific origins
 
 ```typescript
-// Fixed
 app.use(cors({
   origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -79,46 +60,63 @@ app.use(cors({
 
 ---
 
-### 3. [Backend] Path Traversal in S3 File References
-**File:** `backend/src/routes/scenes.ts:210, 223, 238, 254, 270, 286`
+## HIGH
 
-**Issue:** `item.file` from request body used directly in S3 paths without sanitization.
+### 2. [Backend] Missing Authentication/Authorization & Rate Limiting
+**File:** `backend/src/index.ts`
 
-```typescript
-// Current (vulnerable)
-const text = await loadFromS3(`${sceneFolder}/${item.file}`)
-```
-
-**Attack vector:**
-```json
-{ "items": [{ "type": "text", "file": "../../../other-user/secret.txt" }] }
-```
+**Issue:** All endpoints are publicly accessible with no user isolation and no rate limiting. This is especially dangerous for:
+- `POST /api/llm/generate` - triggers expensive LLM API calls
+- `POST /api/items/upload-video` - accepts up to 500MB uploads
+- `DELETE /api/scenes/:id` - can delete any scene
 
 **Remediation:**
-- [ ] Validate `item.file` contains no path traversal sequences
-- [ ] Ensure file path stays within scene folder
+- [ ] Implement authentication (JWT, OAuth, or API keys)
+- [ ] Add per-user data isolation
+- [ ] Implement rate limiting
 
 ```typescript
-// Fixed
-import path from 'path';
+import rateLimit from 'express-rate-limit';
 
-function sanitizeFilePath(file: string): string {
-  const normalized = path.normalize(file).replace(/^(\.\.(\/|\\|$))+/, '');
-  if (normalized.includes('..') || path.isAbsolute(normalized)) {
-    throw new Error('Invalid file path');
-  }
-  return normalized;
-}
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+});
+app.use('/api/', limiter);
+
+// Stricter limit for LLM endpoint
+const llmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+});
+app.use('/api/llm/', llmLimiter);
 ```
 
 ---
 
-## HIGH
+### 3. [Backend] Large Payload DoS Risk
+**File:** `backend/src/index.ts:19`
+
+**Issue:** 50MB JSON limit without rate limiting enables memory exhaustion DoS.
+
+```typescript
+app.use(express.json({ limit: '50mb' }))
+```
+
+**Remediation:**
+- [ ] Reduce payload limit to 10MB
+- [ ] Add rate limiting (see #2)
+
+```typescript
+app.use(express.json({ limit: '10mb' }))
+```
+
+---
 
 ### 4. [Backend] Missing Input Validation on Scene ID
-**File:** `backend/src/routes/scenes.ts:69, 195, 347, 366, 385`
+**File:** `backend/src/routes/scenes.ts` (multiple endpoints)
 
-**Issue:** Scene IDs used in S3 paths without UUID format validation.
+**Issue:** Scene IDs used in S3/storage paths without UUID format validation. Could allow path manipulation.
 
 **Remediation:**
 - [ ] Validate scene ID is valid UUID format
@@ -133,64 +131,109 @@ if (!uuidValidate(id)) {
 
 ---
 
-### 5. [Backend] Weak Model Parameter Validation
-**File:** `backend/src/routes/llm.ts:27-52`
+### 5. [Backend] SSRF via LLM Services (NEW)
+**Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/services/claude.ts:57`
 
-**Issue:** Model validation only checks prefix, allowing arbitrary model strings.
-
-**Remediation:**
-- [ ] Use explicit allowlist of valid models
+**Issue:** When processing image items for LLM calls, `item.src` URLs are fetched (Gemini) or passed to the API (Claude) without validation. While scene save now validates URLs, the LLM endpoint receives items directly from the frontend and does NOT run them through `validateItemSrcUrl()`.
 
 ```typescript
-const ALLOWED_MODELS = ['claude-sonnet', 'claude-opus', 'gemini-1.5-flash', 'gemini-1.5-pro'];
-if (!ALLOWED_MODELS.includes(model)) {
-  return res.status(400).json({ error: 'Invalid model' });
+// gemini.ts:69 - fetches arbitrary URLs
+const response = await fetch(item.src)
+
+// claude.ts:57 - passes arbitrary URL to Claude API
+source: { type: 'url', url: item.src }
+```
+
+**Attack vectors:**
+- `item.src = "http://169.254.169.254/latest/meta-data/"` (AWS credentials via Gemini fetch)
+- `item.src = "http://localhost:4000/api/scenes"` (internal API access)
+
+**Remediation:**
+- [ ] Reuse `validateItemSrcUrl()` in LLM route before passing items to services
+- [ ] Add URL validation directly in Gemini/Claude services as defense-in-depth
+
+---
+
+### 6. [Frontend] No HTML Sanitization for LLM Output
+**File:** `frontend/src/App.tsx` (generateHtml flow) and `frontend/src/components/InfiniteCanvas.tsx:896-897`
+
+**Issue:** LLM-generated HTML is placed directly into `iframe srcDoc` without sanitization. While `allow-scripts` has been removed from the sandbox, unsanitized HTML can still enable:
+- CSS-based content exfiltration
+- Form-based credential harvesting (phishing forms inside canvas)
+- SVG-based attacks in certain sandbox configurations
+
+```typescript
+<iframe srcDoc={item.html} sandbox="allow-same-origin" ... />
+```
+
+**Remediation:**
+- [ ] Install and use DOMPurify to sanitize before rendering
+
+```bash
+npm install dompurify @types/dompurify
+```
+
+```typescript
+import DOMPurify from 'dompurify';
+const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
+  FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+});
+```
+
+---
+
+### 7. [Frontend] Unescaped RegExp Constructor
+**File:** `frontend/src/utils/spatialJson.ts:80`
+
+**Issue:** Image IDs used directly in RegExp constructor without escaping special characters.
+
+```typescript
+result = result.replace(new RegExp(imageId, 'g'), src)
+```
+
+**Note:** `htmlExport.ts` has similar RegExp usage but correctly escapes input (line 164). `spatialJson.ts` does not.
+
+**Remediation:**
+- [ ] Use string split/join instead of RegExp
+
+```typescript
+result = result.split(imageId).join(src)
+```
+
+---
+
+### 8. [Backend] No Response Size Limits on Fetch (UPDATED)
+**Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:241`
+
+**Issue:** Multiple fetch calls download remote content into memory without size limits:
+- Gemini service fetches images with no size check
+- Video processing endpoint (`items.ts:241`) downloads entire videos into memory with `response.arrayBuffer()` before writing to disk
+
+**Attack vector:** Providing URLs to very large files can cause OOM crashes.
+
+**Remediation:**
+- [ ] Check `Content-Length` header before downloading
+- [ ] Implement streaming with size cutoff for large files
+- [ ] Add fetch timeout
+
+```typescript
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_VIDEO_SIZE = 500 * 1024 * 1024; // 500MB
+const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
+const contentLength = parseInt(response.headers.get('content-length') || '0');
+if (contentLength > MAX_SIZE) {
+  throw new Error('Response too large');
 }
 ```
 
 ---
 
-### 6. [Backend] Missing Authentication/Authorization
-**File:** `backend/src/index.ts`
+## MEDIUM
 
-**Issue:** All endpoints are publicly accessible. No user isolation.
+### 9. [Backend] Unsafe JSON Parsing
+**File:** `backend/src/routes/scenes.ts:180, 667, 819, 868`
 
-**Remediation:**
-- [ ] Implement authentication (JWT, OAuth, or API keys)
-- [ ] Add per-user data isolation
-- [ ] Implement rate limiting
-
-```typescript
-import rateLimit from 'express-rate-limit';
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use('/api/', limiter);
-```
-
----
-
-### 7. [Backend] Large Payload DoS Risk
-**File:** `backend/src/index.ts:14`
-
-**Issue:** 50MB JSON limit without rate limiting enables DoS.
-
-**Remediation:**
-- [ ] Reduce payload limit to reasonable size (5-10MB)
-- [ ] Add rate limiting (see #6)
-
-```typescript
-app.use(express.json({ limit: '10mb' }))
-```
-
----
-
-### 8. [Backend] Unsafe JSON Parsing
-**File:** `backend/src/routes/scenes.ts:204, 239, 255, 271, 326, 375`
-
-**Issue:** `JSON.parse()` without try-catch can crash on malformed data.
+**Issue:** `JSON.parse()` without try-catch can crash on malformed stored data.
 
 **Remediation:**
 - [ ] Wrap all JSON.parse calls in try-catch
@@ -207,158 +250,44 @@ try {
 
 ---
 
-### 9. [Backend] Unsafe Filename in S3 Key
-**File:** `backend/src/routes/items.ts:48-54`
+### 10. [Backend] Weak Model Parameter Validation
+**File:** `backend/src/routes/llm.ts:92, 119, 152`
 
-**Issue:** `filename` parameter used unsanitized in S3 key.
-
-**Remediation:**
-- [ ] Sanitize filename, remove path separators
-- [ ] Use only the basename
-
-```typescript
-const safeName = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
-const key = `images/${id}-${safeName}`;
-```
-
----
-
-### 10. [Frontend] Iframe Allows Script Execution
-**File:** `frontend/src/components/InfiniteCanvas.tsx:1873-1886`
-
-**Issue:** Iframe sandbox allows scripts + same-origin, enabling LLM-generated HTML to execute arbitrary JS with full API access.
-
-```typescript
-// Current (vulnerable)
-sandbox="allow-same-origin allow-scripts"
-```
+**Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist. Type guards exist but don't prevent arbitrary model strings from reaching the API.
 
 **Remediation:**
-- [ ] Remove `allow-scripts` or implement strict CSP
-- [ ] Consider removing `allow-same-origin` if scripts not needed
+- [ ] Use explicit allowlist of valid model identifiers
 
 ```typescript
-// Fixed - if scripts needed, add CSP
-sandbox="allow-forms allow-popups"
-// OR with strict CSP headers on backend
-```
-
----
-
-### 11. [Frontend] No HTML Sanitization for LLM Output
-**File:** `frontend/src/App.tsx:660-674`
-
-**Issue:** LLM-generated HTML rendered without sanitization.
-
-**Remediation:**
-- [ ] Install and use DOMPurify
-
-```bash
-npm install dompurify @types/dompurify
-```
-
-```typescript
-import DOMPurify from 'dompurify';
-
-const htmlContent = stripCodeFences(result).trim();
-const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
-  ALLOWED_TAGS: ['h1', 'h2', 'h3', 'p', 'div', 'span', 'img', 'a', 'button',
-                 'form', 'input', 'textarea', 'style', 'ul', 'ol', 'li', 'table',
-                 'tr', 'td', 'th', 'thead', 'tbody'],
-  ALLOWED_ATTR: ['class', 'id', 'style', 'src', 'alt', 'href', 'name',
-                 'placeholder', 'type', 'value'],
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-});
-```
-
----
-
-### 12. [Frontend] Unescaped RegExp Constructor
-**File:** `frontend/src/utils/spatialJson.ts:80`
-
-**Issue:** User data used in RegExp without escaping.
-
-```typescript
-// Current (vulnerable)
-result = result.replace(new RegExp(imageId, 'g'), src)
-```
-
-**Remediation:**
-- [ ] Escape special regex characters or use string split/join
-
-```typescript
-// Fixed
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const ALLOWED_MODELS = ['claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro', 'gemini-imagen'];
+if (!ALLOWED_MODELS.includes(model)) {
+  return res.status(400).json({ error: 'Invalid model' });
 }
-result = result.replace(new RegExp(escapeRegExp(imageId), 'g'), src);
-
-// OR use split/join (simpler, no regex)
-result = result.split(imageId).join(src);
 ```
 
 ---
 
-## MEDIUM
+### 11. [Backend] Error Messages Leak Infrastructure Details
+**Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:243`
 
-### 13. [Backend] Error Messages Leak Infrastructure Details
-**File:** `backend/src/services/s3.ts:64, 92, 112, 140`
+**Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
 
-**Issue:** Error messages reveal S3 usage and status codes.
+```typescript
+// s3.ts
+throw new Error(`S3 PUT failed: ${response.status} ${response.statusText}`)
+
+// items.ts:243
+return res.status(400).json({ error: `Failed to fetch source video: ${sourceUrl}` })
+```
 
 **Remediation:**
 - [ ] Return generic error messages to clients
 - [ ] Log detailed errors server-side only
 
-```typescript
-// Log detailed error internally
-console.error(`S3 PUT failed: ${response.status}`, { bucket, key });
-// Return generic message to client
-throw new Error('Storage operation failed');
-```
-
 ---
 
-### 14. [Backend] No Content-Type Validation in Proxy
-**File:** `backend/src/index.ts:37-38`
-
-**Issue:** Proxy trusts remote Content-Type header, could serve malicious content.
-
-**Remediation:**
-- [ ] Validate Content-Type is image/*
-- [ ] Set explicit safe Content-Type
-
-```typescript
-const contentType = response.headers.get('content-type') || '';
-if (!contentType.startsWith('image/')) {
-  return res.status(400).json({ error: 'Invalid content type' });
-}
-res.setHeader('Content-Type', contentType);
-```
-
----
-
-### 15. [Backend] No Response Size Limits on Fetch
-**File:** `backend/src/index.ts:32`, `backend/src/services/gemini.ts:69, 134`
-
-**Issue:** Fetching remote URLs without size limits enables OOM attacks.
-
-**Remediation:**
-- [ ] Implement response size limits
-
-```typescript
-const MAX_SIZE = 10 * 1024 * 1024; // 10MB
-const response = await fetch(url);
-const contentLength = parseInt(response.headers.get('content-length') || '0');
-if (contentLength > MAX_SIZE) {
-  throw new Error('Response too large');
-}
-```
-
----
-
-### 16. [Backend] Missing Security Headers
-**Issue:** No security headers configured.
+### 12. [Backend] Missing Security Headers
+**Issue:** No security headers configured (no X-Content-Type-Options, X-Frame-Options, CSP, HSTS, etc.).
 
 **Remediation:**
 - [ ] Add helmet middleware
@@ -374,41 +303,57 @@ app.use(helmet());
 
 ---
 
-### 17. [Frontend] Missing CSRF Protection
-**File:** `frontend/src/api/scenes.ts`
+### 13. [Frontend] API Keys Stored with Weak Obfuscation (NEW)
+**File:** `frontend/src/utils/apiKeyStorage.ts`
 
-**Issue:** State-changing requests lack CSRF tokens.
+**Issue:** API keys for Anthropic/Google are stored in `localStorage` with basic character rotation + base64 encoding (not encryption). Anyone with browser access or a malicious extension can retrieve the keys.
+
+**Mitigating factor:** The code documents this is obfuscation, not encryption.
 
 **Remediation:**
-- [ ] Implement CSRF token flow (backend generates, frontend sends in header)
+- [ ] Consider using `sessionStorage` instead (cleared on tab close)
+- [ ] Add clear UI warning when storing keys
+- [ ] Consider requiring re-entry per session rather than persisting
 
 ---
 
-### 18. [Frontend] No Data URL Size Validation
-**File:** `frontend/src/components/InfiniteCanvas.tsx:130-137`
+### 14. [Frontend] No Data URL Size Validation
+**File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
 
-**Issue:** Large data URLs can cause memory exhaustion.
+**Issue:** Large images converted to data URLs can cause memory exhaustion. While image scaling exists, the data URL is created before scaling checks.
 
 **Remediation:**
-- [ ] Add size limit before loading images
+- [ ] Validate file size before converting to data URL
+- [ ] Add maximum file size check (e.g., 10MB)
 
 ```typescript
-const MAX_DATA_URL_SIZE = 10 * 1024 * 1024; // 10MB
-if (item.src.startsWith('data:') && item.src.length > MAX_DATA_URL_SIZE) {
-  console.error('Image data URL too large');
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+if (file.size > MAX_IMAGE_SIZE) {
+  alert('Image too large. Maximum size is 10MB.');
   return;
 }
 ```
 
 ---
 
-### 19. [Frontend] Vulnerable Vite/esbuild Version
-**File:** `frontend/package.json`
+### 15. [Frontend] Missing CSRF Protection
+**File:** `frontend/src/api/scenes.ts` and other API modules
 
-**Issue:** Vite ^5.0.0 uses vulnerable esbuild (<=0.24.2) - CVE affects dev server.
+**Issue:** State-changing requests lack CSRF tokens. Currently mitigated by SPA architecture (same-origin requests via Vite proxy, no cookie-based auth). Will become critical if cookie-based authentication is added.
 
 **Remediation:**
-- [ ] Update Vite to latest version
+- [ ] Implement CSRF token flow when adding authentication
+- [ ] Document that this must be addressed before adding cookie-based auth
+
+---
+
+### 16. [Frontend] Vulnerable Vite Version
+**File:** `frontend/package.json`
+
+**Issue:** Vite `^5.0.0` may resolve to versions with known CVEs affecting the dev server (esbuild vulnerabilities).
+
+**Remediation:**
+- [ ] Update Vite to latest 5.x or 6.x
 
 ```bash
 npm update vite
@@ -418,61 +363,70 @@ npm update vite
 
 ## LOW
 
-### 20. [Backend] No HTTPS Enforcement
+### 17. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 21. [Backend] No Audit Logging
+### 18. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
-### 22. [Backend] Silent Image Fetch Failures
+### 19. [Backend] Silent Image Fetch Failures in Gemini Service
 **File:** `backend/src/services/gemini.ts:79-81`
+
+**Issue:** Failed image fetches are caught and silently ignored, continuing the LLM request without the image.
 
 **Remediation:**
 - [ ] Report errors to client instead of silently continuing
 
-### 23. [Frontend] No Canvas Item Limit
+### 20. [Frontend] No Canvas Item Limit
 **Remediation:**
 - [ ] Add MAX_ITEMS_PER_SCENE constant and enforce
 
-### 24. [Frontend] No Scene Name Length Validation
+### 21. [Frontend] No Scene Name Length Validation
+**File:** `frontend/src/App.tsx` (renameScene)
+
 **Remediation:**
 - [ ] Limit scene names to 255 characters
 
-### 25. [Frontend] Potential URL Validation on Proxy Calls
-**File:** `frontend/src/components/InfiniteCanvas.tsx:351`
+### 22. [Frontend] Missing URL Validation on Frontend API Calls
+**File:** `frontend/src/api/scenes.ts` and other API modules
+
+**Issue:** Scene IDs and other parameters used in URL construction without client-side validation.
 
 **Remediation:**
-- [ ] Validate URLs before sending to proxy endpoint
+- [ ] Validate parameters before constructing API URLs
 
 ---
 
 ## Implementation Priority
 
 ### Phase 1 - Critical (Do Immediately)
-1. Fix SSRF in proxy endpoint (#1)
-2. Restrict CORS (#2)
-3. Fix path traversal (#3)
+1. Restrict CORS to specific origins (#1)
 
 ### Phase 2 - High Priority (This Sprint)
-4. Add input validation (#4, #5, #9)
-5. Sanitize LLM HTML output (#11)
-6. Fix iframe sandbox (#10)
-7. Add rate limiting (#6)
-8. Fix regex injection (#12)
+2. Add rate limiting (#2)
+3. Reduce payload size limit (#3)
+4. Add scene ID validation (#4)
+5. Fix SSRF in LLM services (#5)
+6. Sanitize LLM HTML output (#6)
+7. Fix unescaped RegExp (#7)
+8. Add fetch response size limits (#8)
 
 ### Phase 3 - Medium Priority (Next Sprint)
-9. Add authentication system (#6)
-10. Improve error handling (#8, #13)
-11. Add security headers (#16)
-12. Update dependencies (#19)
-13. Add CSRF protection (#17)
+9. Add authentication system (#2)
+10. Fix unsafe JSON.parse (#9)
+11. Validate model parameters (#10)
+12. Improve error messages (#11)
+13. Add security headers (#12)
+14. Add CSRF protection (#15)
+15. Update Vite (#16)
 
 ### Phase 4 - Low Priority (Backlog)
-14. Add audit logging (#21)
-15. Add input limits (#23, #24)
-16. Improve error reporting (#22)
+16. Add audit logging (#18)
+17. Add input limits (#20, #21)
+18. Improve error reporting (#19)
+19. Add frontend URL validation (#22)
 
 ---
 
@@ -480,10 +434,12 @@ npm update vite
 
 After implementing fixes, verify:
 
-- [ ] SSRF: Cannot access internal IPs or non-S3 URLs via proxy
+- [x] SSRF: Proxy endpoint removed; scene save validates URLs
+- [x] Iframe: Scripts cannot execute in sandboxed iframes
 - [ ] CORS: Requests from unauthorized origins are rejected
-- [ ] Path Traversal: `../` sequences in file paths are rejected
-- [ ] XSS: Script tags in LLM output are sanitized
-- [ ] Iframe: Scripts cannot access parent page or make API calls
+- [ ] SSRF (LLM): Cannot pass internal URLs through LLM image items
 - [ ] Rate Limiting: Excessive requests are throttled
+- [ ] XSS: LLM-generated HTML is sanitized before rendering
 - [ ] Input Validation: Invalid UUIDs and oversized payloads rejected
+- [ ] Fetch Limits: Large remote files are rejected before full download
+- [ ] JSON Parse: Malformed stored data returns error, doesn't crash
