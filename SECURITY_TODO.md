@@ -8,10 +8,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 4 | 0 | 4 |
+| High | 3 | 0 | 3 |
 | Medium | 2 | 3 | 5 |
 | Low | 2 | 0 | 2 |
-| **Total** | **8** | **3** | **11** |
+| **Total** | **7** | **3** | **10** |
 
 ---
 
@@ -33,6 +33,7 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **No Scene Name Length Validation** - Scene names truncated to 255 characters in renameScene
 - **Silent Image Resolve Failures** - Unresolvable images now throw, surfacing error to client
 - **Missing URL Validation on Frontend API Calls** - UUID validation via `validateUuid()` on all API call sites
+- **Missing Rate Limiting** - express-rate-limit: 1000/15min general, 20/15min LLM, 60/15min uploads
 
 ---
 
@@ -52,35 +53,7 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 ---
 
-### 2. [Backend] Missing Rate Limiting
-**File:** `backend/src/index.ts`
-
-**Issue:** No rate limiting on any endpoint, allowing abuse of expensive operations (LLM calls, uploads).
-
-**Remediation:**
-- [ ] Add general rate limiting on all API routes
-- [ ] Add stricter rate limiting on LLM and upload endpoints
-
-```typescript
-import rateLimit from 'express-rate-limit';
-
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-});
-app.use('/api/', limiter);
-
-// Stricter limit for LLM endpoint
-const llmLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-});
-app.use('/api/llm/', llmLimiter);
-```
-
----
-
-### 3. [Backend] Large Payload DoS Risk
+### 2. [Backend] Large Payload DoS Risk
 **File:** `backend/src/index.ts:19`
 
 **Issue:** 50MB JSON limit without rate limiting enables memory exhaustion DoS.
@@ -91,11 +64,11 @@ app.use(express.json({ limit: '50mb' }))
 
 **Remediation:**
 - [ ] Reduce payload limit to 10MB
-- [ ] Add rate limiting (see #2)
+- [ ] Add rate limiting (already done, see Previously Fixed)
 
 ---
 
-### 4. [Backend] No Response Size Limits on Fetch
+### 3. [Backend] No Response Size Limits on Fetch
 **Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:241`
 
 **Issue:** Multiple fetch calls download remote content into memory without size limits:
@@ -123,7 +96,7 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 5. [Backend] Weak Model Parameter Validation
+### 4. [Backend] Weak Model Parameter Validation
 **File:** `backend/src/routes/llm.ts:92, 119, 152`
 
 **Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist.
@@ -140,7 +113,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 6. [Backend] Error Messages Leak Infrastructure Details
+### 5. [Backend] Error Messages Leak Infrastructure Details
 **Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:243`
 
 **Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
@@ -151,7 +124,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 7. [Frontend] API Keys Stored with Weak Obfuscation
+### 6. [Frontend] API Keys Stored with Weak Obfuscation
 **File:** `frontend/src/utils/apiKeyStorage.ts`
 
 **Issue:** API keys stored in `localStorage` with basic character rotation + base64 encoding (not encryption).
@@ -164,7 +137,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 8. [Frontend] No Data URL Size Validation
+### 7. [Frontend] No Data URL Size Validation
 **File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
 
 **Issue:** Large images converted to data URLs can cause memory exhaustion. Data URL is created before scaling checks.
@@ -174,7 +147,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 9. [Frontend] Missing CSRF Protection
+### 8. [Frontend] Missing CSRF Protection
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** State-changing requests lack CSRF tokens. Currently mitigated by SPA architecture (same-origin requests, no cookie-based auth). Will become critical if cookie-based authentication is added.
@@ -186,11 +159,11 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ## LOW
 
-### 10. [Backend] No HTTPS Enforcement
+### 9. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 11. [Backend] No Audit Logging
+### 10. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
@@ -209,6 +182,7 @@ Completed:
 - [x] JSON Parse: Malformed stored data returns error, doesn't crash
 - [x] SSRF (LLM): Image items resolved by ID from storage; no URLs accepted
 
+- [x] Rate Limiting: General (1000/15min), LLM (20/15min), uploads (60/15min)
+
 Remaining:
-- [ ] Rate Limiting: Excessive requests are throttled
 - [ ] Fetch Limits: Large remote files are rejected before full download

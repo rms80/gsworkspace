@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import dotenv from 'dotenv'
 import itemsRouter from './routes/items.js'
 import llmRouter from './routes/llm.js'
@@ -35,6 +36,35 @@ app.use(cors({
   },
 }))
 app.use(express.json({ limit: '50mb' }))
+
+// Rate limiting
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+const llmLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many LLM requests. Please try again later.' },
+})
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many upload requests. Please try again later.' },
+})
+
+app.use('/api/', generalLimiter)
+app.use('/api/llm', llmLimiter)
+app.use('/api/items/upload-image', uploadLimiter)
+app.use('/api/items/upload-video', uploadLimiter)
 
 app.use('/api/items', itemsRouter)
 app.use('/api/llm', llmRouter)
