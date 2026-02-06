@@ -78,6 +78,64 @@ The frontend automatically syncs with the backend's storage mode:
 
 ---
 
+## Authentication
+
+The backend supports optional password authentication. When enabled, all `/api/` routes (except `/api/auth/*`) require a valid session cookie.
+
+### Enabling Authentication
+
+Set `AUTH_PASSWORD` in your `.env` file:
+
+```bash
+AUTH_PASSWORD=your_secret_password
+SESSION_SECRET=a_long_random_string
+```
+
+- **`AUTH_PASSWORD`** — The login password. If unset or empty, auth is disabled entirely (useful for local dev).
+- **`SESSION_SECRET`** — Signs the session cookie. If unset, a random secret is generated on each startup (meaning sessions are invalidated on restart). Set this to a stable value in production.
+
+When auth is enabled:
+- The frontend shows a login screen before loading the app
+- A "Log out" button appears in the menu bar
+- Sessions are stored in a signed cookie (7-day expiry, no server-side state)
+
+### How It Works
+
+| Endpoint | Auth Required | Purpose |
+|----------|--------------|---------|
+| `GET /api/auth/status` | No | Returns `{ authRequired, authenticated, serverName }` |
+| `POST /api/auth/login` | No | Accepts `{ password }`, sets session cookie |
+| `POST /api/auth/logout` | No | Clears session cookie |
+| All other `/api/*` routes | Yes (when enabled) | Returns 401 if not authenticated |
+
+---
+
+## Server Name
+
+Set `SERVER_NAME` to give your deployment a custom name:
+
+```bash
+SERVER_NAME=My Workspace
+```
+
+Defaults to `gsworkspace`. The name is displayed in the login screen and the status bar.
+
+---
+
+## Rate Limiting
+
+All `/api/` routes are rate-limited per IP address using 15-minute sliding windows. Defaults can be overridden via environment variables:
+
+```bash
+RATE_LIMIT_GENERAL=1000   # All /api/ routes
+RATE_LIMIT_LLM=20         # /api/llm routes
+RATE_LIMIT_UPLOAD=60       # Image and video upload routes
+```
+
+When a limit is exceeded, the server returns `429 Too Many Requests`.
+
+---
+
 ## Frontend-Only Offline Deployment (Astro)
 
 The gsworkspace frontend can run entirely offline without a backend, using browser localStorage/IndexedDB for storage. This is useful for embedding in static sites like Astro.
