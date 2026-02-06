@@ -24,6 +24,7 @@ interface MenuBarProps {
   onOpenSettings?: () => void
   onLogout?: () => void
   onNewWorkspace?: () => void
+  onSwitchWorkspace?: () => void
 }
 
 interface MenuItemDef {
@@ -68,6 +69,7 @@ function MenuBar({
   onOpenSettings,
   onLogout,
   onNewWorkspace,
+  onSwitchWorkspace,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -102,6 +104,7 @@ function MenuBar({
         ...(onNewWorkspace ? [
           { label: '', separator: true },
           { label: 'New Workspace...', onClick: onNewWorkspace },
+          ...(onSwitchWorkspace ? [{ label: 'Switch Workspace...', onClick: onSwitchWorkspace }] : []),
         ] : []),
       ],
     },

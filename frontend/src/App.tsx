@@ -6,6 +6,7 @@ import TabBar from './components/TabBar'
 import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
 import NewWorkspaceDialog from './components/NewWorkspaceDialog'
+import SwitchWorkspaceDialog from './components/SwitchWorkspaceDialog'
 import SettingsDialog from './components/SettingsDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
@@ -25,6 +26,7 @@ import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideo
 import { uploadImage } from './api/images'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
+import { ACTIVE_WORKSPACE } from './api/workspace'
 import {
   HistoryStack,
   HistoryState,
@@ -73,6 +75,7 @@ function App() {
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [newWorkspaceDialogOpen, setNewWorkspaceDialogOpen] = useState(false)
+  const [switchWorkspaceDialogOpen, setSwitchWorkspaceDialogOpen] = useState(false)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [videoPlaceholders, setVideoPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -1534,6 +1537,10 @@ function App() {
     }
   }, [])
 
+  const handleSwitchWorkspace = useCallback((name: string) => {
+    window.location.href = `/${name}/`
+  }, [])
+
   // Keyboard shortcuts for scene management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1890,6 +1897,7 @@ function App() {
         onOpenSettings={() => setSettingsDialogOpen(true)}
         onLogout={authRequired ? handleLogout : undefined}
         onNewWorkspace={storageMode !== 'offline' ? () => setNewWorkspaceDialogOpen(true) : undefined}
+        onSwitchWorkspace={storageMode !== 'offline' ? () => setSwitchWorkspaceDialogOpen(true) : undefined}
       />
       <TabBar
         scenes={openScenes}
@@ -1965,6 +1973,7 @@ function App() {
         onStorageModeSync={handleStorageModeSync}
         onStorageModeChange={handleStorageModeChange}
         serverName={serverName}
+        workspaceName={ACTIVE_WORKSPACE}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}
@@ -1992,6 +2001,12 @@ function App() {
         isOpen={newWorkspaceDialogOpen}
         onSubmit={handleCreateWorkspace}
         onCancel={() => setNewWorkspaceDialogOpen(false)}
+      />
+      <SwitchWorkspaceDialog
+        isOpen={switchWorkspaceDialogOpen}
+        currentWorkspace={ACTIVE_WORKSPACE}
+        onSwitch={handleSwitchWorkspace}
+        onCancel={() => setSwitchWorkspaceDialogOpen(false)}
       />
     </div>
   )
