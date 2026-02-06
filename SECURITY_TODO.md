@@ -8,10 +8,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 3 | 0 | 3 |
+| High | 2 | 0 | 2 |
 | Medium | 2 | 3 | 5 |
 | Low | 2 | 0 | 2 |
-| **Total** | **7** | **3** | **10** |
+| **Total** | **6** | **3** | **9** |
 
 ---
 
@@ -34,22 +34,14 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **Silent Image Resolve Failures** - Unresolvable images now throw, surfacing error to client
 - **Missing URL Validation on Frontend API Calls** - UUID validation via `validateUuid()` on all API call sites
 - **Missing Rate Limiting** - express-rate-limit: 1000/15min general, 20/15min LLM, 60/15min uploads
+- **Missing Authentication** - Password + cookie-session auth via `AUTH_PASSWORD` env var; all `/api/` routes protected when enabled
 
 ---
 
 ## HIGH
 
-### 1. [Backend] Missing Authentication/Authorization
-**File:** `backend/src/index.ts`
-
-**Issue:** All endpoints are publicly accessible with no user isolation. This is especially dangerous for:
-- `POST /api/llm/generate` - triggers expensive LLM API calls
-- `POST /api/items/upload-video` - accepts up to 500MB uploads
-- `DELETE /api/scenes/:id` - can delete any scene
-
-**Remediation:**
-- [ ] Implement authentication (JWT, OAuth, or API keys)
-- [ ] Add per-user data isolation
+### ~~1. [Backend] Missing Authentication/Authorization~~ FIXED
+Password-based auth with `cookie-session`. When `AUTH_PASSWORD` is set, all `/api/` routes require authentication via session cookie. Auth endpoints: `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/logout`. Frontend shows login screen when auth is required.
 
 ---
 

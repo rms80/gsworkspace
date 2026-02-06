@@ -22,6 +22,7 @@ interface MenuBarProps {
   onGetHistoryJson?: () => string
   onClearHistory?: () => void
   onOpenSettings?: () => void
+  onLogout?: () => void
 }
 
 interface MenuItemDef {
@@ -39,6 +40,7 @@ interface MenuDef {
   label: string
   items?: MenuItemDef[]
   onClick?: () => void  // For menus that directly trigger an action (no submenu)
+  style?: React.CSSProperties
 }
 
 function MenuBar({
@@ -62,6 +64,7 @@ function MenuBar({
   onGetHistoryJson,
   onClearHistory,
   onOpenSettings,
+  onLogout,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -131,6 +134,11 @@ function MenuBar({
   ]
 
   const rightMenus: MenuDef[] = [
+    ...(onLogout ? [{
+      label: 'Log out',
+      onClick: onLogout,
+      style: { backgroundColor: '#3b82f6', color: '#fff', borderRadius: '4px' },
+    }] : []),
     {
       label: 'About',
       onClick: handleOpenAbout,
@@ -393,6 +401,7 @@ function MenuBar({
               cursor: 'pointer',
               fontFamily: 'inherit',
               fontSize: '14px',
+              ...menu.style,
             }}
           >
             {menu.label}

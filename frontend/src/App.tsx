@@ -7,6 +7,7 @@ import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
 import SettingsDialog from './components/SettingsDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
+import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
@@ -55,6 +56,8 @@ function App() {
   const pendingDropFilesRef = useRef<File[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
+  const [authRequired, setAuthRequired] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
@@ -208,6 +211,22 @@ function App() {
     const initializeApp = async () => {
       let modeToUse = storageMode
 
+      // Check auth status if not in offline mode
+      if (storageMode !== 'offline') {
+        try {
+          const authRes = await fetch('/api/auth/status')
+          const authData = await authRes.json()
+          setAuthRequired(authData.authRequired)
+          setAuthenticated(authData.authenticated)
+          if (authData.authRequired && !authData.authenticated) {
+            setIsLoading(false)
+            return
+          }
+        } catch {
+          // If auth check fails, proceed (server might be down or auth not configured)
+        }
+      }
+
       // Fetch backend config if not in offline mode
       if (storageMode !== 'offline') {
         try {
@@ -296,6 +315,39 @@ function App() {
     // Reload scenes from the backend's storage
     await loadAllScenes(backendMode)
   }, [loadAllScenes])
+
+  // Auth handlers
+  const handleLoginSuccess = useCallback(async () => {
+    setAuthenticated(true)
+    setIsLoading(true)
+
+    // Now that we're authenticated, fetch config and load scenes
+    let modeToUse = storageMode
+    try {
+      const res = await fetch('/api/config')
+      const config = await res.json()
+      if (config.storageMode && config.storageMode !== storageMode) {
+        setStorageMode(config.storageMode)
+        setStorageModeState(config.storageMode)
+        modeToUse = config.storageMode
+      }
+    } catch (err) {
+      console.error('Failed to fetch backend config:', err)
+    }
+
+    await loadAllScenes(modeToUse)
+  }, [storageMode, loadAllScenes])
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' })
+    } catch {
+      // Ignore errors — we'll show the login screen anyway
+    }
+    setAuthenticated(false)
+    setOpenScenes([])
+    setActiveSceneId(null)
+  }, [])
 
   // Auto-save when active scene changes (debounced)
   useEffect(() => {
@@ -1751,6 +1803,10 @@ function App() {
     processFiles()
   }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt])
 
+  if (authRequired && !authenticated) {
+    return <LoginScreen onSuccess={handleLoginSuccess} />
+  }
+
   if (isLoading) {
     return (
       <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1806,6 +1862,7 @@ function App() {
           }
         }}
         onOpenSettings={() => setSettingsDialogOpen(true)}
+        onLogout={authRequired ? handleLogout : undefined}
       />
       <TabBar
         scenes={openScenes}
