@@ -10,8 +10,8 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 |----------|---------|----------|-------|
 | High | 3 | 0 | 3 |
 | Medium | 2 | 3 | 5 |
-| Low | 3 | 3 | 6 |
-| **Total** | **8** | **6** | **14** |
+| Low | 3 | 1 | 4 |
+| **Total** | **8** | **4** | **12** |
 
 ---
 
@@ -29,6 +29,8 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **Missing Security Headers** - Helmet middleware added with sensible defaults
 - **Vulnerable Vite Version** - Updated from Vite 5.x to 6.x
 - **SSRF via LLM Services** - Frontend now sends image IDs; backend resolves from storage instead of fetching URLs
+- **No Canvas Item Limit** - MAX_ITEMS_PER_SCENE (1000) enforced in updateActiveSceneItems
+- **No Scene Name Length Validation** - Scene names truncated to 255 characters in renameScene
 
 ---
 
@@ -188,17 +190,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 **Remediation:**
 - [ ] Report errors to client instead of silently continuing
 
-### 12. [Frontend] No Canvas Item Limit
-**Remediation:**
-- [ ] Add MAX_ITEMS_PER_SCENE constant and enforce
-
-### 13. [Frontend] No Scene Name Length Validation
-**File:** `frontend/src/App.tsx` (renameScene)
-
-**Remediation:**
-- [ ] Limit scene names to 255 characters
-
-### 14. [Frontend] Missing URL Validation on Frontend API Calls
+### 12. [Frontend] Missing URL Validation on Frontend API Calls
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** Scene IDs and other parameters used in URL construction without client-side validation.
@@ -208,26 +200,6 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-## Implementation Priority
-
-### Phase 1 - High Priority (This Sprint)
-1. Add rate limiting (#1)
-2. Reduce payload size limit (#2)
-3. Add fetch response size limits (#3)
-
-### Phase 2 - Medium Priority (Next Sprint)
-4. Add authentication system (#1)
-5. Validate model parameters (#4)
-6. Improve error messages (#5)
-7. Add CSRF protection (#8)
-
-### Phase 3 - Low Priority (Backlog)
-8. Add audit logging (#10)
-9. Add input limits (#12, #13)
-10. Improve error reporting (#11)
-11. Add frontend URL validation (#14)
-
----
 
 ## Testing Checklist
 

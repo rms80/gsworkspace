@@ -491,14 +491,20 @@ function App() {
   }, [handleUndo, handleRedo])
 
   // Helper to update the active scene's items
+  const MAX_ITEMS_PER_SCENE = 1000
+
   const updateActiveSceneItems = useCallback(
     (updater: (items: CanvasItem[]) => CanvasItem[]) => {
       setOpenScenes((prev) =>
-        prev.map((scene) =>
-          scene.id === activeSceneId
-            ? { ...scene, items: updater(scene.items), modifiedAt: new Date().toISOString() }
-            : scene
-        )
+        prev.map((scene) => {
+          if (scene.id !== activeSceneId) return scene
+          const updated = updater(scene.items)
+          if (updated.length > MAX_ITEMS_PER_SCENE) {
+            alert(`Cannot exceed ${MAX_ITEMS_PER_SCENE} items per scene.`)
+            return scene
+          }
+          return { ...scene, items: updated, modifiedAt: new Date().toISOString() }
+        })
       )
     },
     [activeSceneId]
@@ -537,14 +543,17 @@ function App() {
     setActiveSceneId(id)
   }, [])
 
+  const MAX_SCENE_NAME_LENGTH = 255
+
   const renameScene = useCallback(async (id: string, name: string) => {
+    const trimmed = name.slice(0, MAX_SCENE_NAME_LENGTH)
     const now = new Date().toISOString()
     let updatedScene: Scene | null = null
 
     setOpenScenes((prev) =>
       prev.map((scene) => {
         if (scene.id === id) {
-          updatedScene = { ...scene, name, modifiedAt: now }
+          updatedScene = { ...scene, name: trimmed, modifiedAt: now }
           return updatedScene
         }
         return scene
