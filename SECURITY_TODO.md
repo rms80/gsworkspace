@@ -8,10 +8,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 4 | 0 | 4 |
+| High | 3 | 0 | 3 |
 | Medium | 2 | 3 | 5 |
 | Low | 3 | 3 | 6 |
-| **Total** | **9** | **6** | **15** |
+| **Total** | **8** | **6** | **14** |
 
 ---
 
@@ -28,6 +28,7 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **Unsafe JSON Parsing** - All `JSON.parse()` calls wrapped in try-catch
 - **Missing Security Headers** - Helmet middleware added with sensible defaults
 - **Vulnerable Vite Version** - Updated from Vite 5.x to 6.x
+- **SSRF via LLM Services** - Frontend now sends image IDs; backend resolves from storage instead of fetching URLs
 
 ---
 
@@ -80,30 +81,7 @@ app.use(express.json({ limit: '50mb' }))
 
 ---
 
-### 3. [Backend] SSRF via LLM Services
-**Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/services/claude.ts:57`
-
-**Issue:** When processing image items for LLM calls, `item.src` URLs are fetched (Gemini) or passed to the API (Claude) without validation. The LLM endpoint receives items directly from the frontend and does NOT run them through `validateItemSrcUrl()`.
-
-```typescript
-// gemini.ts:69 - fetches arbitrary URLs
-const response = await fetch(item.src)
-
-// claude.ts:57 - passes arbitrary URL to Claude API
-source: { type: 'url', url: item.src }
-```
-
-**Attack vectors:**
-- `item.src = "http://169.254.169.254/latest/meta-data/"` (AWS credentials via Gemini fetch)
-- `item.src = "http://localhost:4000/api/scenes"` (internal API access)
-
-**Remediation:**
-- [ ] Reuse `validateItemSrcUrl()` in LLM route before passing items to services
-- [ ] Add URL validation directly in Gemini/Claude services as defense-in-depth
-
----
-
-### 4. [Backend] No Response Size Limits on Fetch
+### 3. [Backend] No Response Size Limits on Fetch
 **Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:241`
 
 **Issue:** Multiple fetch calls download remote content into memory without size limits:
@@ -131,7 +109,7 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 5. [Backend] Weak Model Parameter Validation
+### 4. [Backend] Weak Model Parameter Validation
 **File:** `backend/src/routes/llm.ts:92, 119, 152`
 
 **Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist.
@@ -148,7 +126,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 6. [Backend] Error Messages Leak Infrastructure Details
+### 5. [Backend] Error Messages Leak Infrastructure Details
 **Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:243`
 
 **Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
@@ -159,7 +137,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 7. [Frontend] API Keys Stored with Weak Obfuscation
+### 6. [Frontend] API Keys Stored with Weak Obfuscation
 **File:** `frontend/src/utils/apiKeyStorage.ts`
 
 **Issue:** API keys stored in `localStorage` with basic character rotation + base64 encoding (not encryption).
@@ -172,7 +150,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 8. [Frontend] No Data URL Size Validation
+### 7. [Frontend] No Data URL Size Validation
 **File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
 
 **Issue:** Large images converted to data URLs can cause memory exhaustion. Data URL is created before scaling checks.
@@ -182,7 +160,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 9. [Frontend] Missing CSRF Protection
+### 8. [Frontend] Missing CSRF Protection
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** State-changing requests lack CSRF tokens. Currently mitigated by SPA architecture (same-origin requests, no cookie-based auth). Will become critical if cookie-based authentication is added.
@@ -194,15 +172,15 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ## LOW
 
-### 10. [Backend] No HTTPS Enforcement
+### 9. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 11. [Backend] No Audit Logging
+### 10. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
-### 12. [Backend] Silent Image Fetch Failures in Gemini Service
+### 11. [Backend] Silent Image Fetch Failures in Gemini Service
 **File:** `backend/src/services/gemini.ts:79-81`
 
 **Issue:** Failed image fetches are silently ignored, continuing the LLM request without the image.
@@ -210,17 +188,17 @@ if (!ALLOWED_MODELS.includes(model)) {
 **Remediation:**
 - [ ] Report errors to client instead of silently continuing
 
-### 13. [Frontend] No Canvas Item Limit
+### 12. [Frontend] No Canvas Item Limit
 **Remediation:**
 - [ ] Add MAX_ITEMS_PER_SCENE constant and enforce
 
-### 14. [Frontend] No Scene Name Length Validation
+### 13. [Frontend] No Scene Name Length Validation
 **File:** `frontend/src/App.tsx` (renameScene)
 
 **Remediation:**
 - [ ] Limit scene names to 255 characters
 
-### 15. [Frontend] Missing URL Validation on Frontend API Calls
+### 14. [Frontend] Missing URL Validation on Frontend API Calls
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** Scene IDs and other parameters used in URL construction without client-side validation.
@@ -235,20 +213,19 @@ if (!ALLOWED_MODELS.includes(model)) {
 ### Phase 1 - High Priority (This Sprint)
 1. Add rate limiting (#1)
 2. Reduce payload size limit (#2)
-3. Fix SSRF in LLM services (#3)
-4. Add fetch response size limits (#4)
+3. Add fetch response size limits (#3)
 
 ### Phase 2 - Medium Priority (Next Sprint)
-5. Add authentication system (#1)
-6. Validate model parameters (#5)
-7. Improve error messages (#6)
-8. Add CSRF protection (#9)
+4. Add authentication system (#1)
+5. Validate model parameters (#4)
+6. Improve error messages (#5)
+7. Add CSRF protection (#8)
 
 ### Phase 3 - Low Priority (Backlog)
-9. Add audit logging (#11)
-10. Add input limits (#13, #14)
-11. Improve error reporting (#12)
-12. Add frontend URL validation (#15)
+8. Add audit logging (#10)
+9. Add input limits (#12, #13)
+10. Improve error reporting (#11)
+11. Add frontend URL validation (#14)
 
 ---
 
@@ -261,8 +238,8 @@ Completed:
 - [x] XSS: LLM-generated HTML is sanitized before rendering
 - [x] Input Validation: Invalid UUIDs rejected at route level
 - [x] JSON Parse: Malformed stored data returns error, doesn't crash
+- [x] SSRF (LLM): Image items resolved by ID from storage; no URLs accepted
 
 Remaining:
-- [ ] SSRF (LLM): Cannot pass internal URLs through LLM image items
 - [ ] Rate Limiting: Excessive requests are throttled
 - [ ] Fetch Limits: Large remote files are rejected before full download

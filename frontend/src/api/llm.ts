@@ -15,10 +15,34 @@ function isGeminiModel(model: string): boolean {
   return model.startsWith('gemini-')
 }
 
+/** Used by offline-mode clients (anthropicClient, googleClient) which handle data URLs directly */
 export interface ContentItem {
   type: 'text' | 'image'
   text?: string
   src?: string
+  // Online-mode fields: image items send IDs so the backend resolves them from storage
+  id?: string
+  sceneId?: string
+  useEdited?: boolean
+}
+
+/** Shape sent to backend in online mode (only id/sceneId/useEdited, no src) */
+interface BackendItem {
+  type: 'text' | 'image'
+  text?: string
+  id?: string
+  sceneId?: string
+  useEdited?: boolean
+}
+
+/** Strip src from items before sending to backend (prevents sending URLs/data to backend) */
+function toBackendItems(items: ContentItem[]): BackendItem[] {
+  return items.map((item) => {
+    if (item.type === 'image') {
+      return { type: item.type, id: item.id, sceneId: item.sceneId, useEdited: item.useEdited }
+    }
+    return { type: item.type, text: item.text }
+  })
 }
 
 export interface GenerateResponse {
@@ -52,11 +76,11 @@ export async function generateFromPrompt(
     }
   }
 
-  // Online mode: use backend
+  // Online mode: use backend (send IDs, not URLs)
   const response = await fetch(`${API_BASE}/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, prompt, model }),
+    body: JSON.stringify({ items: toBackendItems(items), prompt, model }),
   })
 
   if (!response.ok) {
@@ -83,11 +107,11 @@ export async function generateImage(
     return images.map((img) => `data:${img.mimeType};base64,${img.data}`)
   }
 
-  // Online mode: use backend
+  // Online mode: use backend (send IDs, not URLs)
   const response = await fetch(`${API_BASE}/generate-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items, prompt, model }),
+    body: JSON.stringify({ items: toBackendItems(items), prompt, model }),
   })
 
   if (!response.ok) {

@@ -1,4 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
+import { ResolvedContentItem } from './llmTypes.js'
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
@@ -12,14 +13,8 @@ const MODEL_IDS: Record<ClaudeModel, string> = {
   'claude-opus': 'claude-opus-4-20250514',
 }
 
-interface ContentItem {
-  type: 'text' | 'image'
-  text?: string
-  src?: string
-}
-
 export async function generateText(
-  items: ContentItem[],
+  items: ResolvedContentItem[],
   prompt: string,
   model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
@@ -32,32 +27,16 @@ export async function generateText(
         type: 'text',
         text: `[Text block]: ${item.text}`,
       })
-    } else if (item.type === 'image' && item.src) {
-      // If it's a data URL, extract the base64 part
-      if (item.src.startsWith('data:')) {
-        const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
-        if (matches) {
-          const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
-          const base64Data = matches[2]
-          contentBlocks.push({
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: mediaType,
-              data: base64Data,
-            },
-          })
-        }
-      } else {
-        // It's a URL, use URL source
-        contentBlocks.push({
-          type: 'image',
-          source: {
-            type: 'url',
-            url: item.src,
-          },
-        } as unknown as Anthropic.ImageBlockParam)
-      }
+    } else if (item.type === 'image' && item.imageData) {
+      const mediaType = item.imageData.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+      contentBlocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: item.imageData.base64,
+        },
+      })
     }
   }
 

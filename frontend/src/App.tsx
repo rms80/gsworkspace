@@ -1065,22 +1065,27 @@ function App() {
       if (item.type === 'text') {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
-        let src = item.src
-        if (item.cropRect && activeSceneId) {
-          try {
-            src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
-          } catch (err) {
-            console.error('Failed to crop image for LLM, using original:', err)
+        if (isOffline) {
+          // Offline mode: send src data URL directly to client-side LLM
+          let src = item.src
+          if (item.cropRect && activeSceneId) {
+            try {
+              src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
+            } catch (err) {
+              console.error('Failed to crop image for LLM, using original:', err)
+            }
           }
+          return { type: 'image' as const, src }
         }
-        return { type: 'image' as const, src }
+        // Online mode: send ID so backend resolves from storage
+        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
       } else if (item.type === 'prompt') {
         return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
       } else if (item.type === 'html') {
         return { type: 'text' as const, text: `[HTML Content]:\n${item.html}` }
       }
       return { type: 'text' as const, text: '' }
-    }))).filter((item) => item.text || item.src)
+    }))).filter((item) => item.text || item.src || item.id)
 
     try {
       const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
@@ -1144,7 +1149,7 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
@@ -1161,20 +1166,25 @@ function App() {
       if (item.type === 'text') {
         return { type: 'text' as const, text: item.text }
       } else if (item.type === 'image') {
-        let src = item.src
-        if (item.cropRect && activeSceneId) {
-          try {
-            src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
-          } catch (err) {
-            console.error('Failed to crop image for LLM, using original:', err)
+        if (isOffline) {
+          // Offline mode: send src data URL directly to client-side LLM
+          let src = item.src
+          if (item.cropRect && activeSceneId) {
+            try {
+              src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
+            } catch (err) {
+              console.error('Failed to crop image for LLM, using original:', err)
+            }
           }
+          return { type: 'image' as const, src }
         }
-        return { type: 'image' as const, src }
+        // Online mode: send ID so backend resolves from storage
+        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
       } else if (item.type === 'prompt' || item.type === 'image-gen-prompt') {
         return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
       }
       return { type: 'text' as const, text: '' }
-    }))).filter((item) => item.text || item.src)
+    }))).filter((item) => item.text || item.src || item.id)
 
     try {
       const images = await generateImage(contentItems, promptItem.text, promptItem.model)
@@ -1266,7 +1276,7 @@ function App() {
         return next
       })
     }
-  }, [items, selectedIds, updateActiveSceneItems])
+  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
 
   const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')

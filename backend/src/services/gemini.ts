@@ -1,4 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { ResolvedContentItem } from './llmTypes.js'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
@@ -13,12 +14,6 @@ const MODEL_IDS: Record<GeminiModel, string> = {
 const IMAGE_GEN_MODEL_IDS: Record<ImageGenModel, string> = {
   'gemini-imagen': 'gemini-2.0-flash-exp-image-generation',
   'gemini-flash-imagen': 'gemini-2.0-flash-exp-image-generation',
-}
-
-interface ContentItem {
-  type: 'text' | 'image'
-  text?: string
-  src?: string
 }
 
 export async function generateHtmlWithGemini(
@@ -37,7 +32,7 @@ export async function generateHtmlWithGemini(
 }
 
 export async function generateTextWithGemini(
-  items: ContentItem[],
+  items: ResolvedContentItem[],
   prompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
@@ -49,37 +44,13 @@ export async function generateTextWithGemini(
   for (const item of items) {
     if (item.type === 'text' && item.text) {
       parts.push({ text: `[Text block]: ${item.text}` })
-    } else if (item.type === 'image' && item.src) {
-      // If it's a data URL, extract the base64 part
-      if (item.src.startsWith('data:')) {
-        const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
-        if (matches) {
-          const mimeType = matches[1]
-          const base64Data = matches[2]
-          parts.push({
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
-          })
-        }
-      } else {
-        // It's a URL - fetch the image and convert to base64
-        try {
-          const response = await fetch(item.src)
-          const arrayBuffer = await response.arrayBuffer()
-          const base64Data = Buffer.from(arrayBuffer).toString('base64')
-          const contentType = response.headers.get('content-type') || 'image/png'
-          parts.push({
-            inlineData: {
-              mimeType: contentType,
-              data: base64Data,
-            },
-          })
-        } catch (err) {
-          console.error('Failed to fetch image for Gemini:', err)
-        }
-      }
+    } else if (item.type === 'image' && item.imageData) {
+      parts.push({
+        inlineData: {
+          mimeType: item.imageData.mimeType,
+          data: item.imageData.base64,
+        },
+      })
     }
   }
 
@@ -97,7 +68,7 @@ export interface GeneratedImage {
 }
 
 export async function generateImageWithGemini(
-  items: ContentItem[],
+  items: ResolvedContentItem[],
   prompt: string,
   model: ImageGenModel = 'gemini-imagen'
 ): Promise<GeneratedImage[]> {
@@ -114,37 +85,13 @@ export async function generateImageWithGemini(
   for (const item of items) {
     if (item.type === 'text' && item.text) {
       parts.push({ text: `[Text block]: ${item.text}` })
-    } else if (item.type === 'image' && item.src) {
-      // If it's a data URL, extract the base64 part
-      if (item.src.startsWith('data:')) {
-        const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
-        if (matches) {
-          const mimeType = matches[1]
-          const base64Data = matches[2]
-          parts.push({
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
-          })
-        }
-      } else {
-        // It's a URL - fetch the image and convert to base64
-        try {
-          const response = await fetch(item.src)
-          const arrayBuffer = await response.arrayBuffer()
-          const base64Data = Buffer.from(arrayBuffer).toString('base64')
-          const contentType = response.headers.get('content-type') || 'image/png'
-          parts.push({
-            inlineData: {
-              mimeType: contentType,
-              data: base64Data,
-            },
-          })
-        } catch (err) {
-          console.error('Failed to fetch image for Gemini:', err)
-        }
-      }
+    } else if (item.type === 'image' && item.imageData) {
+      parts.push({
+        inlineData: {
+          mimeType: item.imageData.mimeType,
+          data: item.imageData.base64,
+        },
+      })
     }
   }
 

@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
+import { LLMRequestItem, ResolvedContentItem, resolveImageData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -67,10 +68,24 @@ const htmlGenSystemPrompt = readFileSync(
 
 type LLMModel = ClaudeModel | GeminiModel
 
-interface ContentItem {
-  type: 'text' | 'image'
-  text?: string
-  src?: string
+/**
+ * Resolve LLMRequestItems into ResolvedContentItems by loading image data from storage.
+ */
+async function resolveItems(items: LLMRequestItem[]): Promise<ResolvedContentItem[]> {
+  const resolved: ResolvedContentItem[] = []
+  for (const item of items) {
+    if (item.type === 'text') {
+      resolved.push({ type: 'text', text: item.text })
+    } else if (item.type === 'image' && item.id && item.sceneId) {
+      const imageData = await resolveImageData(item.sceneId, item.id, !!item.useEdited)
+      if (imageData) {
+        resolved.push({ type: 'image', imageData })
+      } else {
+        console.warn(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
+      }
+    }
+  }
+  return resolved
 }
 
 function isClaudeModel(model: string): model is ClaudeModel {
@@ -83,19 +98,20 @@ function isGeminiModel(model: string): model is GeminiModel {
 
 router.post('/generate', async (req, res) => {
   try {
-    const { items, prompt, model } = req.body as { items: ContentItem[]; prompt: string; model?: LLMModel }
+    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: LLMModel }
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
     const selectedModel = model || 'claude-sonnet'
+    const resolved = await resolveItems(items)
     let result: string
 
     if (isGeminiModel(selectedModel)) {
-      result = await generateTextWithGemini(items, prompt, selectedModel)
+      result = await generateTextWithGemini(resolved, prompt, selectedModel)
     } else if (isClaudeModel(selectedModel)) {
-      result = await generateText(items, prompt, selectedModel)
+      result = await generateText(resolved, prompt, selectedModel)
     } else {
       return res.status(400).json({ error: `Unknown model: ${selectedModel}` })
     }
@@ -110,14 +126,15 @@ router.post('/generate', async (req, res) => {
 
 router.post('/generate-image', async (req, res) => {
   try {
-    const { items, prompt, model } = req.body as { items: ContentItem[]; prompt: string; model?: ImageGenModel }
+    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: ImageGenModel }
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
     const selectedModel = model || 'gemini-imagen'
-    const images = await generateImageWithGemini(items, prompt, selectedModel)
+    const resolved = await resolveItems(items)
+    const images = await generateImageWithGemini(resolved, prompt, selectedModel)
 
     // Return array of generated images as data URLs
     const imageDataUrls = images.map((img) => `data:${img.mimeType};base64,${img.data}`)
