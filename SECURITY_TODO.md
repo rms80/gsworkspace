@@ -9,10 +9,10 @@ Issues organized by severity with remediation plans.
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 3 | 0 | 3 |
-| Medium | 4 | 3 | 7 |
+| High | 2 | 0 | 2 |
+| Medium | 3 | 3 | 6 |
 | Low | 4 | 0 | 4 |
-| **Total** | **11** | **3** | **14** |
+| **Total** | **9** | **3** | **12** |
 
 ---
 
@@ -34,7 +34,7 @@ Issues organized by severity with remediation plans.
 - **No Scene Name Length Validation** - Scene names truncated to 255 characters in renameScene
 - **Silent Image Resolve Failures** - Unresolvable images now throw, surfacing error to client
 - **Missing URL Validation on Frontend API Calls** - UUID validation via `validateUuid()` on all API call sites
-- **Missing Rate Limiting** - express-rate-limit: 1000/15min general, 20/15min LLM, 60/15min uploads
+- **Missing Rate Limiting** - express-rate-limit: 1000/15min general, 20/15min LLM, 60/15min uploads, 25/15min auth login, 10/15min workspace creation
 - **Missing Authentication** - Password + cookie-session auth via `AUTH_PASSWORD` env var; all `/api/` routes protected when enabled
 - **Workspace Isolation** - Verified: workspace param always comes from `req.params.workspace` (validated URL), never from request body. Client-supplied `sceneId` only creates subfolders within the URL workspace. Storage layer (`diskStorage.validatePath`) also prevents path traversal in local mode. No cross-workspace access possible.
 - **Workspace Name Validation** - Regex `/^[a-zA-Z0-9_-]{1,64}$/` on both `app.param('workspace')` and workspace router. Blocks path traversal characters, unicode, and overly long names.
@@ -48,22 +48,8 @@ Password-based auth with `cookie-session`. When `AUTH_PASSWORD` is set, all `/ap
 
 ---
 
-### 2. [Backend] No Rate Limiting on Auth Login
-**File:** `backend/src/index.ts:70`
-
-**Issue:** The `POST /api/auth/login` endpoint has no rate limiting. An attacker can brute-force the `AUTH_PASSWORD` with unlimited attempts.
-
-**Remediation:**
-- [ ] Add a strict rate limiter to `/api/auth/login` (e.g., 5 attempts per 15 minutes per IP)
-
-```typescript
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
-  message: { error: 'Too many login attempts. Please try again later.' },
-})
-app.post('/api/auth/login', authLimiter, (req, res) => { ... })
-```
+### ~~2. [Backend] No Rate Limiting on Auth Login~~ FIXED
+Auth login rate-limited to 25 attempts per 15 minutes per IP via `authLimiter` (configurable with `RATE_LIMIT_AUTH` env var).
 
 ---
 
@@ -138,14 +124,8 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 7. [Backend] No Rate Limiting on Workspace Endpoints
-**File:** `backend/src/index.ts:150`
-
-**Issue:** The `/api/workspaces` routes have no rate limiting. An attacker can enumerate all workspaces or spam workspace creation without throttling.
-
-**Remediation:**
-- [ ] Apply the general rate limiter to `/api/workspaces`
-- [ ] Consider a stricter limit on `POST /api/workspaces` (workspace creation)
+### ~~7. [Backend] No Rate Limiting on Workspace Endpoints~~ FIXED
+General rate limiter (1000/15min) applied to all `/api/workspaces` routes. Workspace creation (`POST /api/workspaces`) additionally limited to 10 per 15 minutes via `workspaceCreateLimiter` (configurable with `RATE_LIMIT_WORKSPACE_CREATE` env var).
 
 ---
 
@@ -258,13 +238,11 @@ Completed:
 - [x] Input Validation: Invalid UUIDs rejected at route level
 - [x] JSON Parse: Malformed stored data returns error, doesn't crash
 - [x] SSRF (LLM): Image items resolved by ID from storage; no URLs accepted
-- [x] Rate Limiting: General (1000/15min), LLM (20/15min), uploads (60/15min)
+- [x] Rate Limiting: General (1000/15min), LLM (20/15min), uploads (60/15min), auth login (25/15min), workspace creation (10/15min), workspaces general (1000/15min)
 - [x] Auth: Password + cookie-session; all /api/ routes protected when AUTH_PASSWORD is set
 - [x] Workspace Isolation: Workspace param always comes from validated URL, not request body; sceneId can only address subfolders within the URL workspace
 - [x] Path Traversal (storage layer): diskStorage.validatePath() ensures resolved paths stay within storage root; S3 keys are flat strings
 
 Remaining:
 - [ ] Fetch Limits: Large remote files are rejected before full download
-- [ ] Auth Brute Force: Rate limit /api/auth/login
-- [ ] Workspace Rate Limit: Apply rate limiter to /api/workspaces routes
 - [ ] Upload Input Validation: itemId UUID validation, extension allowlist

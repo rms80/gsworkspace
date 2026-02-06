@@ -61,13 +61,21 @@ app.use(cookieSession({
 
 // --- Auth routes (public, before auth middleware) ---
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_AUTH || '25'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again later.' },
+})
+
 app.get('/api/auth/status', (req, res) => {
   const authRequired = !!AUTH_PASSWORD
   const authenticated = !authRequired || !!req.session?.authenticated
   res.json({ authRequired, authenticated, serverName: SERVER_NAME })
 })
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', authLimiter, (req, res) => {
   if (!AUTH_PASSWORD) {
     return res.json({ success: true })
   }
@@ -124,6 +132,14 @@ const uploadLimiter = rateLimit({
   message: { error: 'Too many upload requests. Please try again later.' },
 })
 
+const workspaceCreateLimiter = rateLimit({
+  windowMs: RATE_WINDOW,
+  max: parseInt(process.env.RATE_LIMIT_WORKSPACE_CREATE || '10'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many workspace creation requests. Please try again later.' },
+})
+
 // Workspace param validation middleware
 const WORKSPACE_RE = /^[a-zA-Z0-9_-]{1,64}$/
 app.param('workspace', (req, res, next, value) => {
@@ -147,6 +163,8 @@ app.use('/api/w/:workspace/scenes', scenesRouter)
 // Non-workspace routes
 app.use('/api/local-files', localFilesRouter)
 app.use('/api/config', configRouter)
+app.use('/api/workspaces', generalLimiter)
+app.post('/api/workspaces', workspaceCreateLimiter)
 app.use('/api/workspaces', workspacesRouter)
 
 app.get('/api/health', (_req, res) => {
