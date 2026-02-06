@@ -116,10 +116,13 @@ export interface SelectionRect {
   height: number
 }
 
+export const SCENE_FILE_VERSION = '1'
+
 export interface Scene {
   id: string
   name: string
   items: CanvasItem[]
   createdAt: string
   modifiedAt: string
+  version?: string
 }

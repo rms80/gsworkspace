@@ -13,6 +13,8 @@ import {
 
 const router = Router({ mergeParams: true })
 
+const SCENE_FILE_VERSION = '1'
+
 // Validate :id param is a valid UUID on all routes
 router.param('id', (req, res, next, id) => {
   if (!uuidValidate(id)) {
@@ -169,6 +171,7 @@ interface StoredScene {
   createdAt: string
   modifiedAt: string
   items: StoredItem[]
+  version?: string
 }
 
 // Get scene timestamp only (lightweight check for conflict detection)
@@ -624,6 +627,7 @@ router.post('/:id', async (req, res) => {
       createdAt,
       modifiedAt,
       items: storedItems,
+      version: SCENE_FILE_VERSION,
     }
     await save(`${sceneFolder}/scene.json`, JSON.stringify(storedScene, null, 2))
 
@@ -813,6 +817,7 @@ router.get('/:id', async (req, res) => {
       createdAt: storedScene.createdAt,
       modifiedAt: storedScene.modifiedAt,
       items,
+      version: storedScene.version,
     })
   } catch (error) {
     console.error('Error loading scene:', error)
