@@ -82,7 +82,14 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
       return res.status(400).json({ error: 'No video file provided' })
     }
 
-    const id = uuidv4()
+    // Use client-provided sceneId and itemId to save directly to scene folder
+    const sceneId = req.body.sceneId
+    const itemId = req.body.itemId
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+
+    const sceneFolder = `${USER_FOLDER}/${sceneId}`
     const filename = file.originalname
 
     // Determine file extension from filename
@@ -101,9 +108,8 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
       await transcodeToMp4(inputPath, outputPath)
 
       const transcodedBuffer = fs.readFileSync(outputPath)
-      // Save under .mp4 extension
-      const baseName = filename ? filename.replace(/\.[^/.]+$/, '') : 'video'
-      const key = `temp/videos/${id}-${baseName}.mp4`
+      // Save directly to scene folder with itemId
+      const key = `${sceneFolder}/${itemId}.mp4`
       await save(key, transcodedBuffer, 'video/mp4')
       console.log(`Video transcoded and uploaded: ${key}`)
 
@@ -113,7 +119,8 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
     } else {
       // Browser-native format — save as-is
       const contentType = file.mimetype
-      const key = `temp/videos/${id}-${filename || `video.${ext}`}`
+      // Save directly to scene folder with itemId
+      const key = `${sceneFolder}/${itemId}.${ext}`
 
       console.log(`Uploading video: ${key}, size: ${file.buffer.length} bytes`)
       await save(key, file.buffer, contentType || 'video/mp4')

@@ -634,7 +634,7 @@ function App() {
   )
 
   const addVideoItem = useCallback(
-    (src: string, width: number, height: number, name?: string, fileSize?: number) => {
+    (id: string, src: string, width: number, height: number, name?: string, fileSize?: number) => {
       // Scale down large videos to reasonable canvas size
       const maxDim = 640
       let w = width
@@ -645,7 +645,7 @@ function App() {
         h = Math.round(h * scale)
       }
       const newItem: CanvasItem = {
-        id: uuidv4(),
+        id,
         type: 'video',
         x: 100 + Math.random() * 200,
         y: 100 + Math.random() * 200,
@@ -675,18 +675,20 @@ function App() {
         return
       }
 
+      // Generate item ID upfront so it matches the uploaded file
+      const itemId = uuidv4()
+
       // Show placeholder while uploading (assume 1920x1280, scaled to 640x427)
-      const placeholderId = uuidv4()
       const placeholderW = 640
       const placeholderH = 427
       const placeholderX = 100 + Math.random() * 200
       const placeholderY = 100 + Math.random() * 200
       const placeholderName = file.name.replace(/\.[^/.]+$/, '')
-      setVideoPlaceholders(prev => [...prev, { id: placeholderId, x: placeholderX, y: placeholderY, width: placeholderW, height: placeholderH, name: placeholderName }])
+      setVideoPlaceholders(prev => [...prev, { id: itemId, x: placeholderX, y: placeholderY, width: placeholderW, height: placeholderH, name: placeholderName }])
 
       startOperation()
       try {
-        const result = await uploadVideo(file, isOffline)
+        const result = await uploadVideo(file, activeSceneId!, itemId, isOffline)
         endOperation()
 
         // If client-side dims failed (e.g. MKV), get them from the transcoded URL
@@ -696,19 +698,19 @@ function App() {
         }
 
         const name = file.name.replace(/\.[^/.]+$/, '')
-        addVideoItem(result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+        addVideoItem(itemId, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
       } catch (error) {
         endOperation()
         console.error('Failed to add video:', error)
         alert('Failed to add video. Please try again.')
       } finally {
-        setVideoPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
+        setVideoPlaceholders(prev => prev.filter(p => p.id !== itemId))
       }
     } catch (error) {
       console.error('Failed to add video:', error)
       alert('Failed to add video. Please try again.')
     }
-  }, [isOffline, addVideoItem, startOperation, endOperation])
+  }, [isOffline, activeSceneId, addVideoItem, startOperation, endOperation])
 
   const addPromptItem = useCallback(() => {
     const newItem: CanvasItem = {
@@ -809,7 +811,7 @@ function App() {
   )
 
   const addVideoAt = useCallback(
-    (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
       // Generate unique name using the utility
       const existingNames = getExistingVideoNames(items)
       const uniqueName = generateUniqueName(name || 'Video', existingNames)
@@ -824,7 +826,7 @@ function App() {
         h = Math.round(h * scale)
       }
       const newItem: CanvasItem = {
-        id: uuidv4(),
+        id,
         type: 'video',
         x: x - w / 2,
         y: y - h / 2,
@@ -854,16 +856,18 @@ function App() {
         return
       }
 
+      // Generate item ID upfront so it matches the uploaded file
+      const itemId = uuidv4()
+
       // Show placeholder while uploading (assume 1920x1280, scaled to 640x427)
-      const placeholderId = uuidv4()
       const placeholderW = 640
       const placeholderH = 427
       const placeholderName = file.name.replace(/\.[^/.]+$/, '')
-      setVideoPlaceholders(prev => [...prev, { id: placeholderId, x: x - placeholderW / 2, y: y - placeholderH / 2, width: placeholderW, height: placeholderH, name: placeholderName }])
+      setVideoPlaceholders(prev => [...prev, { id: itemId, x: x - placeholderW / 2, y: y - placeholderH / 2, width: placeholderW, height: placeholderH, name: placeholderName }])
 
       startOperation()
       try {
-        const result = await uploadVideo(file, isOffline)
+        const result = await uploadVideo(file, activeSceneId!, itemId, isOffline)
         endOperation()
 
         if (!dimensions) {
@@ -872,17 +876,17 @@ function App() {
         }
 
         const name = file.name.replace(/\.[^/.]+$/, '')
-        addVideoAt(x, y, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
+        addVideoAt(itemId, x, y, result.url, dimensions.width, dimensions.height, name, dimensions.fileSize)
       } catch (err) {
         console.error('Video upload failed:', file.name, err)
         endOperation()
       } finally {
-        setVideoPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
+        setVideoPlaceholders(prev => prev.filter(p => p.id !== itemId))
       }
     } catch (error) {
       console.error('Failed to process video:', error)
     }
-  }, [isOffline, addVideoAt, startOperation, endOperation])
+  }, [isOffline, activeSceneId, addVideoAt, startOperation, endOperation])
 
   const updateItem = useCallback(
     (id: string, changes: Partial<CanvasItem>) => {

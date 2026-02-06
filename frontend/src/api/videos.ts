@@ -14,6 +14,8 @@ export interface UploadVideoResult {
  */
 export async function uploadVideo(
   file: File,
+  sceneId: string,
+  itemId: string,
   isOffline: boolean = false
 ): Promise<UploadVideoResult> {
   if (isOffline) {
@@ -23,6 +25,8 @@ export async function uploadVideo(
 
   const formData = new FormData()
   formData.append('video', file)
+  formData.append('sceneId', sceneId)
+  formData.append('itemId', itemId)
 
   const response = await fetch(`${API_BASE}/upload-video`, {
     method: 'POST',
