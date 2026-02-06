@@ -15,6 +15,41 @@ const router = Router()
 // User folder - hardcoded for now, will be per-user later
 const USER_FOLDER = 'version0'
 
+/**
+ * Validate that a URL is safe to fetch from.
+ * Only allows: data URLs, our S3 bucket URLs, and local storage URLs.
+ * Rejects external URLs to prevent SSRF attacks.
+ */
+function validateItemSrcUrl(url: string): { valid: boolean; reason?: string; type?: 'data' | 's3' | 'local' } {
+  // Allow data URLs
+  if (url.startsWith('data:')) {
+    return { valid: true, type: 'data' }
+  }
+
+  // Check for path traversal in any URL
+  if (url.includes('..') || url.includes('%2e%2e') || url.includes('%2E%2E')) {
+    return { valid: false, reason: 'Path traversal detected' }
+  }
+
+  // Allow local storage URLs
+  if (url.startsWith('/api/local-files/')) {
+    return { valid: true, type: 'local' }
+  }
+
+  // Allow S3 URLs from our bucket only
+  const bucketName = process.env.S3_BUCKET_NAME
+  const region = process.env.AWS_REGION || 'us-east-1'
+  if (bucketName) {
+    const s3Prefix = `https://${bucketName}.s3.${region}.amazonaws.com/`
+    if (url.startsWith(s3Prefix)) {
+      return { valid: true, type: 's3' }
+    }
+  }
+
+  // Reject all other URLs (external HTTP URLs)
+  return { valid: false, reason: 'External URLs are not allowed' }
+}
+
 // Helper to extract storage key from a URL (S3 or local)
 // Checks both formats regardless of current mode since URLs depend on when the file was uploaded
 function getKeyFromUrl(url: string): string | null {
@@ -296,47 +331,59 @@ router.post('/:id', async (req, res) => {
             )
             imageSaved = true
           }
-        } else if (item.src.startsWith('http') || item.src.startsWith('/api/local-files/')) {
-          // Check if the image is already in this scene folder (skip re-upload)
-          if (item.src.includes(`/${sceneFolder}/`)) {
-            imageSaved = true
+        } else {
+          // Validate URL before processing
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected image URL for item ${item.id}: ${validation.reason}`)
           } else {
-            // Check if the image file already exists in the scene folder (from a previous save)
-            const imageKey = `${sceneFolder}/${imageFile}`
-            const alreadyExists = await exists(imageKey)
-            if (alreadyExists) {
+            if (validation.type === 's3') {
+              console.log(`Processing S3 image URL for item ${item.id}`)
+            } else if (validation.type === 'local') {
+              console.log(`Processing local image URL for item ${item.id}`)
+            }
+
+            // Check if the image is already in this scene folder (skip re-upload)
+            if (item.src.includes(`/${sceneFolder}/`)) {
               imageSaved = true
             } else {
-              // If src is a URL, fetch/load and save the image to the scene folder
-              try {
-                let buffer: Buffer | null = null
-                let contentType = 'image/png'
+              // Check if the image file already exists in the scene folder (from a previous save)
+              const imageKey = `${sceneFolder}/${imageFile}`
+              const alreadyExists = await exists(imageKey)
+              if (alreadyExists) {
+                imageSaved = true
+              } else {
+                // If src is a URL, fetch/load and save the image to the scene folder
+                try {
+                  let buffer: Buffer | null = null
+                  let contentType = 'image/png'
 
-                // Handle local URLs by reading directly from storage
-                if (item.src.startsWith('/api/local-files/')) {
-                  const localKey = item.src.slice('/api/local-files/'.length)
-                  buffer = await loadAsBuffer(localKey)
-                } else {
-                  // Fetch from HTTP URL
-                  const response = await fetch(item.src)
-                  if (response.ok) {
-                    const arrayBuffer = await response.arrayBuffer()
-                    contentType = response.headers.get('content-type') || 'image/png'
-                    buffer = Buffer.from(arrayBuffer)
+                  // Handle local URLs by reading directly from storage
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    // Fetch from our S3 bucket URL
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      contentType = response.headers.get('content-type') || 'image/png'
+                      buffer = Buffer.from(arrayBuffer)
+                    }
                   }
-                }
 
-                if (buffer) {
-                  await save(imageKey, buffer, contentType)
-                  imageSaved = true
-                  // Track staging file for cleanup if it's from /temp/images/ folder
-                  const stagingKey = getKeyFromUrl(item.src)
-                  if (stagingKey && stagingKey.startsWith('temp/images/')) {
-                    stagingKeysToDelete.push(stagingKey)
+                  if (buffer) {
+                    await save(imageKey, buffer, contentType)
+                    imageSaved = true
+                    // Track staging file for cleanup if it's from /temp/images/ folder
+                    const stagingKey = getKeyFromUrl(item.src)
+                    if (stagingKey && stagingKey.startsWith('temp/images/')) {
+                      stagingKeysToDelete.push(stagingKey)
+                    }
                   }
+                } catch (err) {
+                  console.error(`Failed to fetch image from ${item.src}:`, err)
                 }
-              } catch (err) {
-                console.error(`Failed to fetch image from ${item.src}:`, err)
               }
             }
           }
@@ -401,49 +448,61 @@ router.post('/:id', async (req, res) => {
             )
             videoSaved = true
           }
-        } else if (item.src.startsWith('http') || item.src.startsWith('/api/local-files/')) {
-          // Check if the video is already in this scene folder (skip re-upload)
-          if (item.src.includes(`/${sceneFolder}/`)) {
-            videoSaved = true
+        } else {
+          // Validate URL before processing
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected video URL for item ${item.id}: ${validation.reason}`)
           } else {
-            // Check if the video file already exists in the scene folder (from a previous save)
-            const videoKey = `${sceneFolder}/${videoFile}`
-            const alreadyExists = await exists(videoKey)
-            if (alreadyExists) {
+            if (validation.type === 's3') {
+              console.log(`Processing S3 video URL for item ${item.id}`)
+            } else if (validation.type === 'local') {
+              console.log(`Processing local video URL for item ${item.id}`)
+            }
+
+            // Check if the video is already in this scene folder (skip re-upload)
+            if (item.src.includes(`/${sceneFolder}/`)) {
               videoSaved = true
             } else {
-              // If src is a URL, fetch/load and save the video to the scene folder
-              try {
-                let buffer: Buffer | null = null
-                let contentType = 'video/mp4'
+              // Check if the video file already exists in the scene folder (from a previous save)
+              const videoKey = `${sceneFolder}/${videoFile}`
+              const alreadyExists = await exists(videoKey)
+              if (alreadyExists) {
+                videoSaved = true
+              } else {
+                // If src is a URL, fetch/load and save the video to the scene folder
+                try {
+                  let buffer: Buffer | null = null
+                  let contentType = 'video/mp4'
 
-                // Handle local URLs by reading directly from storage
-                if (item.src.startsWith('/api/local-files/')) {
-                  const localKey = item.src.slice('/api/local-files/'.length)
-                  buffer = await loadAsBuffer(localKey)
-                } else {
-                  // Fetch from HTTP URL
-                  const response = await fetch(item.src)
-                  if (response.ok) {
-                    const arrayBuffer = await response.arrayBuffer()
-                    contentType = response.headers.get('content-type') || 'video/mp4'
-                    buffer = Buffer.from(arrayBuffer)
-                  } else {
-                    console.error(`Failed to fetch video ${item.id}: HTTP ${response.status} ${response.statusText}`)
+                  // Handle local URLs by reading directly from storage
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    // Fetch from our S3 bucket URL
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      contentType = response.headers.get('content-type') || 'video/mp4'
+                      buffer = Buffer.from(arrayBuffer)
+                    } else {
+                      console.error(`Failed to fetch video ${item.id}: HTTP ${response.status} ${response.statusText}`)
+                    }
                   }
-                }
 
-                if (buffer) {
-                  await save(videoKey, buffer, contentType)
-                  videoSaved = true
-                  // Track staging file for cleanup if it's from /temp/videos/ folder
-                  const stagingKey = getKeyFromUrl(item.src)
-                  if (stagingKey && stagingKey.startsWith('temp/videos/')) {
-                    stagingKeysToDelete.push(stagingKey)
+                  if (buffer) {
+                    await save(videoKey, buffer, contentType)
+                    videoSaved = true
+                    // Track staging file for cleanup if it's from /temp/videos/ folder
+                    const stagingKey = getKeyFromUrl(item.src)
+                    if (stagingKey && stagingKey.startsWith('temp/videos/')) {
+                      stagingKeysToDelete.push(stagingKey)
+                    }
                   }
+                } catch (err) {
+                  console.error(`Failed to fetch video from ${item.src}:`, err)
                 }
-              } catch (err) {
-                console.error(`Failed to fetch video from ${item.src}:`, err)
               }
             }
           }
