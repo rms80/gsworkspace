@@ -11,8 +11,8 @@ Issues organized by severity with remediation plans.
 |----------|---------|----------|-------|
 | High | 2 | 0 | 2 |
 | Medium | 2 | 2 | 4 |
-| Low | 4 | 0 | 4 |
-| **Total** | **8** | **2** | **10** |
+| Low | 3 | 0 | 3 |
+| **Total** | **7** | **2** | **9** |
 
 ---
 
@@ -188,13 +188,8 @@ app.use(cookieSession({
 
 ---
 
-### 13. [Backend] No Workspace Creation Limit
-**File:** `backend/src/routes/workspaces.ts:87`
-
-**Issue:** No limit on the number of workspaces that can be created. An authenticated attacker could create thousands of workspaces, consuming storage and polluting the workspace list.
-
-**Remediation:**
-- [ ] Add a maximum workspace count check before creation (e.g., 100)
+### ~~13. [Backend] No Workspace Creation Limit~~ FIXED
+Workspace creation capped at 50. The `POST /api/workspaces` endpoint counts existing `workspace.json` files and returns `409` if the limit is reached.
 
 ---
 

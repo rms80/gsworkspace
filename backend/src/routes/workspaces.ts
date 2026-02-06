@@ -102,6 +102,14 @@ router.post('/', async (req, res) => {
       return res.status(409).json({ error: 'Workspace already exists' })
     }
 
+    // Enforce maximum workspace count
+    const MAX_WORKSPACES = 50
+    const allKeys = await list('')
+    const workspaceCount = allKeys.filter((k: string) => k.endsWith('/workspace.json')).length
+    if (workspaceCount >= MAX_WORKSPACES) {
+      return res.status(409).json({ error: `Maximum number of workspaces (${MAX_WORKSPACES}) reached` })
+    }
+
     const createdAt = new Date().toISOString()
     const metadata = {
       name,
