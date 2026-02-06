@@ -1629,12 +1629,15 @@ function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
         e.preventDefault()
         setSettingsDialogOpen(true)
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault()
+        if (storageMode !== 'offline') setSwitchWorkspaceDialogOpen(true)
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [handleOpenSceneDialog, handleExportScene])
+  }, [handleOpenSceneDialog, handleExportScene, storageMode])
 
   // Handle opening selected scenes from the dialog
   const handleOpenScenes = useCallback(async (sceneIds: string[]) => {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
 import LocalStorageSettingsTab from './settings/LocalStorageSettingsTab'
 import StorageModeSettingsTab from './settings/StorageModeSettingsTab'
@@ -25,6 +25,16 @@ const tabs: TabDef[] = [
 
 export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }: SettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<TabId>('storage-mode')
+
+  // Close on Escape
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
 
   if (!isOpen) return null
 

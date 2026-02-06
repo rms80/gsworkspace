@@ -37,11 +37,13 @@ interface MenuItemDef {
   accept?: string
   onFileSelect?: (file: File) => void
   onFolderSelect?: (files: FileList) => void
+  submenu?: MenuItemDef[]
 }
 
 interface MenuDef {
   label: string
   items?: MenuItemDef[]
+  minWidth?: string
   onClick?: () => void  // For menus that directly trigger an action (no submenu)
   style?: React.CSSProperties
 }
@@ -72,6 +74,7 @@ function MenuBar({
   onSwitchWorkspace,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false)
   const [aboutContent, setAboutContent] = useState('')
@@ -95,23 +98,26 @@ function MenuBar({
   const leftMenus: MenuDef[] = [
     {
       label: 'File',
+      minWidth: '250px',
       items: [
         { label: 'New Scene', onClick: onNewScene },
-        { label: 'Open Scene...', onClick: onOpenScene },
-        { label: 'Export Scene...', onClick: onExportScene },
-        { label: 'Import Scene from Zip...', type: 'file-input', accept: '.zip', onFileSelect: onImportSceneFromZip },
-        { label: 'Import Scene from Folder...', type: 'folder-input', onFolderSelect: onImportSceneFromFolder },
+        { label: 'Open Scene...', onClick: onOpenScene, shortcut: 'Ctrl+O' },
+        { label: 'Export Scene...', onClick: onExportScene, shortcut: 'Ctrl+Shift+E' },
+        { label: 'Import Scene', submenu: [
+          { label: 'From Zip...', type: 'file-input', accept: '.zip', onFileSelect: onImportSceneFromZip },
+          { label: 'From Folder...', type: 'folder-input', onFolderSelect: onImportSceneFromFolder },
+        ]},
         ...(onNewWorkspace ? [
           { label: '', separator: true },
           { label: 'New Workspace...', onClick: onNewWorkspace },
-          ...(onSwitchWorkspace ? [{ label: 'Switch Workspace...', onClick: onSwitchWorkspace }] : []),
+          ...(onSwitchWorkspace ? [{ label: 'Switch Workspace...', onClick: onSwitchWorkspace, shortcut: 'Ctrl+Shift+O' }] : []),
         ] : []),
       ],
     },
     {
       label: 'Add',
       items: [
-        { label: 'Text Block', onClick: onAddText },
+        { label: 'Text Block', onClick: onAddText, shortcut: 'T' },
         { label: 'Image', type: 'file-input', accept: 'image/*', onFileSelect: handleImageUpload },
         ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
         { label: 'LLM Prompt', onClick: onAddPrompt },
@@ -255,9 +261,11 @@ function MenuBar({
       // Direct action menu - no submenu
       menu.onClick()
       setOpenMenu(null)
+      setOpenSubmenu(null)
     } else {
       // Toggle submenu
       setOpenMenu(openMenu === menu.label ? null : menu.label)
+      setOpenSubmenu(null)
     }
   }
 
@@ -351,13 +359,90 @@ function MenuBar({
                 border: '1px solid #ccc',
                 borderRadius: '4px',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                minWidth: '160px',
+                minWidth: menu.minWidth ?? '160px',
                 zIndex: 200,
               }}
             >
               {menu.items.map((item, index) =>
                 item.separator ? (
                   <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
+                ) : item.submenu ? (
+                <div
+                  key={index}
+                  style={{ position: 'relative' }}
+                  onMouseEnter={() => setOpenSubmenu(item.label)}
+                  onMouseLeave={() => setOpenSubmenu(null)}
+                >
+                  <button
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      width: '100%',
+                      padding: '8px 12px',
+                      backgroundColor: openSubmenu === item.label ? '#f0f0f0' : 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: '14px',
+                      textAlign: 'left',
+                      color: '#333',
+                    }}
+                  >
+                    <span>{item.label}</span>
+                    <span style={{ color: '#888', fontSize: '12px', marginLeft: '16px' }}>&#9656;</span>
+                  </button>
+                  {openSubmenu === item.label && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: '100%',
+                        backgroundColor: '#fff',
+                        border: '1px solid #ccc',
+                        borderRadius: '4px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        minWidth: '160px',
+                        zIndex: 201,
+                      }}
+                    >
+                      {item.submenu.map((sub, subIndex) => (
+                        <button
+                          key={subIndex}
+                          onClick={() => handleItemClick(sub)}
+                          disabled={sub.disabled}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            width: '100%',
+                            padding: '8px 12px',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            cursor: sub.disabled ? 'default' : 'pointer',
+                            fontFamily: 'inherit',
+                            fontSize: '14px',
+                            textAlign: 'left',
+                            color: sub.disabled ? '#aaa' : '#333',
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!sub.disabled) e.currentTarget.style.backgroundColor = '#f0f0f0'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent'
+                          }}
+                        >
+                          <span>{sub.label}</span>
+                          {sub.shortcut && (
+                            <span style={{ color: '#888', fontSize: '12px', marginLeft: '16px' }}>
+                              {sub.shortcut}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 ) : (
                 <button
                   key={index}
@@ -574,6 +659,7 @@ function MenuBar({
                   { shortcut: 'Ctrl+Y', action: 'Redo' },
                   { shortcut: 'Ctrl+Shift+Z', action: 'Redo' },
                   { shortcut: 'Ctrl+O', action: 'Open Scene' },
+                  { shortcut: 'Ctrl+Shift+O', action: 'Switch Workspace' },
                   { shortcut: 'Ctrl+Shift+E', action: 'Export Scene' },
                   { shortcut: 'Ctrl+,', action: 'Open Settings' },
                   { shortcut: 'Ctrl+C', action: 'Copy selected item' },
