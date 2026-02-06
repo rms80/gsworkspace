@@ -2,7 +2,7 @@ import { StorageMode } from '../api/storage'
 
 interface ToolbarProps {
   onAddText: () => void
-  onAddImage: (src: string, width: number, height: number) => void
+  onAddImage: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
@@ -25,16 +25,7 @@ function Toolbar({ onAddText, onAddImage, onAddPrompt, onAddImageGenPrompt, onAd
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const img = new Image()
-      img.onload = () => {
-        onAddImage(event.target?.result as string, img.width, img.height)
-      }
-      img.src = event.target?.result as string
-    }
-    reader.readAsDataURL(file)
+    onAddImage(file)
     e.target.value = ''
   }
 

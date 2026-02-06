@@ -3,7 +3,7 @@ import { config } from '../config'
 
 interface MenuBarProps {
   onAddText: () => void
-  onAddImage: (src: string, width: number, height: number) => void
+  onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
@@ -81,15 +81,7 @@ function MenuBar({
   const folderInputRef = useRef<HTMLInputElement>(null)
 
   const handleImageUpload = (file: File) => {
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const img = new Image()
-      img.onload = () => {
-        onAddImage(event.target?.result as string, img.width, img.height)
-      }
-      img.src = event.target?.result as string
-    }
-    reader.readAsDataURL(file)
+    onAddImage(file)
   }
 
   const leftMenus: MenuDef[] = [

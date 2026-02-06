@@ -617,9 +617,9 @@ function App() {
   }, [updateActiveSceneItems, pushChange])
 
   const addImageItem = useCallback(
-    (src: string, width: number, height: number) => {
+    (id: string, src: string, width: number, height: number) => {
       const newItem: CanvasItem = {
-        id: uuidv4(),
+        id,
         type: 'image',
         x: 100 + Math.random() * 200,
         y: 100 + Math.random() * 200,
@@ -632,6 +632,35 @@ function App() {
     },
     [updateActiveSceneItems, pushChange]
   )
+
+  const handleAddImage = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    // Generate item ID upfront so it matches the uploaded file
+    const itemId = uuidv4()
+
+    // Read file as data URL to get dimensions and upload
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      const img = new Image()
+      img.onload = async () => {
+        try {
+          startOperation()
+          const s3Url = await uploadImage(dataUrl, activeSceneId, itemId, file.name || 'image.png')
+          endOperation()
+          addImageItem(itemId, s3Url, img.width, img.height)
+        } catch (err) {
+          endOperation()
+          console.error('Failed to upload image:', err)
+          // Fall back to data URL
+          addImageItem(itemId, dataUrl, img.width, img.height)
+        }
+      }
+      img.src = dataUrl
+    }
+    reader.readAsDataURL(file)
+  }, [activeSceneId, addImageItem, startOperation, endOperation])
 
   const addVideoItem = useCallback(
     (id: string, src: string, width: number, height: number, name?: string, fileSize?: number) => {
@@ -786,13 +815,13 @@ function App() {
   )
 
   const addImageAt = useCallback(
-    (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => {
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => {
       // Generate unique name using the utility
       const existingNames = getExistingImageNames(items)
       const uniqueName = generateUniqueName(name || 'Image', existingNames)
 
       const newItem: CanvasItem = {
-        id: uuidv4(),
+        id,
         type: 'image',
         x: x - width / 2,
         y: y - height / 2,
@@ -970,9 +999,9 @@ function App() {
       ? selectedItems
       : await Promise.all(
           selectedItems.map(async (item) => {
-            if (item.type === 'image' && item.src.startsWith('data:')) {
+            if (item.type === 'image' && item.src.startsWith('data:') && activeSceneId) {
               try {
-                const s3Url = await uploadImage(item.src, `deleted-${item.id}.png`)
+                const s3Url = await uploadImage(item.src, activeSceneId, item.id, `deleted-${item.id}.png`)
                 // Return item with S3 URL for history
                 return { ...item, src: s3Url }
               } catch (err) {
@@ -1666,15 +1695,18 @@ function App() {
               const originalWidth = img.naturalWidth
               const originalHeight = img.naturalHeight
 
+              // Generate item ID upfront so it matches the uploaded file
+              const itemId = uuidv4()
+
               try {
                 startOperation()
-                const s3Url = await uploadImage(dataUrl, fileName || `dropped-${Date.now()}.png`)
+                const s3Url = await uploadImage(dataUrl, activeSceneId!, itemId, fileName || `dropped-${Date.now()}.png`)
                 endOperation()
-                addImageAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, width, height, name, originalWidth, originalHeight, fileSize)
+                addImageAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, width, height, name, originalWidth, originalHeight, fileSize)
               } catch (err) {
                 endOperation()
                 console.error('Failed to upload image:', err)
-                addImageAt(centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, width, height, name, originalWidth, originalHeight, fileSize)
+                addImageAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, width, height, name, originalWidth, originalHeight, fileSize)
               }
             }
             img.src = dataUrl
@@ -1704,7 +1736,7 @@ function App() {
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <MenuBar
         onAddText={addTextItem}
-        onAddImage={addImageItem}
+        onAddImage={handleAddImage}
         onAddVideo={handleAddVideo}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}

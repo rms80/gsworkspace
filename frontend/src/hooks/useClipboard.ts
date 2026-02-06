@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { v4 as uuidv4 } from 'uuid'
 import { CanvasItem } from '../types'
 import { uploadImage } from '../api/images'
 import { getContentData } from '../api/scenes'
@@ -14,7 +15,7 @@ interface UseClipboardParams {
   screenToCanvas: (x: number, y: number) => { x: number; y: number }
   scaleImageToViewport: (w: number, h: number) => { width: number; height: number }
   onAddTextAt: (x: number, y: number, text: string) => string | void
-  onAddImageAt: (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
+  onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onDeleteSelected: () => void
 }
@@ -95,20 +96,22 @@ export function useClipboard({
               const originalHeight = img.naturalHeight
               // Use "Image" as base name - unique name generator will make it Image1, Image2, etc.
               const name = 'Image'
+              // Generate item ID upfront so it matches the uploaded file
+              const itemId = uuidv4()
               // In offline mode, skip S3 upload and use data URL directly
               if (isOffline) {
-                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
                 return
               }
               try {
                 startOperation()
-                const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+                const s3Url = await uploadImage(dataUrl, sceneId, itemId, `pasted-${Date.now()}.png`)
                 endOperation()
-                onAddImageAt(canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasPos.x, canvasPos.y, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               } catch (err) {
                 endOperation()
                 console.error('Failed to upload image, using data URL:', err)
-                onAddImageAt(canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasPos.x, canvasPos.y, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               }
             }
             img.src = dataUrl
@@ -272,20 +275,22 @@ export function useClipboard({
               const originalHeight = img.naturalHeight
               // Use "Image" as base name - unique name generator will make it Image1, Image2, etc.
               const name = 'Image'
+              // Generate item ID upfront so it matches the uploaded file
+              const itemId = uuidv4()
               // In offline mode, skip S3 upload and use data URL directly
               if (isOffline) {
-                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
                 return
               }
               try {
                 startOperation()
-                const s3Url = await uploadImage(dataUrl, `pasted-${Date.now()}.png`)
+                const s3Url = await uploadImage(dataUrl, sceneId, itemId, `pasted-${Date.now()}.png`)
                 endOperation()
-                onAddImageAt(canvasX, canvasY, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasX, canvasY, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               } catch (err) {
                 endOperation()
                 console.error('Failed to upload image, using data URL:', err)
-                onAddImageAt(canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+                onAddImageAt(itemId, canvasX, canvasY, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
               }
             }
             img.src = dataUrl

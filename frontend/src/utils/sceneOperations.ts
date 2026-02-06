@@ -8,8 +8,10 @@ import { ImageItem, VideoItem } from '../types'
 import { getContentData } from '../api/scenes'
 import { uploadImage } from '../api/images'
 import { uploadVideo } from '../api/videos'
+import { v4 as uuidv4 } from 'uuid'
 
 export interface DuplicateImageResult {
+  id: string
   url: string
   pixelWidth: number
   pixelHeight: number
@@ -21,6 +23,7 @@ export interface DuplicateImageResult {
 }
 
 export interface DuplicateVideoResult {
+  id: string
   url: string
   pixelWidth: number
   pixelHeight: number
@@ -62,8 +65,9 @@ export async function duplicateImage(
     img.src = dataUrl
   })
 
-  // Upload as new file
-  const url = await uploadImage(dataUrl, `${imageItem.name || 'image'}.png`)
+  // Generate item ID and upload to scene folder
+  const id = uuidv4()
+  const url = await uploadImage(dataUrl, sceneId, id, `${imageItem.name || 'image'}.png`)
 
   // Calculate the visual size the original is displayed at
   const scaleX = imageItem.scaleX ?? 1
@@ -78,6 +82,7 @@ export async function duplicateImage(
   const positionY = imageItem.y + visualHeight / 2
 
   return {
+    id,
     url,
     pixelWidth,
     pixelHeight,
@@ -109,8 +114,9 @@ export async function duplicateVideo(
   const ext = hasEdit ? 'mp4' : (videoItem.src.match(/\.(\w+)(?:\?|$)/)?.[1] || 'mp4')
   const file = new File([blob], `${videoItem.name || 'video'}.${ext}`, { type: `video/${ext}` })
 
-  // Upload as new file
-  const uploadResult = await uploadVideo(file, isOffline)
+  // Generate item ID and upload to scene folder
+  const id = uuidv4()
+  const uploadResult = await uploadVideo(file, sceneId, id, isOffline)
   const url = uploadResult.url
 
   // Calculate the visual size the original is displayed at
@@ -136,6 +142,7 @@ export async function duplicateVideo(
   const positionY = videoItem.y + visualHeight / 2
 
   return {
+    id,
     url,
     pixelWidth,
     pixelHeight,

@@ -46,13 +46,25 @@ const router = Router()
 // Upload image
 router.post('/upload-image', async (req, res) => {
   try {
-    const { imageData, filename } = req.body
-    const id = uuidv4()
-    const key = `temp/images/${id}-${filename}`
+    const { imageData, sceneId, itemId, filename } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+
+    // Determine file extension from filename or default to png
+    let ext = 'png'
+    if (filename) {
+      const dotIndex = filename.lastIndexOf('.')
+      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
+    }
+
+    // Save directly to scene folder with itemId
+    const sceneFolder = `${USER_FOLDER}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.${ext}`
 
     // imageData is base64, convert to buffer
     const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
-    await save(key, Buffer.from(base64Data, 'base64'), 'image/png')
+    await save(key, Buffer.from(base64Data, 'base64'), `image/${ext}`)
 
     // Return the appropriate URL based on storage mode
     const url = getPublicUrl(key)

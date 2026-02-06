@@ -37,12 +37,14 @@ export async function cropImage(
 
 export async function uploadImage(
   dataUrl: string,
+  sceneId: string,
+  itemId: string,
   filename: string = 'image.png'
 ): Promise<string> {
   const response = await fetch(`${API_BASE}/upload-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageData: dataUrl, filename }),
+    body: JSON.stringify({ imageData: dataUrl, sceneId, itemId, filename }),
   })
   if (!response.ok) {
     throw new Error(`Failed to upload image: ${response.statusText}`)

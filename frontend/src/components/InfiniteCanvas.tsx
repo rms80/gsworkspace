@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
+import { v4 as uuidv4 } from 'uuid'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
@@ -52,8 +53,8 @@ interface InfiniteCanvasProps {
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string) => string
-  onAddImageAt: (x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
-  onAddVideoAt: (x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
+  onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
+  onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
@@ -301,6 +302,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       startOperation()
       const result = await duplicateImage(sceneId, imageItem)
       onAddImageAt(
+        result.id,
         result.positionX,
         result.positionY,
         result.url,
@@ -324,6 +326,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       startOperation()
       const result = await duplicateVideo(sceneId, videoItem, isOffline)
       onAddVideoAt(
+        result.id,
         result.positionX,
         result.positionY,
         result.url,
@@ -369,18 +372,20 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             const name = fileName.replace(/\.[^/.]+$/, '')
             const originalWidth = img.naturalWidth
             const originalHeight = img.naturalHeight
+            // Generate item ID upfront so it matches the uploaded file
+            const itemId = uuidv4()
             try {
               // Upload to S3 immediately to avoid storing large data URLs in memory
               startOperation()
-              const s3Url = await uploadImage(dataUrl, fileName || `dropped-${Date.now()}.png`)
+              const s3Url = await uploadImage(dataUrl, sceneId, itemId, fileName || `dropped-${Date.now()}.png`)
               endOperation()
               // Offset multiple files so they don't stack exactly
-              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+              onAddImageAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
             } catch (err) {
               endOperation()
               console.error('Failed to upload image, using data URL:', err)
               // Fallback to data URL if upload fails
-              onAddImageAt(canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
+              onAddImageAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, scaled.width, scaled.height, name, originalWidth, originalHeight, fileSize)
             }
           }
           img.src = dataUrl
