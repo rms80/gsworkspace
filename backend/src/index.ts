@@ -15,7 +15,23 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 
-app.use(cors())
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., server-to-server, curl)
+    if (!origin) return callback(null, true)
+
+    // Allow any localhost origin (dev)
+    if (origin.startsWith('http://localhost:') || origin === 'http://localhost') {
+      return callback(null, true)
+    }
+
+    // Check allowed origins from env
+    const allowed = process.env.ALLOWED_ORIGINS?.split(',') || []
+    if (allowed.includes(origin)) return callback(null, true)
+
+    callback(new Error('Not allowed by CORS'))
+  },
+}))
 app.use(express.json({ limit: '50mb' }))
 
 app.use('/api/items', itemsRouter)

@@ -25,38 +25,20 @@ Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| Critical | 1 | 0 | 1 |
+| Critical | 0 | 0 | 0 |
 | High | 5 | 2 | 7 |
 | Medium | 5 | 3 | 8 |
 | Low | 3 | 3 | 6 |
-| **Total** | **14** | **8** | **22** |
+| **Total** | **13** | **8** | **21** |
 
 ---
 
 ## CRITICAL
 
-### 1. [Backend] Overly Permissive CORS
+### ~~1. [Backend] Overly Permissive CORS~~ FIXED
 **File:** `backend/src/index.ts:18`
 
-**Issue:** CORS allows requests from any origin.
-
-```typescript
-// Current (vulnerable)
-app.use(cors())
-```
-
-**Attack vector:** Any website can make cross-origin API requests to the backend, enabling data exfiltration, unauthorized scene manipulation, and triggering expensive LLM calls from malicious third-party pages.
-
-**Remediation:**
-- [ ] Restrict to specific origins
-
-```typescript
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true,
-}))
-```
+CORS now restricted to localhost (any port, for dev) and origins specified via `ALLOWED_ORIGINS` env var (for production). All other origins are rejected.
 
 ---
 
@@ -347,17 +329,10 @@ if (file.size > MAX_IMAGE_SIZE) {
 
 ---
 
-### 16. [Frontend] Vulnerable Vite Version
+### ~~16. [Frontend] Vulnerable Vite Version~~ FIXED
 **File:** `frontend/package.json`
 
-**Issue:** Vite `^5.0.0` may resolve to versions with known CVEs affecting the dev server (esbuild vulnerabilities).
-
-**Remediation:**
-- [ ] Update Vite to latest 5.x or 6.x
-
-```bash
-npm update vite
-```
+Updated from Vite `^5.0.0` to `^6.0.0` (resolves to 6.4.1). Committed in `0f2c7ad`.
 
 ---
 
@@ -401,10 +376,7 @@ npm update vite
 
 ## Implementation Priority
 
-### Phase 1 - Critical (Do Immediately)
-1. Restrict CORS to specific origins (#1)
-
-### Phase 2 - High Priority (This Sprint)
+### Phase 1 - High Priority (This Sprint)
 2. Add rate limiting (#2)
 3. Reduce payload size limit (#3)
 4. Add scene ID validation (#4)
@@ -436,7 +408,7 @@ After implementing fixes, verify:
 
 - [x] SSRF: Proxy endpoint removed; scene save validates URLs
 - [x] Iframe: Scripts cannot execute in sandboxed iframes
-- [ ] CORS: Requests from unauthorized origins are rejected
+- [x] CORS: Requests from unauthorized origins are rejected
 - [ ] SSRF (LLM): Cannot pass internal URLs through LLM image items
 - [ ] Rate Limiting: Excessive requests are throttled
 - [ ] XSS: LLM-generated HTML is sanitized before rendering
