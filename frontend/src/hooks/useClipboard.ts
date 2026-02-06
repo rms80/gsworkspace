@@ -84,6 +84,11 @@ export function useClipboard({
           const blob = item.getAsFile()
           if (!blob) continue
 
+          // Reject images larger than 25MB to prevent memory exhaustion
+          if (blob.size > 25 * 1024 * 1024) {
+            console.warn(`Pasted image too large (${(blob.size / 1024 / 1024).toFixed(1)}MB), max 25MB`)
+            return
+          }
           // Capture file size for pasted images
           const fileSize = blob.size
           const reader = new FileReader()
@@ -263,6 +268,11 @@ export function useClipboard({
         const imageType = item.types.find((type) => type.startsWith('image/'))
         if (imageType) {
           const blob = await item.getType(imageType)
+          // Reject images larger than 25MB to prevent memory exhaustion
+          if (blob.size > 25 * 1024 * 1024) {
+            console.warn(`Pasted image too large (${(blob.size / 1024 / 1024).toFixed(1)}MB), max 25MB`)
+            return
+          }
           // Capture file size for pasted images
           const fileSize = blob.size
           const reader = new FileReader()

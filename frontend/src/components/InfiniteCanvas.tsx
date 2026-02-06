@@ -359,6 +359,11 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     for (const file of Array.from(files)) {
       // Handle image files
       if (file.type.startsWith('image/')) {
+        // Reject images larger than 25MB to prevent memory exhaustion
+        if (file.size > 25 * 1024 * 1024) {
+          console.warn(`Image too large (${(file.size / 1024 / 1024).toFixed(1)}MB), max 25MB`)
+          continue
+        }
         const reader = new FileReader()
         // Capture file info before async operations
         const fileName = file.name

@@ -10,9 +10,9 @@ Issues organized by severity with remediation plans.
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
 | High | 2 | 0 | 2 |
-| Medium | 2 | 3 | 5 |
+| Medium | 2 | 2 | 4 |
 | Low | 4 | 0 | 4 |
-| **Total** | **8** | **3** | **11** |
+| **Total** | **8** | **2** | **10** |
 
 ---
 
@@ -147,13 +147,8 @@ General rate limiter (1000/15min) applied to all `/api/workspaces` routes. Works
 
 ---
 
-### 10. [Frontend] No Data URL Size Validation
-**File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
-
-**Issue:** Large images converted to data URLs can cause memory exhaustion. Data URL is created before scaling checks.
-
-**Remediation:**
-- [ ] Validate file size before converting to data URL (e.g., 10MB max)
+### ~~10. [Frontend] No Data URL Size Validation~~ FIXED
+Images over 25MB are rejected before `readAsDataURL()` in all three entry points: file drop (InfiniteCanvas.tsx), Ctrl+V paste, and context menu paste (useClipboard.ts).
 
 ---
 
