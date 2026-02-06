@@ -6,31 +6,22 @@ This document describes key architectural decisions and patterns in the gsworksp
 
 ### Overview
 
-Media files (images and videos) follow a two-stage storage pattern to balance immediate responsiveness with organized long-term storage.
+Media files (images and videos) are uploaded directly to the scene folder on drop/paste. The frontend provides the `sceneId` and `itemId` with each upload so the file is stored in its final location immediately.
 
-### The Two-Stage Pattern
+### Direct-to-Scene Upload
 
-**Stage 1: Staging Upload (immediate)**
+When a user pastes or drops an image/video onto the canvas, the file is immediately uploaded to the scene folder:
+- Images: `{workspace}/{sceneId}/{itemId}.{ext}`
+- Videos: `{workspace}/{sceneId}/{itemId}.{ext}`
 
-When a user pastes or drops an image/video onto the canvas, the file is immediately uploaded to a staging folder in S3:
-- Images: `temp/images/{uuid}-{filename}.png`
-- Videos: `temp/videos/{uuid}-{filename}.{ext}`
+This happens via the `/api/w/:workspace/items/upload-image` and `/api/w/:workspace/items/upload-video` endpoints.
 
-This happens via the `/api/items/upload-image` and `/api/items/upload-video` endpoints.
-
-**Why immediate upload?**
+**Why immediate upload to scene folder?**
 - Avoids keeping large base64 data URLs in browser memory
-- Keeps undo/redo history lightweight (stores S3 URLs instead of raw data)
-- Provides immediate feedback to the user
+- Keeps undo/redo history lightweight (stores URLs instead of raw data)
+- No staging cleanup needed on save — files are already in the right place
 
-**Stage 2: Scene Folder (on save)**
-
-When the scene is saved, media files are copied from the staging folder to the scene's dedicated folder:
-- Scene folder: `version0/{sceneId}/`
-- Images become: `version0/{sceneId}/{itemId}.png`
-- Videos become: `version0/{sceneId}/{itemId}.{ext}`
-
-After successful copy, the original staging file is deleted to avoid duplication.
+**Video transcoding**: Non-browser-native video formats (e.g., `.mov`, `.avi`) are automatically transcoded to MP4 (H.264/AAC) on upload.
 
 ### Flow Diagram
 
@@ -38,46 +29,40 @@ After successful copy, the original staging file is deleted to avoid duplication
 User drops image
        │
        ▼
-┌──────────────────────┐
-│ uploadImage()        │  Frontend calls /api/items/upload-image
-│ → temp/images/{uuid} │  File stored in staging folder
-└────────┬─────────────┘
+┌─────────────────────────────────────────┐
+│ uploadImage(sceneId, itemId)            │
+│ POST /api/w/:workspace/items/upload-image│
+│ → {workspace}/{sceneId}/{itemId}.png    │
+└────────┬────────────────────────────────┘
          │
          ▼
    Canvas shows image
-   (using S3 URL)
+   (using storage URL)
          │
          ▼
    User saves scene
          │
          ▼
-┌──────────────────────────────┐
-│ POST /api/scenes/{id}        │
-│                              │
-│ 1. Fetch from staging URL    │
-│ 2. Save to scene folder      │
-│ 3. Delete staging file       │
-└──────────────────────────────┘
-         │
-         ▼
-   Image now at:
-   version0/{sceneId}/{itemId}.png
+┌──────────────────────────────────────────┐
+│ POST /api/w/:workspace/scenes/{id}       │
+│                                          │
+│ Image already in scene folder — no copy  │
+│ Just saves scene.json with item metadata │
+└──────────────────────────────────────────┘
 ```
 
 ### Special Cases
 
-**Already in scene folder**: If an image URL already points to the current scene folder, no copy is made (avoids redundant work on re-saves).
+**Already in scene folder**: If an image/video URL already points to the current scene folder, no copy is made (avoids redundant work on re-saves).
 
-**External URLs**: Images from external URLs are fetched and saved to the scene folder on first save.
-
-**Data URLs**: If somehow a data URL reaches the save logic, it's decoded and saved directly to the scene folder.
+**Data URLs**: If a data URL reaches the save logic, it's decoded and saved directly to the scene folder.
 
 ### Related Files
 
-- `frontend/src/api/images.ts` - `uploadImage()` for staging upload
-- `frontend/src/api/videos.ts` - `uploadVideo()` for staging upload
+- `frontend/src/api/images.ts` - `uploadImage()` with sceneId/itemId
+- `frontend/src/api/videos.ts` - `uploadVideo()` with sceneId/itemId
 - `backend/src/routes/items.ts` - `/upload-image`, `/upload-video` endpoints
-- `backend/src/routes/scenes.ts` - Scene save logic with staging cleanup
+- `backend/src/routes/scenes.ts` - Scene save logic
 
 ---
 
@@ -85,17 +70,20 @@ User drops image
 
 ### Overview
 
-Scenes are stored in S3 with each scene in its own folder under `version0/{sceneId}/`.
+Scenes are organized by workspace, with each scene in its own folder under `{workspace}/{sceneId}/`.
 
 ### Folder Structure
 
 ```
-version0/
+{workspace}/
+  ├── workspace.json          # Workspace metadata (name, hidden, pinnedSceneIds)
   └── {sceneId}/
       ├── scene.json          # Scene metadata and item definitions
       ├── history.json        # Undo/redo history
       ├── {itemId}.png        # Image files
+      ├── {itemId}.crop.png   # Cropped image files
       ├── {itemId}.mp4        # Video files
+      ├── {itemId}.crop.mp4   # Processed video files
       └── {itemId}.html       # HTML content files
 ```
 
@@ -109,6 +97,7 @@ The `scene.json` file contains all scene metadata and item definitions:
   "name": "My Scene",
   "createdAt": "2025-01-15T10:00:00.000Z",
   "modifiedAt": "2025-01-15T12:30:00.000Z",
+  "version": "1",
   "items": [
     {
       "type": "text",
@@ -156,6 +145,8 @@ The `scene.json` file contains all scene metadata and item definitions:
 }
 ```
 
+The `version` field is stamped by the server on every save (ignoring any client-provided value). Old scenes without a `version` field still load fine since the field is optional.
+
 ### Content Storage by Item Type
 
 | Item Type | Content Location | Rationale |
@@ -181,7 +172,55 @@ This section describes all available backend API endpoints, their arguments, fun
 
 ## Base URL
 
-All endpoints are prefixed with `/api` and proxied through the Vite dev server to `localhost:4000`.
+All endpoints are prefixed with `/api` and proxied through the Vite dev server to `localhost:4000`. Workspace-scoped endpoints use `/api/w/:workspace/` prefix. The frontend derives the active workspace from the first segment of the URL path (defaulting to `"default"`).
+
+---
+
+## Auth Endpoints (`/api/auth`)
+
+These endpoints are public (not behind auth middleware). Auth is optional — if `AUTH_PASSWORD` is not set in the backend `.env`, all requests pass through unauthenticated.
+
+### `GET /api/auth/status`
+
+**Description:** Returns whether authentication is required and whether the current session is authenticated.
+
+**Response:**
+```json
+{
+  "authRequired": true,        // false if AUTH_PASSWORD is not set
+  "authenticated": false,      // true if session is authenticated or auth is not required
+  "serverName": "gsworkspace"  // from SERVER_NAME env var
+}
+```
+
+---
+
+### `POST /api/auth/login`
+
+**Description:** Authenticates with the server password. Sets a session cookie.
+
+**Request Body:**
+```json
+{ "password": "..." }
+```
+
+**Response:**
+```json
+{ "success": true }
+```
+
+**Error:** `401` if password is invalid.
+
+---
+
+### `POST /api/auth/logout`
+
+**Description:** Clears the session cookie.
+
+**Response:**
+```json
+{ "success": true }
+```
 
 ---
 
@@ -207,45 +246,127 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-## Items Endpoints (`/api/items`)
+## Workspaces Endpoints (`/api/workspaces`)
 
-### `POST /api/items/upload-image`
+### `GET /api/workspaces`
 
-**Description:** Uploads an image (as base64 data URL) to S3 temporary storage. Returns the public S3 URL. Used for immediate upload on paste/drop to avoid storing large data URLs in memory.
+**Description:** Lists all non-hidden workspaces. Discovers workspaces from `workspace.json` files and also detects legacy workspace folders that have scene content but no `workspace.json`.
+
+**Response:**
+```json
+[
+  { "name": "default", "createdAt": "2025-01-01T00:00:00.000Z" },
+  { "name": "my-project", "createdAt": "2025-06-15T10:00:00.000Z" }
+]
+```
+
+---
+
+### `GET /api/workspaces/:name`
+
+**Description:** Checks if a workspace exists and returns its metadata (hidden flag, pinned scene IDs).
+
+**URL Parameters:**
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | string | Yes | Workspace name (1-64 alphanumeric, hyphen, or underscore) |
+
+**Response:**
+```json
+{
+  "exists": true,
+  "hidden": false,
+  "pinnedSceneIds": ["scene-uuid-1", "scene-uuid-2"]
+}
+```
+
+---
+
+### `POST /api/workspaces`
+
+**Description:** Creates a new workspace. Writes a `workspace.json` to the workspace folder.
 
 **Request Body:**
 ```json
 {
-  "imageData": "data:image/png;base64,...", // Base64 image data URL
-  "filename": "image.png" // Optional filename
+  "name": "my-workspace",  // Required, must match /^[a-zA-Z0-9_-]{1,64}$/
+  "hidden": false           // Optional, default false
 }
 ```
 
 **Response:**
 ```json
-{ "success": true, "url": "https://bucket.s3.region.amazonaws.com/temp/images/..." }
+{
+  "success": true,
+  "workspace": { "name": "my-workspace", "hidden": false, "createdAt": "..." }
+}
 ```
 
-**Frontend Usage:** Multiple calls (via `uploadImage()` function)
-- `frontend/src/App.tsx` - Uploading deleted item for recovery
-- `frontend/src/hooks/useClipboard.ts` - Pasting images from clipboard
-- `frontend/src/components/InfiniteCanvas.tsx` - Dropping images onto canvas
+**Error:** `409` if workspace already exists, `400` if name is invalid.
 
 ---
 
-### `POST /api/items/upload-video`
+### `PUT /api/workspaces/:name/pinned-scenes`
 
-**Description:** Uploads a video file (multipart form data) to temporary storage. Returns the public URL. Uses multer middleware with 500MB file size limit.
+**Description:** Updates the list of pinned scene IDs for a workspace. Creates a minimal `workspace.json` if one doesn't exist yet (for legacy workspaces).
 
-**Request:** `multipart/form-data`
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `video` | File | Yes | Video file binary data |
+**Request Body:**
+```json
+{ "sceneIds": ["scene-uuid-1", "scene-uuid-2"] }
+```
+
+**Response:**
+```json
+{ "success": true }
+```
+
+---
+
+## Items Endpoints (`/api/w/:workspace/items`)
+
+### `POST /api/w/:workspace/items/upload-image`
+
+**Description:** Uploads an image (as base64 data URL) directly to the scene folder. Returns the public URL. The `sceneId` and `itemId` determine the storage path.
+
+**Request Body:**
+```json
+{
+  "imageData": "data:image/png;base64,...", // Base64 image data URL
+  "sceneId": "scene-uuid",                 // Required scene ID
+  "itemId": "item-uuid",                   // Required item ID
+  "filename": "image.png"                  // Optional (used for extension detection)
+}
+```
 
 **Response:**
 ```json
 { "success": true, "url": "https://..." }
 ```
+
+**Frontend Usage:** Multiple calls (via `uploadImage()` function)
+- `frontend/src/App.tsx` - Uploading images on paste/drop
+- `frontend/src/hooks/useClipboard.ts` - Pasting images from clipboard
+- `frontend/src/components/InfiniteCanvas.tsx` - Dropping images onto canvas
+
+---
+
+### `POST /api/w/:workspace/items/upload-video`
+
+**Description:** Uploads a video file (multipart form data) directly to the scene folder. Non-browser-native formats (e.g., `.mov`, `.avi`) are automatically transcoded to MP4. Uses multer middleware with 500MB file size limit.
+
+**Request:** `multipart/form-data`
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `video` | File | Yes | Video file binary data |
+| `sceneId` | string | Yes | Scene UUID |
+| `itemId` | string | Yes | Item UUID |
+
+**Response:**
+```json
+{ "success": true, "url": "https://...", "transcoded": true }
+```
+
+The `transcoded` field is only present (and `true`) when the video was converted to MP4.
 
 **Frontend Usage:** 2 calls (via `uploadVideo()` function)
 - `frontend/src/App.tsx` - Uploading video files
@@ -253,7 +374,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/items/crop-image`
+### `POST /api/w/:workspace/items/crop-image`
 
 **Description:** Crops an image on the server using Sharp and saves the cropped version to storage. Uses scene and image IDs to locate the source image (tries common extensions: png, jpg, jpeg, gif, webp).
 
@@ -281,7 +402,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/items/crop-video`
+### `POST /api/w/:workspace/items/crop-video`
 
 **Description:** Processes a video on the server using FFmpeg. Supports cropping, speed changes, audio removal, and trimming. Operations can be combined. Uses two-pass encoding when both trim and speed change are requested to ensure accurate results.
 
@@ -289,7 +410,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 ```json
 {
   "sceneId": "scene-uuid",  // Scene ID where the video belongs
-  "videoId": "video-uuid",  // Video item ID (source key is constructed from these)
+  "videoId": "video-uuid",  // Video item ID
   "cropRect": {             // Optional crop rectangle
     "x": 0,
     "y": 0,
@@ -301,13 +422,14 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
   "trim": {                 // Optional - trim video
     "start": 0,             // Start time in seconds
     "end": 10               // End time in seconds
-  }
+  },
+  "extension": "mp4"        // Optional source file extension (default: mp4)
 }
 ```
 
 **Response:**
 ```json
-{ "success": true, "url": "https://bucket.s3.region.amazonaws.com/.../video-id.crop.mp4" }
+{ "success": true }
 ```
 
 **Frontend Usage:** 1 call (via `cropVideo()` function)
@@ -315,18 +437,18 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-## LLM Endpoints (`/api/llm`)
+## LLM Endpoints (`/api/w/:workspace/llm`)
 
-### `POST /api/llm/generate`
+### `POST /api/w/:workspace/llm/generate`
 
-**Description:** Generates text using an LLM (Claude or Gemini). Accepts context items (text and images) along with a prompt.
+**Description:** Generates text using an LLM (Claude or Gemini). Accepts context items (text and image references) along with a prompt. Image items are resolved server-side from storage using workspace/sceneId/itemId.
 
 **Request Body:**
 ```json
 {
   "items": [                    // Optional context items
     { "type": "text", "text": "..." },
-    { "type": "image", "src": "data:..." }
+    { "type": "image", "id": "item-uuid", "sceneId": "scene-uuid", "useEdited": false }
   ],
   "prompt": "Your instruction...", // Required prompt text
   "model": "claude-sonnet"         // Optional model (default: claude-sonnet)
@@ -348,14 +470,14 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/llm/generate-image`
+### `POST /api/w/:workspace/llm/generate-image`
 
 **Description:** Generates images using AI image generation models (currently Gemini Imagen).
 
 **Request Body:**
 ```json
 {
-  "items": [...],              // Optional context items
+  "items": [...],              // Optional context items (same format as /generate)
   "prompt": "Image description...", // Required prompt text
   "model": "gemini-imagen"     // Optional model (default: gemini-imagen)
 }
@@ -371,7 +493,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/llm/generate-html`
+### `POST /api/w/:workspace/llm/generate-html`
 
 **Description:** Generates HTML code using an LLM. Takes spatial layout information about canvas items to help the LLM understand the visual context.
 
@@ -407,11 +529,11 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-## Scenes Endpoints (`/api/scenes`)
+## Scenes Endpoints (`/api/w/:workspace/scenes`)
 
-### `GET /api/scenes`
+### `GET /api/w/:workspace/scenes`
 
-**Description:** Lists all scenes with metadata only (no items). Returns an array of scene summaries sorted for display.
+**Description:** Lists all scenes in the workspace with metadata only (no items). Returns an array of scene summaries.
 
 **Arguments:** None
 
@@ -434,9 +556,9 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id`
+### `GET /api/w/:workspace/scenes/:id`
 
-**Description:** Loads a complete scene including all items with their full data. Images and videos are returned as S3 URLs, HTML content is loaded inline.
+**Description:** Loads a complete scene including all items with their full data. Images and videos are returned as storage URLs, HTML content is loaded inline. Includes the `version` field if present.
 
 **URL Parameters:**
 | Parameter | Type | Required | Description |
@@ -450,10 +572,11 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
   "name": "My Scene",
   "createdAt": "...",
   "modifiedAt": "...",
+  "version": "1",
   "items": [
     { "type": "text", "id": "...", "x": 0, "y": 0, "text": "..." },
-    { "type": "image", "id": "...", "src": "https://s3...", ... },
-    { "type": "video", "id": "...", "src": "https://s3...", ... },
+    { "type": "image", "id": "...", "src": "https://...", ... },
+    { "type": "video", "id": "...", "src": "https://...", ... },
     { "type": "html", "id": "...", "html": "<!DOCTYPE html>...", ... }
   ]
 }
@@ -464,7 +587,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id/raw`
+### `GET /api/w/:workspace/scenes/:id/raw`
 
 **Description:** Returns the raw scene.json file without any transformation. Useful for debugging or exporting the raw data format.
 
@@ -480,9 +603,9 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/scenes/:id`
+### `POST /api/w/:workspace/scenes/:id`
 
-**Description:** Saves a complete scene. Handles uploading images/videos from data URLs or external URLs to the scene's S3 folder. Cleans up temporary staging files after successful save.
+**Description:** Saves a complete scene. Handles any remaining data URLs or external URLs by saving them to the scene folder. Stamps a `version` field on the stored scene (overriding any client value).
 
 **URL Parameters:**
 | Parameter | Type | Required | Description |
@@ -514,9 +637,9 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `DELETE /api/scenes/:id`
+### `DELETE /api/w/:workspace/scenes/:id`
 
-**Description:** Deletes a scene and all its associated files (images, videos, HTML, history) from S3.
+**Description:** Deletes a scene and all its associated files (images, videos, HTML, history) from storage.
 
 **URL Parameters:**
 | Parameter | Type | Required | Description |
@@ -533,7 +656,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id/timestamp`
+### `GET /api/w/:workspace/scenes/:id/timestamp`
 
 **Description:** Returns only the scene's modification timestamp. Used for lightweight conflict detection without loading the full scene.
 
@@ -556,9 +679,9 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id/content-url`
+### `GET /api/w/:workspace/scenes/:id/content-url`
 
-**Description:** Constructs and returns the S3 URL for a specific content item (image, video, or HTML) within a scene.
+**Description:** Constructs and returns the storage URL for a specific content item (image, video, or HTML) within a scene.
 
 **URL Parameters:**
 | Parameter | Type | Required | Description |
@@ -575,7 +698,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 **Response:**
 ```json
-{ "url": "https://bucket.s3.region.amazonaws.com/version0/scene-id/item-id.mp4" }
+{ "url": "https://.../{workspace}/scene-id/item-id.mp4" }
 ```
 
 **Frontend Usage:** 1 call (via `getContentUrl()` function)
@@ -583,7 +706,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id/content-data`
+### `GET /api/w/:workspace/scenes/:id/content-data`
 
 **Description:** Returns the actual binary content data for a scene item (image, video, or HTML). Automatically detects the file extension by trying common formats. This endpoint replaces the need for proxy endpoints by providing direct access to scene content.
 
@@ -616,7 +739,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `GET /api/scenes/:id/history`
+### `GET /api/w/:workspace/scenes/:id/history`
 
 **Description:** Loads the undo/redo history for a scene.
 
@@ -638,7 +761,7 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 ---
 
-### `POST /api/scenes/:id/history`
+### `POST /api/w/:workspace/scenes/:id/history`
 
 **Description:** Saves the undo/redo history for a scene.
 
@@ -730,26 +853,33 @@ All endpoints are prefixed with `/api` and proxied through the Vite dev server t
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
+| `/api/auth/status` | GET | Auth status and server name |
+| `/api/auth/login` | POST | Authenticate with password |
+| `/api/auth/logout` | POST | Clear session |
 | `/api/health` | GET | Server health and config status |
-| `/api/items/upload-image` | POST | Upload image to staging |
-| `/api/items/upload-video` | POST | Upload video to staging |
-| `/api/items/crop-image` | POST | Crop an image server-side |
-| `/api/items/crop-video` | POST | Process video (crop, speed, trim) |
-| `/api/llm/generate` | POST | Generate text with LLM |
-| `/api/llm/generate-image` | POST | Generate image with AI |
-| `/api/llm/generate-html` | POST | Generate HTML with LLM |
-| `/api/scenes` | GET | List all scenes |
-| `/api/scenes/:id` | GET | Load a scene |
-| `/api/scenes/:id` | POST | Save a scene |
-| `/api/scenes/:id` | DELETE | Delete a scene |
-| `/api/scenes/:id/raw` | GET | Get raw scene.json |
-| `/api/scenes/:id/timestamp` | GET | Get scene modification time |
-| `/api/scenes/:id/content-url` | GET | Get URL for scene content |
-| `/api/scenes/:id/content-data` | GET | Get binary data for scene content |
-| `/api/scenes/:id/history` | GET | Load scene history |
-| `/api/scenes/:id/history` | POST | Save scene history |
+| `/api/workspaces` | GET | List all workspaces |
+| `/api/workspaces/:name` | GET | Check workspace existence and metadata |
+| `/api/workspaces` | POST | Create a workspace |
+| `/api/workspaces/:name/pinned-scenes` | PUT | Update pinned scene IDs |
+| `/api/w/:workspace/items/upload-image` | POST | Upload image to scene folder |
+| `/api/w/:workspace/items/upload-video` | POST | Upload video to scene folder (auto-transcode) |
+| `/api/w/:workspace/items/crop-image` | POST | Crop an image server-side |
+| `/api/w/:workspace/items/crop-video` | POST | Process video (crop, speed, trim) |
+| `/api/w/:workspace/llm/generate` | POST | Generate text with LLM |
+| `/api/w/:workspace/llm/generate-image` | POST | Generate image with AI |
+| `/api/w/:workspace/llm/generate-html` | POST | Generate HTML with LLM |
+| `/api/w/:workspace/scenes` | GET | List all scenes in workspace |
+| `/api/w/:workspace/scenes/:id` | GET | Load a scene |
+| `/api/w/:workspace/scenes/:id` | POST | Save a scene |
+| `/api/w/:workspace/scenes/:id` | DELETE | Delete a scene |
+| `/api/w/:workspace/scenes/:id/raw` | GET | Get raw scene.json |
+| `/api/w/:workspace/scenes/:id/timestamp` | GET | Get scene modification time |
+| `/api/w/:workspace/scenes/:id/content-url` | GET | Get URL for scene content |
+| `/api/w/:workspace/scenes/:id/content-data` | GET | Get binary data for scene content |
+| `/api/w/:workspace/scenes/:id/history` | GET | Load scene history |
+| `/api/w/:workspace/scenes/:id/history` | POST | Save scene history |
 | `/api/local-files/*` | GET | Serve local storage files |
 | `/api/config` | GET | Get server configuration |
 | `/api/config/storage-mode` | POST | Change storage mode |
 
-**Total Endpoints:** 21
+**Total Endpoints:** 28

@@ -43,6 +43,7 @@ gsworkspace provides an infinite pan/zoom canvas where you can:
 
 ### Scene Management
 - **Multiple Scenes** - Work with multiple scenes using a tabbed interface
+- **Multiple Workspaces** - Workspaces are collections of Scenes
 - **Auto-Save** - Automatic saving with debounce (1 second delay)
 - **Undo/Redo** - Full undo/redo history with keyboard shortcuts (Ctrl+Z, Ctrl+Y)
 - **Export/Import** - Export scenes as ZIP archives or files, import from ZIP
