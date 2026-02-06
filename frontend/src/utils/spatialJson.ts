@@ -77,7 +77,7 @@ export function replaceImagePlaceholders(html: string, imageMap: ImageSourceMap)
   let result = html
   imageMap.forEach((src, imageId) => {
     // Replace all occurrences of the placeholder ID with the actual src
-    result = result.replace(new RegExp(imageId, 'g'), src)
+    result = result.split(imageId).join(src)
   })
   return result
 }

@@ -26,10 +26,10 @@ Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organi
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
 | Critical | 0 | 0 | 0 |
-| High | 4 | 1 | 5 |
-| Medium | 5 | 3 | 8 |
+| High | 4 | 0 | 4 |
+| Medium | 4 | 3 | 7 |
 | Low | 3 | 3 | 6 |
-| **Total** | **12** | **7** | **19** |
+| **Total** | **10** | **6** | **16** |
 
 ---
 
@@ -132,23 +132,10 @@ LLM-generated HTML is now sanitized with DOMPurify before rendering. Forbidden t
 
 ---
 
-### 7. [Frontend] Unescaped RegExp Constructor
+### ~~7. [Frontend] Unescaped RegExp Constructor~~ FIXED
 **File:** `frontend/src/utils/spatialJson.ts:80`
 
-**Issue:** Image IDs used directly in RegExp constructor without escaping special characters.
-
-```typescript
-result = result.replace(new RegExp(imageId, 'g'), src)
-```
-
-**Note:** `htmlExport.ts` has similar RegExp usage but correctly escapes input (line 164). `spatialJson.ts` does not.
-
-**Remediation:**
-- [ ] Use string split/join instead of RegExp
-
-```typescript
-result = result.split(imageId).join(src)
-```
+Replaced `new RegExp(imageId, 'g')` with safe `split().join()` pattern.
 
 ---
 
@@ -180,23 +167,10 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 9. [Backend] Unsafe JSON Parsing
-**File:** `backend/src/routes/scenes.ts:180, 667, 819, 868`
+### ~~9. [Backend] Unsafe JSON Parsing~~ FIXED
+**File:** `backend/src/routes/scenes.ts`
 
-**Issue:** `JSON.parse()` without try-catch can crash on malformed stored data.
-
-**Remediation:**
-- [ ] Wrap all JSON.parse calls in try-catch
-- [ ] Return appropriate error responses
-
-```typescript
-let storedScene: StoredScene;
-try {
-  storedScene = JSON.parse(sceneJson);
-} catch (e) {
-  return res.status(500).json({ error: 'Corrupted scene data' });
-}
-```
+All 4 `JSON.parse()` calls now wrapped in try-catch with appropriate error responses.
 
 ---
 
@@ -382,4 +356,4 @@ After implementing fixes, verify:
 - [x] XSS: LLM-generated HTML is sanitized before rendering
 - [x] Input Validation: Invalid UUIDs rejected at route level
 - [ ] Fetch Limits: Large remote files are rejected before full download
-- [ ] JSON Parse: Malformed stored data returns error, doesn't crash
+- [x] JSON Parse: Malformed stored data returns error, doesn't crash

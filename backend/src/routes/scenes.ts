@@ -186,7 +186,12 @@ router.get('/:id/timestamp', async (req, res) => {
       return res.status(404).json({ error: 'Scene not found' })
     }
 
-    const storedScene: StoredScene = JSON.parse(sceneJson)
+    let storedScene: StoredScene
+    try {
+      storedScene = JSON.parse(sceneJson)
+    } catch {
+      return res.status(500).json({ error: 'Corrupted scene data' })
+    }
     res.json({
       id: storedScene.id,
       modifiedAt: storedScene.modifiedAt,
@@ -673,7 +678,12 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Scene not found' })
     }
 
-    const storedScene: StoredScene = JSON.parse(sceneJson)
+    let storedScene: StoredScene
+    try {
+      storedScene = JSON.parse(sceneJson)
+    } catch {
+      return res.status(500).json({ error: 'Corrupted scene data' })
+    }
 
     // Reconstruct items with full data
     const items = await Promise.all(
@@ -825,7 +835,12 @@ router.get('/', async (_req, res) => {
       sceneJsonKeys.map(async (key) => {
         const sceneJson = await load(key)
         if (!sceneJson) return null
-        const scene: StoredScene = JSON.parse(sceneJson)
+        let scene: StoredScene
+        try {
+          scene = JSON.parse(sceneJson)
+        } catch {
+          return null
+        }
         return {
           id: scene.id,
           name: scene.name,
@@ -874,7 +889,13 @@ router.get('/:id/history', async (req, res) => {
       return res.json({ records: [], currentIndex: -1 })
     }
 
-    res.json(JSON.parse(historyJson))
+    let history
+    try {
+      history = JSON.parse(historyJson)
+    } catch {
+      return res.status(500).json({ error: 'Corrupted history data' })
+    }
+    res.json(history)
   } catch (error) {
     console.error('Error loading history:', error)
     res.status(500).json({ error: 'Failed to load history' })
