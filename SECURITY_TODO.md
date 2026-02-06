@@ -27,9 +27,9 @@ Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organi
 |----------|---------|----------|-------|
 | Critical | 0 | 0 | 0 |
 | High | 4 | 0 | 4 |
-| Medium | 4 | 3 | 7 |
+| Medium | 3 | 3 | 6 |
 | Low | 3 | 3 | 6 |
-| **Total** | **10** | **6** | **16** |
+| **Total** | **9** | **6** | **15** |
 
 ---
 
@@ -210,20 +210,9 @@ return res.status(400).json({ error: `Failed to fetch source video: ${sourceUrl}
 
 ---
 
-### 12. [Backend] Missing Security Headers
-**Issue:** No security headers configured (no X-Content-Type-Options, X-Frame-Options, CSP, HSTS, etc.).
+### ~~12. [Backend] Missing Security Headers~~ FIXED
 
-**Remediation:**
-- [ ] Add helmet middleware
-
-```bash
-npm install helmet
-```
-
-```typescript
-import helmet from 'helmet';
-app.use(helmet());
-```
+Added helmet middleware with default configuration. Sets X-Content-Type-Options, X-Frame-Options, HSTS, Referrer-Policy, and other security headers.
 
 ---
 

@@ -1,5 +1,6 @@
 import express from 'express'
 import cors from 'cors'
+import helmet from 'helmet'
 import dotenv from 'dotenv'
 import itemsRouter from './routes/items.js'
 import llmRouter from './routes/llm.js'
@@ -15,6 +16,7 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 
+app.use(helmet())
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (e.g., server-to-server, curl)
