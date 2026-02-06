@@ -709,22 +709,6 @@ function MenuBar({
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px' }}>About</h2>
-              <button
-                onClick={() => setAboutDialogOpen(false)}
-                style={{
-                  border: 'none',
-                  background: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
-                  color: '#666',
-                  padding: '4px 8px',
-                }}
-              >
-                x
-              </button>
-            </div>
             <div dangerouslySetInnerHTML={{ __html: aboutContent }} />
           </div>
         </div>
