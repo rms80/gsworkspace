@@ -1,8 +1,19 @@
 
 - only push history to server that is older than current state. push at same time as save scene. so "last" history state is the saved state.
-- clean up files no longer referenced by history or scene
+- clean up files no longer referenced by history or scene (on save I guess?)
+
+
 
 - add support for PDF
 
 - add gif support w/ editing
 - video to gif support
+
+- video storage support in offline mode? 
+
+
+- support for renaming & deleting workspaces (?)
+- support for exporting and importing workspaces (download zip)
+
+
+- dark mode from future todo
