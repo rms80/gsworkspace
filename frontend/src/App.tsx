@@ -150,7 +150,20 @@ function App() {
 
       // Determine which scenes to open based on settings
       const availableIds = new Set(sceneList.map((s) => s.id))
-      const validOpenIds = modeSettings.openSceneIds.filter((id) => availableIds.has(id))
+      let validOpenIds = modeSettings.openSceneIds.filter((id) => availableIds.has(id))
+
+      // If no client-remembered scenes and not offline, try pinned scenes from workspace
+      if (validOpenIds.length === 0 && mode !== 'offline') {
+        try {
+          const wsRes = await fetch(`/api/workspaces/${ACTIVE_WORKSPACE}`)
+          const wsData = await wsRes.json()
+          if (wsData.pinnedSceneIds && Array.isArray(wsData.pinnedSceneIds)) {
+            validOpenIds = wsData.pinnedSceneIds.filter((id: string) => availableIds.has(id))
+          }
+        } catch {
+          // Ignore - proceed with empty list
+        }
+      }
 
       if (validOpenIds.length === 0) {
         // No scenes to open - show empty state
@@ -1541,6 +1554,20 @@ function App() {
     window.location.href = `/${name}/`
   }, [])
 
+  const handlePinCurrentScenes = useCallback(async () => {
+    const sceneIds = openScenes.map((s) => s.id)
+    try {
+      await fetch(`/api/workspaces/${ACTIVE_WORKSPACE}/pinned-scenes`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sceneIds }),
+      })
+    } catch (error) {
+      console.error('Failed to pin scenes:', error)
+      alert('Failed to pin current scenes')
+    }
+  }, [openScenes])
+
   // Keyboard shortcuts for scene management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1908,6 +1935,7 @@ function App() {
         onCloseScene={closeScene}
         onDeleteScene={handleDeleteScene}
         onOpenScenes={handleOpenScenes}
+        onPinCurrentScenes={storageMode !== 'offline' ? handlePinCurrentScenes : undefined}
       />
       {activeScene ? (
         <InfiniteCanvas

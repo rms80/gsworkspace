@@ -12,6 +12,7 @@ interface TabBarProps {
   onCloseScene: (id: string) => void
   onDeleteScene: (id: string) => void
   onOpenScenes?: (sceneIds: string[]) => void
+  onPinCurrentScenes?: () => void
 }
 
 interface ContextMenuState {
@@ -30,6 +31,7 @@ function TabBar({
   onCloseScene,
   onDeleteScene,
   onOpenScenes,
+  onPinCurrentScenes,
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameDialog, setRenameDialog] = useState<{ sceneId: string; currentName: string } | null>(null)
@@ -282,6 +284,33 @@ function TabBar({
             zIndex: 200,
           }}
         >
+          {onPinCurrentScenes && (
+            <>
+              <button
+                onClick={() => {
+                  setSceneDropdownOpen(false)
+                  onPinCurrentScenes()
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f0f0f0' }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+              >
+                Pin Current Scenes
+              </button>
+              <div style={{ borderTop: '1px solid #e0e0e0', margin: '2px 0' }} />
+            </>
+          )}
           {dropdownLoading ? (
             <div style={{ padding: '8px 12px', color: '#888', fontSize: '13px' }}>Loading...</div>
           ) : (() => {

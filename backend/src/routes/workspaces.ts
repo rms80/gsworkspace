@@ -53,7 +53,7 @@ router.get('/', async (_req, res) => {
   }
 })
 
-// Check if a workspace exists
+// Check if a workspace exists (and return pinned scenes if available)
 router.get('/:name', async (req, res) => {
   try {
     const { name } = req.params
@@ -63,13 +63,20 @@ router.get('/:name', async (req, res) => {
     }
 
     // Check for workspace.json first
-    if (await exists(`${name}/workspace.json`)) {
-      return res.json({ exists: true })
+    const workspaceKey = `${name}/workspace.json`
+    if (await exists(workspaceKey)) {
+      try {
+        const raw = await load(workspaceKey)
+        const meta = raw ? JSON.parse(raw) : {}
+        return res.json({ exists: true, pinnedSceneIds: meta.pinnedSceneIds ?? [] })
+      } catch {
+        return res.json({ exists: true, pinnedSceneIds: [] })
+      }
     }
 
     // Also check if the folder has any content (workspace predates workspace.json)
     const keys = await list(`${name}/`)
-    res.json({ exists: keys.length > 0 })
+    res.json({ exists: keys.length > 0, pinnedSceneIds: [] })
   } catch (error) {
     console.error('Error checking workspace:', error)
     res.status(500).json({ error: 'Failed to check workspace' })
@@ -108,6 +115,45 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('Error creating workspace:', error)
     res.status(500).json({ error: 'Failed to create workspace' })
+  }
+})
+
+// Update pinned scenes for a workspace
+router.put('/:name/pinned-scenes', async (req, res) => {
+  try {
+    const { name } = req.params
+    const { sceneIds } = req.body
+
+    if (!WORKSPACE_RE.test(name)) {
+      return res.status(400).json({ error: 'Invalid workspace name' })
+    }
+
+    if (!Array.isArray(sceneIds)) {
+      return res.status(400).json({ error: 'sceneIds must be an array' })
+    }
+
+    const workspaceKey = `${name}/workspace.json`
+    let meta: Record<string, unknown>
+
+    if (await exists(workspaceKey)) {
+      try {
+        const raw = await load(workspaceKey)
+        meta = raw ? JSON.parse(raw) : {}
+      } catch {
+        meta = {}
+      }
+    } else {
+      // Create minimal workspace.json for legacy workspaces
+      meta = { name, hidden: false, createdAt: '' }
+    }
+
+    meta.pinnedSceneIds = sceneIds
+    await save(workspaceKey, Buffer.from(JSON.stringify(meta, null, 2)), 'application/json')
+
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error updating pinned scenes:', error)
+    res.status(500).json({ error: 'Failed to update pinned scenes' })
   }
 })
 
