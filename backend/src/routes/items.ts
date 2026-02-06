@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { save, loadAsBuffer, getPublicUrl } from '../services/storage.js'
-import { v4 as uuidv4 } from 'uuid'
+import { v4 as uuidv4, validate as uuidValidate } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
@@ -49,6 +49,9 @@ router.post('/upload-image', async (req, res) => {
     const { imageData, sceneId, itemId, filename } = req.body
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId)) {
+      return res.status(400).json({ error: 'Invalid scene ID format' })
     }
 
     // Determine file extension from filename or default to png
@@ -99,6 +102,9 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
     const itemId = req.body.itemId
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId)) {
+      return res.status(400).json({ error: 'Invalid scene ID format' })
     }
 
     const sceneFolder = `${USER_FOLDER}/${sceneId}`

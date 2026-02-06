@@ -26,10 +26,10 @@ Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organi
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
 | Critical | 0 | 0 | 0 |
-| High | 5 | 2 | 7 |
+| High | 4 | 2 | 6 |
 | Medium | 5 | 3 | 8 |
 | Low | 3 | 3 | 6 |
-| **Total** | **13** | **8** | **21** |
+| **Total** | **12** | **8** | **20** |
 
 ---
 
@@ -95,21 +95,10 @@ app.use(express.json({ limit: '10mb' }))
 
 ---
 
-### 4. [Backend] Missing Input Validation on Scene ID
-**File:** `backend/src/routes/scenes.ts` (multiple endpoints)
+### ~~4. [Backend] Missing Input Validation on Scene ID~~ FIXED
+**File:** `backend/src/routes/scenes.ts`, `backend/src/routes/items.ts`
 
-**Issue:** Scene IDs used in S3/storage paths without UUID format validation. Could allow path manipulation.
-
-**Remediation:**
-- [ ] Validate scene ID is valid UUID format
-
-```typescript
-import { validate as uuidValidate } from 'uuid';
-
-if (!uuidValidate(id)) {
-  return res.status(400).json({ error: 'Invalid scene ID format' });
-}
-```
+Added `router.param('id')` middleware in scenes router to validate all `:id` params as UUIDs. Added explicit `uuidValidate()` checks in items router for `sceneId` from request body.
 
 ---
 
@@ -412,6 +401,6 @@ After implementing fixes, verify:
 - [ ] SSRF (LLM): Cannot pass internal URLs through LLM image items
 - [ ] Rate Limiting: Excessive requests are throttled
 - [ ] XSS: LLM-generated HTML is sanitized before rendering
-- [ ] Input Validation: Invalid UUIDs and oversized payloads rejected
+- [x] Input Validation: Invalid UUIDs rejected at route level
 - [ ] Fetch Limits: Large remote files are rejected before full download
 - [ ] JSON Parse: Malformed stored data returns error, doesn't crash

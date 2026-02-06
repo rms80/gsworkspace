@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { validate as uuidValidate } from 'uuid'
 import {
   save,
   load,
@@ -11,6 +12,14 @@ import {
 } from '../services/storage.js'
 
 const router = Router()
+
+// Validate :id param is a valid UUID on all routes
+router.param('id', (req, res, next, id) => {
+  if (!uuidValidate(id)) {
+    return res.status(400).json({ error: 'Invalid scene ID format' })
+  }
+  next()
+})
 
 // User folder - hardcoded for now, will be per-user later
 const USER_FOLDER = 'version0'
