@@ -10,8 +10,8 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 |----------|---------|----------|-------|
 | High | 3 | 0 | 3 |
 | Medium | 2 | 3 | 5 |
-| Low | 2 | 1 | 3 |
-| **Total** | **7** | **4** | **11** |
+| Low | 2 | 0 | 2 |
+| **Total** | **7** | **3** | **10** |
 
 ---
 
@@ -32,6 +32,7 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **No Canvas Item Limit** - MAX_ITEMS_PER_SCENE (1000) enforced in updateActiveSceneItems
 - **No Scene Name Length Validation** - Scene names truncated to 255 characters in renameScene
 - **Silent Image Resolve Failures** - Unresolvable images now throw, surfacing error to client
+- **Missing URL Validation on Frontend API Calls** - UUID validation via `validateUuid()` on all API call sites
 
 ---
 
@@ -183,13 +184,6 @@ if (!ALLOWED_MODELS.includes(model)) {
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
-### 11. [Frontend] Missing URL Validation on Frontend API Calls
-**File:** `frontend/src/api/scenes.ts` and other API modules
-
-**Issue:** Scene IDs and other parameters used in URL construction without client-side validation.
-
-**Remediation:**
-- [ ] Validate parameters before constructing API URLs
 
 ---
 

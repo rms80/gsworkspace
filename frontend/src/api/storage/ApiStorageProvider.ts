@@ -1,11 +1,13 @@
 import { Scene } from '../../types'
 import { SerializedHistory } from '../../history/types'
 import { StorageProvider, SceneMetadata, SceneTimestamp } from './StorageProvider'
+import { validateUuid } from '../../utils/validation'
 
 const API_BASE = '/api/scenes'
 
 export class ApiStorageProvider implements StorageProvider {
   async saveScene(scene: Scene): Promise<void> {
+    validateUuid(scene.id, 'scene ID')
     const response = await fetch(`${API_BASE}/${scene.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -17,6 +19,7 @@ export class ApiStorageProvider implements StorageProvider {
   }
 
   async loadScene(id: string): Promise<Scene> {
+    validateUuid(id, 'scene ID')
     const response = await fetch(`${API_BASE}/${id}`)
     if (!response.ok) {
       throw new Error(`Failed to load scene: ${response.statusText}`)
@@ -33,6 +36,7 @@ export class ApiStorageProvider implements StorageProvider {
   }
 
   async deleteScene(id: string): Promise<void> {
+    validateUuid(id, 'scene ID')
     const response = await fetch(`${API_BASE}/${id}`, {
       method: 'DELETE',
     })
@@ -42,6 +46,7 @@ export class ApiStorageProvider implements StorageProvider {
   }
 
   async loadHistory(sceneId: string): Promise<SerializedHistory> {
+    validateUuid(sceneId, 'scene ID')
     const response = await fetch(`${API_BASE}/${sceneId}/history`)
     if (!response.ok) {
       throw new Error(`Failed to load history: ${response.statusText}`)
@@ -50,6 +55,7 @@ export class ApiStorageProvider implements StorageProvider {
   }
 
   async saveHistory(sceneId: string, history: SerializedHistory): Promise<void> {
+    validateUuid(sceneId, 'scene ID')
     const response = await fetch(`${API_BASE}/${sceneId}/history`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,6 +67,7 @@ export class ApiStorageProvider implements StorageProvider {
   }
 
   async getSceneTimestamp(id: string): Promise<SceneTimestamp | null> {
+    validateUuid(id, 'scene ID')
     try {
       const response = await fetch(`${API_BASE}/${id}/timestamp`)
       if (response.status === 404) {

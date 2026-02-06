@@ -1,3 +1,5 @@
+import { validateUuid } from '../utils/validation'
+
 const API_BASE = '/api/items'
 
 export interface UploadImageResult {
@@ -23,6 +25,8 @@ export async function cropImage(
   imageId: string,
   cropRect: { x: number; y: number; width: number; height: number }
 ): Promise<string> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(imageId, 'image ID')
   const response = await fetch(`${API_BASE}/crop-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -41,6 +45,8 @@ export async function uploadImage(
   itemId: string,
   filename: string = 'image.png'
 ): Promise<string> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(itemId, 'item ID')
   const response = await fetch(`${API_BASE}/upload-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

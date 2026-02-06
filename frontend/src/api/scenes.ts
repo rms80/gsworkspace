@@ -16,6 +16,8 @@ export {
 
 export type { SceneMetadata, SceneTimestamp, StorageMode } from './storage'
 
+import { validateUuid } from '../utils/validation'
+
 const API_BASE = '/api/scenes'
 
 /**
@@ -29,6 +31,8 @@ export async function getContentUrl(
   extension?: string,
   isEdit: boolean = false
 ): Promise<string> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(contentId, 'content ID')
   const params = new URLSearchParams({
     contentId,
     contentType,
@@ -56,6 +60,8 @@ export async function getContentData(
   contentType: 'video' | 'image' | 'html',
   isEdit: boolean = false
 ): Promise<Blob> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(contentId, 'content ID')
   const params = new URLSearchParams({
     contentId,
     contentType,
