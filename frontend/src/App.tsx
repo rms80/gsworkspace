@@ -90,6 +90,11 @@ function App() {
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
 
+  // Update browser tab title
+  useEffect(() => {
+    document.title = `[GSW] ${serverName} / ${ACTIVE_WORKSPACE}`
+  }, [serverName])
+
   // Selection for active scene (stored separately from items)
   const selectedIds = activeSceneId ? (selectionMap.get(activeSceneId) ?? []) : []
 

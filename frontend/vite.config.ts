@@ -7,7 +7,16 @@ export default defineConfig(({ mode }) => {
   const apiPort = env.VITE_API_PORT || '4000'
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'favicon-swap',
+        transformIndexHtml(html, ctx) {
+          const favicon = ctx.server ? '/favicon_dev.png' : '/favicon.svg'
+          return html.replace(/href="\/favicon[^"]*"/, `href="${favicon}"`)
+        },
+      },
+    ],
     server: {
       port,
       proxy: {
