@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Scene } from '../types'
+import { listScenes } from '../api/scenes'
+import type { SceneMetadata } from '../api/scenes'
 
 interface TabBarProps {
   scenes: Scene[]
@@ -9,6 +11,7 @@ interface TabBarProps {
   onRenameScene: (id: string, name: string) => void
   onCloseScene: (id: string) => void
   onDeleteScene: (id: string) => void
+  onOpenScenes?: (sceneIds: string[]) => void
 }
 
 interface ContextMenuState {
@@ -26,12 +29,19 @@ function TabBar({
   onRenameScene,
   onCloseScene,
   onDeleteScene,
+  onOpenScenes,
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameDialog, setRenameDialog] = useState<{ sceneId: string; currentName: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [sceneDropdownOpen, setSceneDropdownOpen] = useState(false)
+  const [dropdownScenes, setDropdownScenes] = useState<SceneMetadata[]>([])
+  const [dropdownLoading, setDropdownLoading] = useState(false)
   const contextMenuRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const dropdownButtonRef = useRef<HTMLButtonElement>(null)
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 })
 
   // Close context menu when clicking outside
   useEffect(() => {
@@ -60,6 +70,47 @@ function TabBar({
       renameInputRef.current.select()
     }
   }, [renameDialog])
+
+  // Close scene dropdown when clicking outside
+  useEffect(() => {
+    if (!sceneDropdownOpen) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSceneDropdownOpen(false)
+      }
+    }
+
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside)
+    }, 0)
+
+    return () => {
+      clearTimeout(timeoutId)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [sceneDropdownOpen])
+
+  const handleToggleSceneDropdown = async () => {
+    if (sceneDropdownOpen) {
+      setSceneDropdownOpen(false)
+      return
+    }
+    if (dropdownButtonRef.current) {
+      const rect = dropdownButtonRef.current.getBoundingClientRect()
+      setDropdownPos({ top: rect.bottom + 2, left: rect.left })
+    }
+    setSceneDropdownOpen(true)
+    setDropdownLoading(true)
+    try {
+      const allScenes = await listScenes()
+      setDropdownScenes(allScenes)
+    } catch {
+      setDropdownScenes([])
+    } finally {
+      setDropdownLoading(false)
+    }
+  }
 
   const handleContextMenu = (e: React.MouseEvent, scene: Scene) => {
     e.preventDefault()
@@ -190,7 +241,85 @@ function TabBar({
         >
           +
         </button>
+        {onOpenScenes && (
+          <button
+            ref={dropdownButtonRef}
+            onClick={handleToggleSceneDropdown}
+            style={{
+              padding: '2px 6px',
+              marginBottom: '4px',
+              backgroundColor: sceneDropdownOpen ? '#e0e0e0' : '#f0f0f0',
+              border: '1px solid #ccc',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              fontSize: '12px',
+              lineHeight: 1,
+              alignSelf: 'center',
+            }}
+            title="Open scene..."
+          >
+            ...
+          </button>
+        )}
       </div>
+
+      {/* Scene Dropdown */}
+      {sceneDropdownOpen && (
+        <div
+          ref={dropdownRef}
+          style={{
+            position: 'fixed',
+            top: dropdownPos.top,
+            left: dropdownPos.left,
+            backgroundColor: '#fff',
+            border: '1px solid #ccc',
+            borderRadius: '4px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            minWidth: '180px',
+            maxHeight: '300px',
+            overflowY: 'auto',
+            zIndex: 200,
+          }}
+        >
+          {dropdownLoading ? (
+            <div style={{ padding: '8px 12px', color: '#888', fontSize: '13px' }}>Loading...</div>
+          ) : (() => {
+            const openIds = new Set(scenes.map((s) => s.id))
+            const closed = dropdownScenes
+              .filter((s) => !openIds.has(s.id))
+              .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
+            if (closed.length === 0) {
+              return <div style={{ padding: '8px 12px', color: '#888', fontSize: '13px' }}>All scenes are open</div>
+            }
+            return closed.map((scene) => (
+              <button
+                key={scene.id}
+                onClick={() => {
+                  setSceneDropdownOpen(false)
+                  onOpenScenes?.([scene.id])
+                }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '6px 12px',
+                  border: 'none',
+                  backgroundColor: 'transparent',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontFamily: 'inherit',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f0f0f0' }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
+              >
+                {scene.name}
+              </button>
+            ))
+          })()}
+        </div>
+      )}
 
       {/* Context Menu */}
       {contextMenu && (

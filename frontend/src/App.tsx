@@ -1907,6 +1907,7 @@ function App() {
         onRenameScene={renameScene}
         onCloseScene={closeScene}
         onDeleteScene={handleDeleteScene}
+        onOpenScenes={handleOpenScenes}
       />
       {activeScene ? (
         <InfiniteCanvas
