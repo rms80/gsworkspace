@@ -50,8 +50,8 @@ router.post('/upload-image', async (req, res) => {
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
     }
-    if (!uuidValidate(sceneId)) {
-      return res.status(400).json({ error: 'Invalid scene ID format' })
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
     }
 
     // Determine file extension from filename or default to png
@@ -60,6 +60,8 @@ router.post('/upload-image', async (req, res) => {
       const dotIndex = filename.lastIndexOf('.')
       if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
     }
+    // Sanitize extension: strip any path separators
+    ext = ext.replace(/[/\\]/g, '')
 
     // Save directly to scene folder with itemId
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
@@ -103,8 +105,8 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
     }
-    if (!uuidValidate(sceneId)) {
-      return res.status(400).json({ error: 'Invalid scene ID format' })
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
     }
 
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
@@ -116,6 +118,8 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
       const dotIndex = filename.lastIndexOf('.')
       if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
     }
+    // Sanitize extension: strip any path separators
+    ext = ext.replace(/[/\\]/g, '')
 
     const needsTranscode = !BROWSER_NATIVE_EXTENSIONS.has(ext)
 

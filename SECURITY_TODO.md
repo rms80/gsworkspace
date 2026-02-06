@@ -10,9 +10,9 @@ Issues organized by severity with remediation plans.
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
 | High | 2 | 0 | 2 |
-| Medium | 3 | 3 | 6 |
+| Medium | 2 | 3 | 5 |
 | Low | 4 | 0 | 4 |
-| **Total** | **9** | **3** | **12** |
+| **Total** | **8** | **3** | **11** |
 
 ---
 
@@ -129,21 +129,8 @@ General rate limiter (1000/15min) applied to all `/api/workspaces` routes. Works
 
 ---
 
-### 8. [Backend] Missing itemId and Extension Validation in Upload Endpoints
-**Files:** `backend/src/routes/items.ts:49, 59-62`
-
-**Issue:** The `upload-image` and `upload-video` endpoints validate `sceneId` as UUID but do not validate `itemId` format. The file extension is extracted from `filename` without sanitizing (could contain path separators or multiple dots).
-
-**Mitigating factor:** The disk storage layer's `validatePath()` catches path traversal in local mode, and S3 treats keys as flat strings. So this is a defense-in-depth issue, not directly exploitable.
-
-**Remediation:**
-- [ ] Validate `itemId` as UUID (same as `sceneId`)
-- [ ] Validate extracted extension against an allowlist (e.g., `png`, `jpg`, `gif`, `webp`, `mp4`, `webm`)
-
-```typescript
-const ALLOWED_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
-if (!ALLOWED_IMAGE_EXTS.has(ext)) ext = 'png'
-```
+### ~~8. [Backend] Missing itemId and Extension Validation in Upload Endpoints~~ FIXED
+`itemId` now validated as UUID (same as `sceneId`). File extensions sanitized by stripping path separators (`/`, `\`). Applied to both `upload-image` and `upload-video` endpoints.
 
 ---
 
@@ -245,4 +232,3 @@ Completed:
 
 Remaining:
 - [ ] Fetch Limits: Large remote files are rejected before full download
-- [ ] Upload Input Validation: itemId UUID validation, extension allowlist
