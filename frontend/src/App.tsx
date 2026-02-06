@@ -16,6 +16,7 @@ import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, Con
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
+import DOMPurify from 'dompurify'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
@@ -1101,7 +1102,9 @@ function App() {
       if (isHtmlContent(result)) {
         // Create an HTML view item for webpage content
         // Strip code fences that LLMs often wrap around HTML
-        const htmlContent = stripCodeFences(result).trim()
+        const htmlContent = DOMPurify.sanitize(stripCodeFences(result).trim(), {
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        })
         // Generate title before creating item so it's saved properly
         const title = await generateHtmlTitle(htmlContent)
         newItem = {
@@ -1292,6 +1295,11 @@ function App() {
 
       // Replace image placeholder IDs with actual source URLs
       html = replaceImagePlaceholders(html, imageMap)
+
+      // Sanitize LLM-generated HTML
+      html = DOMPurify.sanitize(html, {
+        FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+      })
 
       // Position output to the right of the prompt, aligned with top
       // Find existing outputs to stack vertically

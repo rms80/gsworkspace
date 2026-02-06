@@ -26,10 +26,10 @@ Security audit updated on 2026-02-06 (previous audit: 2026-01-23). Issues organi
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
 | Critical | 0 | 0 | 0 |
-| High | 4 | 2 | 6 |
+| High | 4 | 1 | 5 |
 | Medium | 5 | 3 | 8 |
 | Low | 3 | 3 | 6 |
-| **Total** | **12** | **8** | **20** |
+| **Total** | **12** | **7** | **19** |
 
 ---
 
@@ -125,31 +125,10 @@ source: { type: 'url', url: item.src }
 
 ---
 
-### 6. [Frontend] No HTML Sanitization for LLM Output
-**File:** `frontend/src/App.tsx` (generateHtml flow) and `frontend/src/components/InfiniteCanvas.tsx:896-897`
+### ~~6. [Frontend] No HTML Sanitization for LLM Output~~ FIXED
+**File:** `frontend/src/App.tsx`
 
-**Issue:** LLM-generated HTML is placed directly into `iframe srcDoc` without sanitization. While `allow-scripts` has been removed from the sandbox, unsanitized HTML can still enable:
-- CSS-based content exfiltration
-- Form-based credential harvesting (phishing forms inside canvas)
-- SVG-based attacks in certain sandbox configurations
-
-```typescript
-<iframe srcDoc={item.html} sandbox="allow-same-origin" ... />
-```
-
-**Remediation:**
-- [ ] Install and use DOMPurify to sanitize before rendering
-
-```bash
-npm install dompurify @types/dompurify
-```
-
-```typescript
-import DOMPurify from 'dompurify';
-const sanitizedHtml = DOMPurify.sanitize(htmlContent, {
-  FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-});
-```
+LLM-generated HTML is now sanitized with DOMPurify before rendering. Forbidden tags: `script`, `iframe`, `object`, `embed`. Applied at both HTML generation paths (text prompt and HTML prompt).
 
 ---
 
@@ -400,7 +379,7 @@ After implementing fixes, verify:
 - [x] CORS: Requests from unauthorized origins are rejected
 - [ ] SSRF (LLM): Cannot pass internal URLs through LLM image items
 - [ ] Rate Limiting: Excessive requests are throttled
-- [ ] XSS: LLM-generated HTML is sanitized before rendering
+- [x] XSS: LLM-generated HTML is sanitized before rendering
 - [x] Input Validation: Invalid UUIDs rejected at route level
 - [ ] Fetch Limits: Large remote files are rejected before full download
 - [ ] JSON Parse: Malformed stored data returns error, doesn't crash
