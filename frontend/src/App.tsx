@@ -674,6 +674,7 @@ function App() {
         setSaveStatus('saving')
         await saveScene(updatedScene)
         lastSavedRef.current.set(id, JSON.stringify(updatedScene))
+        lastKnownServerModifiedAtRef.current.set(id, now)
         persistedSceneIdsRef.current.add(id) // Mark as persisted
         setSaveStatus('saved')
       } catch (error) {

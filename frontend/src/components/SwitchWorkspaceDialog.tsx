@@ -25,6 +25,7 @@ function SwitchWorkspaceDialog({
   const [inputError, setInputError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   // Fetch workspace list when dialog opens
   useEffect(() => {
@@ -44,15 +45,62 @@ function SwitchWorkspaceDialog({
       .finally(() => setLoading(false))
   }, [isOpen])
 
-  // Close on Escape
+  // Keyboard navigation: Escape, Up/Down, Tab, Enter
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel()
+      if (e.key === 'Escape') {
+        onCancel()
+        return
+      }
+
+      const switchable = workspaces.filter((ws) => ws.name !== currentWorkspace)
+
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        if (switchable.length === 0) return
+
+        const currentIndex = selectedName
+          ? switchable.findIndex((ws) => ws.name === selectedName)
+          : -1
+        let nextIndex: number
+        if (e.key === 'ArrowDown') {
+          nextIndex = currentIndex < switchable.length - 1 ? currentIndex + 1 : 0
+        } else {
+          nextIndex = currentIndex > 0 ? currentIndex - 1 : switchable.length - 1
+        }
+
+        const nextName = switchable[nextIndex].name
+        setSelectedName(nextName)
+        setInputName('')
+        setInputError(null)
+        inputRef.current?.blur()
+
+        // Scroll the selected item into view
+        const item = listRef.current?.querySelector(`[data-workspace="${nextName}"]`)
+        item?.scrollIntoView({ block: 'nearest' })
+        return
+      }
+
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        inputRef.current?.focus()
+        return
+      }
+
+      if (e.key === 'Enter') {
+        // If input is focused, let its own onKeyDown handler deal with it
+        if (document.activeElement === inputRef.current) return
+        // Otherwise switch to the selected workspace
+        if (selectedName) {
+          e.preventDefault()
+          onSwitch(selectedName)
+        }
+      }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, onCancel])
+  }, [isOpen, onCancel, workspaces, currentWorkspace, selectedName, onSwitch])
 
   if (!isOpen) return null
 
@@ -147,6 +195,7 @@ function SwitchWorkspaceDialog({
 
         {/* Workspace list */}
         <div
+          ref={listRef}
           style={{
             flex: 1,
             overflowY: 'auto',
@@ -170,6 +219,7 @@ function SwitchWorkspaceDialog({
               return (
                 <div
                   key={ws.name}
+                  data-workspace={ws.name}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
