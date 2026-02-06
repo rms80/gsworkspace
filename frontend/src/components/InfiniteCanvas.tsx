@@ -889,7 +889,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             >
               <iframe
                 srcDoc={item.html}
-                sandbox="allow-same-origin allow-scripts"
+                sandbox="allow-same-origin"
                 style={{
                   width: (width * stageScale) / zoom,
                   height: (height * stageScale) / zoom,
