@@ -203,7 +203,7 @@ router.post('/crop-image', async (req, res) => {
 })
 
 // User folder - must match scenes.ts
-const USER_FOLDER = 'version0'
+const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
 
 // Process a video (crop, speed change, trim) and save
 router.post('/crop-video', async (req, res) => {

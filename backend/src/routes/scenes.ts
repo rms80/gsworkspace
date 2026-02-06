@@ -21,8 +21,7 @@ router.param('id', (req, res, next, id) => {
   next()
 })
 
-// User folder - hardcoded for now, will be per-user later
-const USER_FOLDER = 'version0'
+const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
 
 /**
  * Validate that a URL is safe to fetch from.

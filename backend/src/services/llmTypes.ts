@@ -1,6 +1,6 @@
 import { loadAsBuffer } from './storage.js'
 
-const USER_FOLDER = 'version0'
+const USER_FOLDER = process.env.DEFAULT_WORKSPACE || 'default'
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'webp']
 
