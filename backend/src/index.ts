@@ -10,6 +10,7 @@ import llmRouter from './routes/llm.js'
 import scenesRouter from './routes/scenes.js'
 import localFilesRouter from './routes/localFiles.js'
 import configRouter from './routes/config.js'
+import workspacesRouter from './routes/workspaces.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
 import { getS3ConfigStatus } from './services/s3.js'
@@ -146,6 +147,7 @@ app.use('/api/w/:workspace/scenes', scenesRouter)
 // Non-workspace routes
 app.use('/api/local-files', localFilesRouter)
 app.use('/api/config', configRouter)
+app.use('/api/workspaces', workspacesRouter)
 
 app.get('/api/health', (_req, res) => {
   const storageMode = getStorageMode()

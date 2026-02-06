@@ -5,6 +5,7 @@ import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
+import NewWorkspaceDialog from './components/NewWorkspaceDialog'
 import SettingsDialog from './components/SettingsDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
@@ -71,6 +72,7 @@ function App() {
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
   const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
+  const [newWorkspaceDialogOpen, setNewWorkspaceDialogOpen] = useState(false)
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [videoPlaceholders, setVideoPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -1510,6 +1512,28 @@ function App() {
     }
   }, [])
 
+  // Create a new workspace
+  const handleCreateWorkspace = useCallback(async (name: string, hidden: boolean) => {
+    try {
+      const response = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, hidden }),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        alert(data.error || 'Failed to create workspace')
+        return
+      }
+      setNewWorkspaceDialogOpen(false)
+      // Navigate to the new workspace
+      window.location.href = `/${name}/`
+    } catch (error) {
+      console.error('Failed to create workspace:', error)
+      alert('Failed to create workspace')
+    }
+  }, [])
+
   // Keyboard shortcuts for scene management
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1865,6 +1889,7 @@ function App() {
         }}
         onOpenSettings={() => setSettingsDialogOpen(true)}
         onLogout={authRequired ? handleLogout : undefined}
+        onNewWorkspace={storageMode !== 'offline' ? () => setNewWorkspaceDialogOpen(true) : undefined}
       />
       <TabBar
         scenes={openScenes}
@@ -1962,6 +1987,11 @@ function App() {
         isOpen={settingsDialogOpen}
         onClose={() => setSettingsDialogOpen(false)}
         onStorageModeChange={handleStorageModeChange}
+      />
+      <NewWorkspaceDialog
+        isOpen={newWorkspaceDialogOpen}
+        onSubmit={handleCreateWorkspace}
+        onCancel={() => setNewWorkspaceDialogOpen(false)}
       />
     </div>
   )

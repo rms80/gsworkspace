@@ -23,10 +23,12 @@ interface MenuBarProps {
   onClearHistory?: () => void
   onOpenSettings?: () => void
   onLogout?: () => void
+  onNewWorkspace?: () => void
 }
 
 interface MenuItemDef {
   label: string
+  separator?: boolean
   onClick?: () => void
   disabled?: boolean
   shortcut?: string
@@ -65,6 +67,7 @@ function MenuBar({
   onClearHistory,
   onOpenSettings,
   onLogout,
+  onNewWorkspace,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -96,6 +99,10 @@ function MenuBar({
         { label: 'Export Scene...', onClick: onExportScene },
         { label: 'Import Scene from Zip...', type: 'file-input', accept: '.zip', onFileSelect: onImportSceneFromZip },
         { label: 'Import Scene from Folder...', type: 'folder-input', onFolderSelect: onImportSceneFromFolder },
+        ...(onNewWorkspace ? [
+          { label: '', separator: true },
+          { label: 'New Workspace...', onClick: onNewWorkspace },
+        ] : []),
       ],
     },
     {
@@ -345,7 +352,10 @@ function MenuBar({
                 zIndex: 200,
               }}
             >
-              {menu.items.map((item, index) => (
+              {menu.items.map((item, index) =>
+                item.separator ? (
+                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
+                ) : (
                 <button
                   key={index}
                   onClick={() => handleItemClick(item)}
@@ -380,7 +390,8 @@ function MenuBar({
                     </span>
                   )}
                 </button>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
@@ -421,7 +432,10 @@ function MenuBar({
                 zIndex: 200,
               }}
             >
-              {menu.items.map((item, index) => (
+              {menu.items.map((item, index) =>
+                item.separator ? (
+                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
+                ) : (
                 <button
                   key={index}
                   onClick={() => handleItemClick(item)}
@@ -456,7 +470,8 @@ function MenuBar({
                     </span>
                   )}
                 </button>
-              ))}
+                )
+              )}
             </div>
           )}
         </div>
