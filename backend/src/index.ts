@@ -37,25 +37,27 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '50mb' }))
 
-// Rate limiting
+// Rate limiting (max requests per 15-minute window)
+const RATE_WINDOW = 15 * 60 * 1000
+
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
+  windowMs: RATE_WINDOW,
+  max: parseInt(process.env.RATE_LIMIT_GENERAL || '1000'),
   standardHeaders: true,
   legacyHeaders: false,
 })
 
 const llmLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
+  windowMs: RATE_WINDOW,
+  max: parseInt(process.env.RATE_LIMIT_LLM || '20'),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many LLM requests. Please try again later.' },
 })
 
 const uploadLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 60,
+  windowMs: RATE_WINDOW,
+  max: parseInt(process.env.RATE_LIMIT_UPLOAD || '60'),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many upload requests. Please try again later.' },
