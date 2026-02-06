@@ -38,22 +38,17 @@ Issues organized by severity with remediation plans.
 - **Missing Authentication** - Password + cookie-session auth via `AUTH_PASSWORD` env var; all `/api/` routes protected when enabled
 - **Workspace Isolation** - Verified: workspace param always comes from `req.params.workspace` (validated URL), never from request body. Client-supplied `sceneId` only creates subfolders within the URL workspace. Storage layer (`diskStorage.validatePath`) also prevents path traversal in local mode. No cross-workspace access possible.
 - **Workspace Name Validation** - Regex `/^[a-zA-Z0-9_-]{1,64}$/` on both `app.param('workspace')` and workspace router. Blocks path traversal characters, unicode, and overly long names.
+- **No Rate Limiting on Auth Login** - Auth login rate-limited to 25/15min per IP via `authLimiter` (configurable with `RATE_LIMIT_AUTH` env var)
+- **No Rate Limiting on Workspace Endpoints** - General limiter (1000/15min) on all `/api/workspaces` routes; workspace creation additionally limited to 10/15min via `workspaceCreateLimiter` (configurable with `RATE_LIMIT_WORKSPACE_CREATE` env var)
+- **Missing itemId and Extension Validation in Uploads** - `itemId` validated as UUID; file extensions sanitized by stripping path separators (`/`, `\`) in both `upload-image` and `upload-video`
+- **No Data URL Size Validation** - Images over 25MB rejected before `readAsDataURL()` in all three entry points: file drop, Ctrl+V paste, and context menu paste
+- **No Workspace Creation Limit** - Workspace creation capped at 50; `POST /api/workspaces` counts existing `workspace.json` files and returns 409 if limit reached
 
 ---
 
 ## HIGH
 
-### ~~1. [Backend] Missing Authentication/Authorization~~ FIXED
-Password-based auth with `cookie-session`. When `AUTH_PASSWORD` is set, all `/api/` routes require authentication via session cookie. Auth endpoints: `GET /api/auth/status`, `POST /api/auth/login`, `POST /api/auth/logout`. Frontend shows login screen when auth is required.
-
----
-
-### ~~2. [Backend] No Rate Limiting on Auth Login~~ FIXED
-Auth login rate-limited to 25 attempts per 15 minutes per IP via `authLimiter` (configurable with `RATE_LIMIT_AUTH` env var).
-
----
-
-### 3. [Backend] Large Payload DoS Risk
+### 1. [Backend] Large Payload DoS Risk
 **File:** `backend/src/index.ts:51`
 
 **Issue:** 50MB JSON limit without rate limiting enables memory exhaustion DoS.
@@ -68,7 +63,7 @@ app.use(express.json({ limit: '50mb' }))
 
 ---
 
-### 4. [Backend] No Response Size Limits on Fetch
+### 2. [Backend] No Response Size Limits on Fetch
 **Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:244`
 
 **Issue:** Multiple fetch calls download remote content into memory without size limits:
@@ -96,7 +91,7 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 5. [Backend] Weak Model Parameter Validation
+### 3. [Backend] Weak Model Parameter Validation
 **File:** `backend/src/routes/llm.ts:99, 127, 157`
 
 **Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist.
@@ -113,7 +108,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 6. [Backend] Error Messages Leak Infrastructure Details
+### 4. [Backend] Error Messages Leak Infrastructure Details
 **Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:246`
 
 **Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
@@ -124,17 +119,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### ~~7. [Backend] No Rate Limiting on Workspace Endpoints~~ FIXED
-General rate limiter (1000/15min) applied to all `/api/workspaces` routes. Workspace creation (`POST /api/workspaces`) additionally limited to 10 per 15 minutes via `workspaceCreateLimiter` (configurable with `RATE_LIMIT_WORKSPACE_CREATE` env var).
-
----
-
-### ~~8. [Backend] Missing itemId and Extension Validation in Upload Endpoints~~ FIXED
-`itemId` now validated as UUID (same as `sceneId`). File extensions sanitized by stripping path separators (`/`, `\`). Applied to both `upload-image` and `upload-video` endpoints.
-
----
-
-### 9. [Frontend] API Keys Stored with Weak Obfuscation
+### 5. [Frontend] API Keys Stored with Weak Obfuscation
 **File:** `frontend/src/utils/apiKeyStorage.ts`
 
 **Issue:** API keys stored in `localStorage` with basic character rotation + base64 encoding (not encryption).
@@ -147,12 +132,7 @@ General rate limiter (1000/15min) applied to all `/api/workspaces` routes. Works
 
 ---
 
-### ~~10. [Frontend] No Data URL Size Validation~~ FIXED
-Images over 25MB are rejected before `readAsDataURL()` in all three entry points: file drop (InfiniteCanvas.tsx), Ctrl+V paste, and context menu paste (useClipboard.ts).
-
----
-
-### 11. [Backend/Frontend] CSRF Protection Relies on sameSite: lax
+### 6. [Backend/Frontend] CSRF Protection Relies on sameSite: lax
 **Files:** `backend/src/index.ts:59` (cookie config), `backend/src/index.ts:33-50` (CORS config)
 
 **Issue:** Cookie-session auth is now in place. CSRF mitigation relies on:
@@ -170,7 +150,7 @@ Residual risk: `sameSite: 'lax'` still allows cookies on cross-site top-level GE
 
 ## LOW
 
-### 12. [Backend] Session Cookie Missing `secure` Flag
+### 7. [Backend] Session Cookie Missing `secure` Flag
 **File:** `backend/src/index.ts:54-60`
 
 **Issue:** The cookie-session config does not set `secure: true`. In production over HTTPS behind a reverse proxy, the session cookie can still be sent over plain HTTP if the client follows an HTTP link.
@@ -188,16 +168,11 @@ app.use(cookieSession({
 
 ---
 
-### ~~13. [Backend] No Workspace Creation Limit~~ FIXED
-Workspace creation capped at 50. The `POST /api/workspaces` endpoint counts existing `workspace.json` files and returns `409` if the limit is reached.
-
----
-
-### 14. [Backend] No HTTPS Enforcement
+### 8. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 15. [Backend] No Audit Logging
+### 9. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
