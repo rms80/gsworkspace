@@ -25,8 +25,8 @@ import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImpor
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
-import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings } from './utils/settings'
-import { ACTIVE_WORKSPACE } from './api/workspace'
+import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
+import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
   HistoryStack,
   HistoryState,
@@ -85,6 +85,7 @@ function App() {
   const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
   const persistedSceneIdsRef = useRef<Set<string>>(new Set()) // Tracks scenes that have been saved to server
+  const isHiddenWorkspaceRef = useRef(false) // Whether the current workspace is hidden (don't save as lastWorkspace)
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -262,8 +263,33 @@ function App() {
         }
       }
 
+      // Redirect to last-used workspace if user is at root '/' and not offline
+      if (WORKSPACE_FROM_URL === null && modeToUse !== 'offline') {
+        const lastWs = getLastWorkspace(modeToUse)
+        if (lastWs && lastWs !== 'default') {
+          window.location.href = `/${lastWs}/`
+          return
+        }
+      }
+
+      // Check if the current workspace is hidden (don't remember hidden workspaces)
+      if (modeToUse !== 'offline') {
+        try {
+          const wsRes = await fetch(`/api/workspaces/${ACTIVE_WORKSPACE}`)
+          const wsData = await wsRes.json()
+          isHiddenWorkspaceRef.current = !!wsData.hidden
+        } catch {
+          // If check fails, assume not hidden
+        }
+      }
+
       // Load scenes with the correct mode
       await loadAllScenes(modeToUse)
+
+      // Save the active workspace (only when not offline and not hidden)
+      if (modeToUse !== 'offline' && !isHiddenWorkspaceRef.current) {
+        setLastWorkspace(ACTIVE_WORKSPACE, modeToUse)
+      }
     }
 
     initializeApp()
@@ -323,6 +349,11 @@ function App() {
     setIsOffline(mode === 'offline')
     // Reload scenes from the new storage provider
     await loadAllScenes(mode)
+
+    // Save the active workspace for the new mode (skip hidden workspaces)
+    if (mode !== 'offline' && !isHiddenWorkspaceRef.current) {
+      setLastWorkspace(ACTIVE_WORKSPACE, mode)
+    }
   }, [loadAllScenes])
 
   // Handler for syncing storage mode when backend reports a different mode
@@ -334,6 +365,11 @@ function App() {
     setIsOffline(backendMode === 'offline')
     // Reload scenes from the backend's storage
     await loadAllScenes(backendMode)
+
+    // Save the active workspace for the synced mode (skip hidden workspaces)
+    if (backendMode !== 'offline' && !isHiddenWorkspaceRef.current) {
+      setLastWorkspace(ACTIVE_WORKSPACE, backendMode)
+    }
   }, [loadAllScenes])
 
   // Auth handlers

@@ -12,6 +12,8 @@ export interface ModeSettings {
   openSceneIds: string[]
   /** ID of the active scene */
   activeSceneId: string | null
+  /** Last-used workspace name (for auto-redirect on next visit) */
+  lastWorkspace?: string
 }
 
 export interface Settings {
@@ -122,4 +124,19 @@ export function setActiveSceneId(id: string | null, mode: StorageMode): void {
  */
 export function setOpenScenes(openIds: string[], activeId: string | null, mode: StorageMode): void {
   updateModeSettings(mode, { openSceneIds: openIds, activeSceneId: activeId })
+}
+
+/**
+ * Get the last-used workspace for a specific storage mode
+ */
+export function getLastWorkspace(mode: StorageMode): string | null {
+  const settings = loadModeSettings(mode)
+  return settings.lastWorkspace ?? null
+}
+
+/**
+ * Save the last-used workspace for a specific storage mode
+ */
+export function setLastWorkspace(workspace: string, mode: StorageMode): void {
+  updateModeSettings(mode, { lastWorkspace: workspace })
 }

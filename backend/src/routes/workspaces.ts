@@ -68,15 +68,15 @@ router.get('/:name', async (req, res) => {
       try {
         const raw = await load(workspaceKey)
         const meta = raw ? JSON.parse(raw) : {}
-        return res.json({ exists: true, pinnedSceneIds: meta.pinnedSceneIds ?? [] })
+        return res.json({ exists: true, hidden: !!meta.hidden, pinnedSceneIds: meta.pinnedSceneIds ?? [] })
       } catch {
-        return res.json({ exists: true, pinnedSceneIds: [] })
+        return res.json({ exists: true, hidden: false, pinnedSceneIds: [] })
       }
     }
 
     // Also check if the folder has any content (workspace predates workspace.json)
     const keys = await list(`${name}/`)
-    res.json({ exists: keys.length > 0, pinnedSceneIds: [] })
+    res.json({ exists: keys.length > 0, hidden: false, pinnedSceneIds: [] })
   } catch (error) {
     console.error('Error checking workspace:', error)
     res.status(500).json({ error: 'Failed to check workspace' })
