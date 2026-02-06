@@ -14,6 +14,7 @@ interface StatusBarProps {
   onOpenSettings?: () => void
   onStorageModeSync?: (mode: StorageMode) => void
   onStorageModeChange?: (mode: StorageMode) => void
+  serverName?: string
 }
 
 const storageModeDisplay: Record<StorageMode, { label: string; icon: string; bg: string }> = {
@@ -26,7 +27,7 @@ export const STATUS_BAR_HEIGHT = 28
 
 type ServerStatus = 'connected' | 'misconfigured' | 'disconnected' | null
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange, serverName }: StatusBarProps) {
   const [serverStatus, setServerStatus] = useState<ServerStatus>(null)
   const [configWarning, setConfigWarning] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -134,7 +135,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         zIndex: 100,
       }}
     >
-      <span style={{ color: '#666' }}>gsworkspace</span>
+      <span style={{ color: '#666' }}>{serverName || 'gsworkspace'}</span>
       <div ref={menuRef} style={{ position: 'relative' }}>
         <span
           style={{

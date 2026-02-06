@@ -1,10 +1,11 @@
 import { useState, useRef, FormEvent } from 'react'
 
 interface LoginScreenProps {
+  serverName: string
   onSuccess: () => void
 }
 
-function LoginScreen({ onSuccess }: LoginScreenProps) {
+function LoginScreen({ serverName, onSuccess }: LoginScreenProps) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -64,7 +65,7 @@ function LoginScreen({ onSuccess }: LoginScreenProps) {
         }}
       >
         <div style={{ color: '#ccc', fontSize: 18, fontWeight: 600, marginBottom: 4 }}>
-          gsworkspace
+          {serverName}
         </div>
         <input
           ref={inputRef}

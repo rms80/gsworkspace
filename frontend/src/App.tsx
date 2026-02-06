@@ -58,6 +58,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true)
   const [authRequired, setAuthRequired] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
+  const [serverName, setServerName] = useState('gsworkspace')
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
@@ -218,6 +219,7 @@ function App() {
           const authData = await authRes.json()
           setAuthRequired(authData.authRequired)
           setAuthenticated(authData.authenticated)
+          if (authData.serverName) setServerName(authData.serverName)
           if (authData.authRequired && !authData.authenticated) {
             setIsLoading(false)
             return
@@ -1804,7 +1806,7 @@ function App() {
   }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt])
 
   if (authRequired && !authenticated) {
-    return <LoginScreen onSuccess={handleLoginSuccess} />
+    return <LoginScreen serverName={serverName} onSuccess={handleLoginSuccess} />
   }
 
   if (isLoading) {
@@ -1937,6 +1939,7 @@ function App() {
         onOpenSettings={() => setSettingsDialogOpen(true)}
         onStorageModeSync={handleStorageModeSync}
         onStorageModeChange={handleStorageModeChange}
+        serverName={serverName}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}

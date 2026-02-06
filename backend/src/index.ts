@@ -19,6 +19,7 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 
+const SERVER_NAME = process.env.SERVER_NAME || 'gsworkspace'
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || ''
 const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
   if (AUTH_PASSWORD) {
@@ -62,7 +63,7 @@ app.use(cookieSession({
 app.get('/api/auth/status', (req, res) => {
   const authRequired = !!AUTH_PASSWORD
   const authenticated = !authRequired || !!req.session?.authenticated
-  res.json({ authRequired, authenticated })
+  res.json({ authRequired, authenticated, serverName: SERVER_NAME })
 })
 
 app.post('/api/auth/login', (req, res) => {
