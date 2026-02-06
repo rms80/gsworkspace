@@ -42,7 +42,7 @@ $serverProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
     -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru
 
 # Give servers a moment to start
-Start-Sleep -Seconds 4
+Start-Sleep -Seconds 2
 
 # --- Launch Chrome in app mode ---
 # --user-data-dir forces a separate Chrome process so we can detect when it exits
