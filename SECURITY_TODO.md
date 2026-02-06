@@ -8,10 +8,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 3 | 0 | 3 |
+| High | 4 | 0 | 4 |
 | Medium | 2 | 3 | 5 |
 | Low | 2 | 0 | 2 |
-| **Total** | **7** | **3** | **10** |
+| **Total** | **8** | **3** | **11** |
 
 ---
 
@@ -38,10 +38,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 ## HIGH
 
-### 1. [Backend] Missing Authentication/Authorization & Rate Limiting
+### 1. [Backend] Missing Authentication/Authorization
 **File:** `backend/src/index.ts`
 
-**Issue:** All endpoints are publicly accessible with no user isolation and no rate limiting. This is especially dangerous for:
+**Issue:** All endpoints are publicly accessible with no user isolation. This is especially dangerous for:
 - `POST /api/llm/generate` - triggers expensive LLM API calls
 - `POST /api/items/upload-video` - accepts up to 500MB uploads
 - `DELETE /api/scenes/:id` - can delete any scene
@@ -49,7 +49,17 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 **Remediation:**
 - [ ] Implement authentication (JWT, OAuth, or API keys)
 - [ ] Add per-user data isolation
-- [ ] Implement rate limiting
+
+---
+
+### 2. [Backend] Missing Rate Limiting
+**File:** `backend/src/index.ts`
+
+**Issue:** No rate limiting on any endpoint, allowing abuse of expensive operations (LLM calls, uploads).
+
+**Remediation:**
+- [ ] Add general rate limiting on all API routes
+- [ ] Add stricter rate limiting on LLM and upload endpoints
 
 ```typescript
 import rateLimit from 'express-rate-limit';
@@ -70,7 +80,7 @@ app.use('/api/llm/', llmLimiter);
 
 ---
 
-### 2. [Backend] Large Payload DoS Risk
+### 3. [Backend] Large Payload DoS Risk
 **File:** `backend/src/index.ts:19`
 
 **Issue:** 50MB JSON limit without rate limiting enables memory exhaustion DoS.
@@ -81,11 +91,11 @@ app.use(express.json({ limit: '50mb' }))
 
 **Remediation:**
 - [ ] Reduce payload limit to 10MB
-- [ ] Add rate limiting (see #1)
+- [ ] Add rate limiting (see #2)
 
 ---
 
-### 3. [Backend] No Response Size Limits on Fetch
+### 4. [Backend] No Response Size Limits on Fetch
 **Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:241`
 
 **Issue:** Multiple fetch calls download remote content into memory without size limits:
@@ -113,7 +123,7 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 4. [Backend] Weak Model Parameter Validation
+### 5. [Backend] Weak Model Parameter Validation
 **File:** `backend/src/routes/llm.ts:92, 119, 152`
 
 **Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist.
@@ -130,7 +140,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 5. [Backend] Error Messages Leak Infrastructure Details
+### 6. [Backend] Error Messages Leak Infrastructure Details
 **Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:243`
 
 **Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
@@ -141,7 +151,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 6. [Frontend] API Keys Stored with Weak Obfuscation
+### 7. [Frontend] API Keys Stored with Weak Obfuscation
 **File:** `frontend/src/utils/apiKeyStorage.ts`
 
 **Issue:** API keys stored in `localStorage` with basic character rotation + base64 encoding (not encryption).
@@ -154,7 +164,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 7. [Frontend] No Data URL Size Validation
+### 8. [Frontend] No Data URL Size Validation
 **File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
 
 **Issue:** Large images converted to data URLs can cause memory exhaustion. Data URL is created before scaling checks.
@@ -164,7 +174,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 8. [Frontend] Missing CSRF Protection
+### 9. [Frontend] Missing CSRF Protection
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** State-changing requests lack CSRF tokens. Currently mitigated by SPA architecture (same-origin requests, no cookie-based auth). Will become critical if cookie-based authentication is added.
@@ -176,11 +186,11 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ## LOW
 
-### 9. [Backend] No HTTPS Enforcement
+### 10. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 10. [Backend] No Audit Logging
+### 11. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
