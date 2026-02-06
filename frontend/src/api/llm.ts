@@ -60,7 +60,8 @@ export async function generateFromPrompt(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to generate: ${response.statusText}`)
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Failed to generate: ${response.statusText}`)
   }
 
   const data: GenerateResponse = await response.json()
@@ -90,7 +91,8 @@ export async function generateImage(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to generate image: ${response.statusText}`)
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Failed to generate image: ${response.statusText}`)
   }
 
   const data: GenerateImageResponse = await response.json()
@@ -132,7 +134,8 @@ export async function generateHtml(
   })
 
   if (!response.ok) {
-    throw new Error(`Failed to generate HTML: ${response.statusText}`)
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Failed to generate HTML: ${response.statusText}`)
   }
 
   const data: GenerateHtmlResponse = await response.json()

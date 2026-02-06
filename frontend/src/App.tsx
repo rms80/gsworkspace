@@ -1098,7 +1098,8 @@ function App() {
       updateActiveSceneItems((prev) => [...prev, newItem])
     } catch (error) {
       console.error('Failed to run prompt:', error)
-      alert('Failed to run prompt. Check the console for details.')
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to run prompt: ${message}`)
     } finally {
       // Mark prompt as no longer running
       setRunningPromptIds((prev) => {
@@ -1219,7 +1220,8 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to run image generation prompt:', error)
-      alert('Failed to generate image. Check the console for details.')
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to generate image: ${message}`)
     } finally {
       // Mark prompt as no longer running
       setRunningImageGenPromptIds((prev) => {
@@ -1288,7 +1290,8 @@ function App() {
       updateActiveSceneItems((prev) => [...prev, newItem])
     } catch (error) {
       console.error('Failed to run HTML gen prompt:', error)
-      alert('Failed to generate HTML. Check the console for details.')
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to generate HTML: ${message}`)
     } finally {
       // Mark prompt as no longer running
       setRunningHtmlGenPromptIds((prev) => {

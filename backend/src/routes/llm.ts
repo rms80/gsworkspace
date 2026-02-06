@@ -10,6 +10,55 @@ const __dirname = dirname(__filename)
 
 const router = Router()
 
+/**
+ * Extract a user-friendly error message from various error types
+ */
+function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): string {
+  if (error instanceof Error) {
+    const message = error.message
+
+    // Check for authentication errors
+    if ('status' in error && (error as { status: number }).status === 401) {
+      if (provider === 'anthropic') {
+        return 'Anthropic API key is missing or invalid. Please check your ANTHROPIC_API_KEY in the backend .env file.'
+      } else {
+        return 'Google API key is missing or invalid. Please check your GEMINI_API_KEY in the backend .env file.'
+      }
+    }
+
+    // Check for rate limiting
+    if ('status' in error && (error as { status: number }).status === 429) {
+      return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API rate limit exceeded. Please try again later.`
+    }
+
+    // Check for invalid API key in message
+    if (message.includes('invalid x-api-key') || message.includes('invalid api key') || message.includes('API_KEY_INVALID')) {
+      if (provider === 'anthropic') {
+        return 'Anthropic API key is invalid. Please check your ANTHROPIC_API_KEY in the backend .env file.'
+      } else {
+        return 'Google API key is invalid. Please check your GEMINI_API_KEY in the backend .env file.'
+      }
+    }
+
+    // Check for missing API key
+    if (message.includes('API key') && (message.includes('missing') || message.includes('not provided') || message.includes('required'))) {
+      if (provider === 'anthropic') {
+        return 'Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in the backend .env file.'
+      } else {
+        return 'Google API key is not configured. Please set GEMINI_API_KEY in the backend .env file.'
+      }
+    }
+
+    // Return the original message if it's descriptive enough
+    if (message.length > 10 && message.length < 200) {
+      return message
+    }
+  }
+
+  // Generic fallback
+  return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API request failed. Check the server logs for details.`
+}
+
 // Load HTML generation system prompt
 const htmlGenSystemPrompt = readFileSync(
   join(__dirname, '../../prompts/html-gen-system.txt'),
@@ -54,7 +103,8 @@ router.post('/generate', async (req, res) => {
     res.json({ result })
   } catch (error) {
     console.error('Error generating text:', error)
-    res.status(500).json({ error: 'Failed to generate text' })
+    const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
+    res.status(500).json({ error: getErrorMessage(error, provider) })
   }
 })
 
@@ -75,7 +125,7 @@ router.post('/generate-image', async (req, res) => {
     res.json({ images: imageDataUrls })
   } catch (error) {
     console.error('Error generating image:', error)
-    res.status(500).json({ error: 'Failed to generate image' })
+    res.status(500).json({ error: getErrorMessage(error, 'gemini') })
   }
 })
 
@@ -118,7 +168,8 @@ router.post('/generate-html', async (req, res) => {
     res.json({ html })
   } catch (error) {
     console.error('Error generating HTML:', error)
-    res.status(500).json({ error: 'Failed to generate HTML' })
+    const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
+    res.status(500).json({ error: getErrorMessage(error, provider) })
   }
 })
 
