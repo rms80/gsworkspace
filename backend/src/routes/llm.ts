@@ -81,7 +81,7 @@ async function resolveItems(items: LLMRequestItem[]): Promise<ResolvedContentIte
       if (imageData) {
         resolved.push({ type: 'image', imageData })
       } else {
-        console.warn(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
+        throw new Error(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
       }
     }
   }

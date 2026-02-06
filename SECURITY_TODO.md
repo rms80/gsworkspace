@@ -10,8 +10,8 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 |----------|---------|----------|-------|
 | High | 3 | 0 | 3 |
 | Medium | 2 | 3 | 5 |
-| Low | 3 | 1 | 4 |
-| **Total** | **8** | **4** | **12** |
+| Low | 2 | 1 | 3 |
+| **Total** | **7** | **4** | **11** |
 
 ---
 
@@ -31,6 +31,7 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **SSRF via LLM Services** - Frontend now sends image IDs; backend resolves from storage instead of fetching URLs
 - **No Canvas Item Limit** - MAX_ITEMS_PER_SCENE (1000) enforced in updateActiveSceneItems
 - **No Scene Name Length Validation** - Scene names truncated to 255 characters in renameScene
+- **Silent Image Resolve Failures** - Unresolvable images now throw, surfacing error to client
 
 ---
 
@@ -182,15 +183,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
-### 11. [Backend] Silent Image Fetch Failures in Gemini Service
-**File:** `backend/src/services/gemini.ts:79-81`
-
-**Issue:** Failed image fetches are silently ignored, continuing the LLM request without the image.
-
-**Remediation:**
-- [ ] Report errors to client instead of silently continuing
-
-### 12. [Frontend] Missing URL Validation on Frontend API Calls
+### 11. [Frontend] Missing URL Validation on Frontend API Calls
 **File:** `frontend/src/api/scenes.ts` and other API modules
 
 **Issue:** Scene IDs and other parameters used in URL construction without client-side validation.
