@@ -1,6 +1,7 @@
 # Security Audit TODO
 
-Security audit performed on 2026-02-06. Issues organized by severity with remediation plans.
+Security audit performed on 2026-02-06. Updated 2026-02-06 for workspace API and auth changes.
+Issues organized by severity with remediation plans.
 
 ---
 
@@ -8,10 +9,10 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 
 | Severity | Backend | Frontend | Total |
 |----------|---------|----------|-------|
-| High | 2 | 0 | 2 |
-| Medium | 2 | 3 | 5 |
-| Low | 2 | 0 | 2 |
-| **Total** | **6** | **3** | **9** |
+| High | 3 | 0 | 3 |
+| Medium | 4 | 3 | 7 |
+| Low | 4 | 0 | 4 |
+| **Total** | **11** | **3** | **14** |
 
 ---
 
@@ -35,6 +36,8 @@ Security audit performed on 2026-02-06. Issues organized by severity with remedi
 - **Missing URL Validation on Frontend API Calls** - UUID validation via `validateUuid()` on all API call sites
 - **Missing Rate Limiting** - express-rate-limit: 1000/15min general, 20/15min LLM, 60/15min uploads
 - **Missing Authentication** - Password + cookie-session auth via `AUTH_PASSWORD` env var; all `/api/` routes protected when enabled
+- **Workspace Isolation** - Verified: workspace param always comes from `req.params.workspace` (validated URL), never from request body. Client-supplied `sceneId` only creates subfolders within the URL workspace. Storage layer (`diskStorage.validatePath`) also prevents path traversal in local mode. No cross-workspace access possible.
+- **Workspace Name Validation** - Regex `/^[a-zA-Z0-9_-]{1,64}$/` on both `app.param('workspace')` and workspace router. Blocks path traversal characters, unicode, and overly long names.
 
 ---
 
@@ -45,8 +48,27 @@ Password-based auth with `cookie-session`. When `AUTH_PASSWORD` is set, all `/ap
 
 ---
 
-### 2. [Backend] Large Payload DoS Risk
-**File:** `backend/src/index.ts:19`
+### 2. [Backend] No Rate Limiting on Auth Login
+**File:** `backend/src/index.ts:70`
+
+**Issue:** The `POST /api/auth/login` endpoint has no rate limiting. An attacker can brute-force the `AUTH_PASSWORD` with unlimited attempts.
+
+**Remediation:**
+- [ ] Add a strict rate limiter to `/api/auth/login` (e.g., 5 attempts per 15 minutes per IP)
+
+```typescript
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Too many login attempts. Please try again later.' },
+})
+app.post('/api/auth/login', authLimiter, (req, res) => { ... })
+```
+
+---
+
+### 3. [Backend] Large Payload DoS Risk
+**File:** `backend/src/index.ts:51`
 
 **Issue:** 50MB JSON limit without rate limiting enables memory exhaustion DoS.
 
@@ -60,8 +82,8 @@ app.use(express.json({ limit: '50mb' }))
 
 ---
 
-### 3. [Backend] No Response Size Limits on Fetch
-**Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:241`
+### 4. [Backend] No Response Size Limits on Fetch
+**Files:** `backend/src/services/gemini.ts:69, 134` and `backend/src/routes/items.ts:244`
 
 **Issue:** Multiple fetch calls download remote content into memory without size limits:
 - Gemini service fetches images with no size check
@@ -88,8 +110,8 @@ if (contentLength > MAX_SIZE) {
 
 ## MEDIUM
 
-### 4. [Backend] Weak Model Parameter Validation
-**File:** `backend/src/routes/llm.ts:92, 119, 152`
+### 5. [Backend] Weak Model Parameter Validation
+**File:** `backend/src/routes/llm.ts:99, 127, 157`
 
 **Issue:** Model parameter defaults to a fallback but is not validated against an explicit allowlist.
 
@@ -105,8 +127,8 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 5. [Backend] Error Messages Leak Infrastructure Details
-**Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:243`
+### 6. [Backend] Error Messages Leak Infrastructure Details
+**Files:** `backend/src/services/s3.ts:88, 116, 136, 164` and `backend/src/routes/items.ts:246`
 
 **Issue:** Error messages reveal S3 usage, status codes, and internal URLs to clients.
 
@@ -116,7 +138,36 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 6. [Frontend] API Keys Stored with Weak Obfuscation
+### 7. [Backend] No Rate Limiting on Workspace Endpoints
+**File:** `backend/src/index.ts:150`
+
+**Issue:** The `/api/workspaces` routes have no rate limiting. An attacker can enumerate all workspaces or spam workspace creation without throttling.
+
+**Remediation:**
+- [ ] Apply the general rate limiter to `/api/workspaces`
+- [ ] Consider a stricter limit on `POST /api/workspaces` (workspace creation)
+
+---
+
+### 8. [Backend] Missing itemId and Extension Validation in Upload Endpoints
+**Files:** `backend/src/routes/items.ts:49, 59-62`
+
+**Issue:** The `upload-image` and `upload-video` endpoints validate `sceneId` as UUID but do not validate `itemId` format. The file extension is extracted from `filename` without sanitizing (could contain path separators or multiple dots).
+
+**Mitigating factor:** The disk storage layer's `validatePath()` catches path traversal in local mode, and S3 treats keys as flat strings. So this is a defense-in-depth issue, not directly exploitable.
+
+**Remediation:**
+- [ ] Validate `itemId` as UUID (same as `sceneId`)
+- [ ] Validate extracted extension against an allowlist (e.g., `png`, `jpg`, `gif`, `webp`, `mp4`, `webm`)
+
+```typescript
+const ALLOWED_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
+if (!ALLOWED_IMAGE_EXTS.has(ext)) ext = 'png'
+```
+
+---
+
+### 9. [Frontend] API Keys Stored with Weak Obfuscation
 **File:** `frontend/src/utils/apiKeyStorage.ts`
 
 **Issue:** API keys stored in `localStorage` with basic character rotation + base64 encoding (not encryption).
@@ -129,7 +180,7 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 7. [Frontend] No Data URL Size Validation
+### 10. [Frontend] No Data URL Size Validation
 **File:** `frontend/src/components/InfiniteCanvas.tsx` (image drop/paste handlers)
 
 **Issue:** Large images converted to data URLs can cause memory exhaustion. Data URL is created before scaling checks.
@@ -139,23 +190,57 @@ if (!ALLOWED_MODELS.includes(model)) {
 
 ---
 
-### 8. [Frontend] Missing CSRF Protection
-**File:** `frontend/src/api/scenes.ts` and other API modules
+### 11. [Backend/Frontend] CSRF Protection Relies on sameSite: lax
+**Files:** `backend/src/index.ts:59` (cookie config), `backend/src/index.ts:33-50` (CORS config)
 
-**Issue:** State-changing requests lack CSRF tokens. Currently mitigated by SPA architecture (same-origin requests, no cookie-based auth). Will become critical if cookie-based authentication is added.
+**Issue:** Cookie-session auth is now in place. CSRF mitigation relies on:
+- `sameSite: 'lax'` — prevents cookies from being sent on cross-site POST/PUT/DELETE (good)
+- CORS origin checking — blocks cross-origin JS requests (good)
+
+Residual risk: `sameSite: 'lax'` still allows cookies on cross-site top-level GET navigations. No state-changing GET endpoints exist currently, but this is fragile. Also, CORS allows requests with no `Origin` header (server-to-server), though these don't carry browser cookies.
 
 **Remediation:**
-- [ ] Implement CSRF token flow when adding authentication
+- [ ] Consider upgrading to `sameSite: 'strict'` (may affect UX with external links)
+- [ ] Alternatively, add CSRF token validation for state-changing endpoints
+- [ ] Ensure no GET endpoint ever has side effects
 
 ---
 
 ## LOW
 
-### 9. [Backend] No HTTPS Enforcement
+### 12. [Backend] Session Cookie Missing `secure` Flag
+**File:** `backend/src/index.ts:54-60`
+
+**Issue:** The cookie-session config does not set `secure: true`. In production over HTTPS behind a reverse proxy, the session cookie can still be sent over plain HTTP if the client follows an HTTP link.
+
+**Remediation:**
+- [ ] Set `secure: true` when running in production (behind HTTPS)
+- [ ] Or set it conditionally based on `NODE_ENV` or a config flag
+
+```typescript
+app.use(cookieSession({
+  // ...
+  secure: process.env.NODE_ENV === 'production',
+}))
+```
+
+---
+
+### 13. [Backend] No Workspace Creation Limit
+**File:** `backend/src/routes/workspaces.ts:87`
+
+**Issue:** No limit on the number of workspaces that can be created. An authenticated attacker could create thousands of workspaces, consuming storage and polluting the workspace list.
+
+**Remediation:**
+- [ ] Add a maximum workspace count check before creation (e.g., 100)
+
+---
+
+### 14. [Backend] No HTTPS Enforcement
 **Remediation:**
 - [ ] Use HTTPS in production (typically handled by reverse proxy/load balancer)
 
-### 10. [Backend] No Audit Logging
+### 15. [Backend] No Audit Logging
 **Remediation:**
 - [ ] Add request logging with user/IP tracking
 
@@ -173,8 +258,13 @@ Completed:
 - [x] Input Validation: Invalid UUIDs rejected at route level
 - [x] JSON Parse: Malformed stored data returns error, doesn't crash
 - [x] SSRF (LLM): Image items resolved by ID from storage; no URLs accepted
-
 - [x] Rate Limiting: General (1000/15min), LLM (20/15min), uploads (60/15min)
+- [x] Auth: Password + cookie-session; all /api/ routes protected when AUTH_PASSWORD is set
+- [x] Workspace Isolation: Workspace param always comes from validated URL, not request body; sceneId can only address subfolders within the URL workspace
+- [x] Path Traversal (storage layer): diskStorage.validatePath() ensures resolved paths stay within storage root; S3 keys are flat strings
 
 Remaining:
 - [ ] Fetch Limits: Large remote files are rejected before full download
+- [ ] Auth Brute Force: Rate limit /api/auth/login
+- [ ] Workspace Rate Limit: Apply rate limiter to /api/workspaces routes
+- [ ] Upload Input Validation: itemId UUID validation, extension allowlist
