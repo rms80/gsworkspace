@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
@@ -73,7 +73,12 @@ interface InfiniteCanvasProps {
   onUploadVideoAt?: (file: File, x: number, y: number) => void
 }
 
-function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt }: InfiniteCanvasProps) {
+export interface CanvasHandle {
+  resetZoom: () => void
+  fitToView: () => void
+}
+
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -111,6 +116,41 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     screenToCanvas,
     scaleImageToViewport,
   } = useCanvasViewport(containerRef, stageRef)
+
+  // Expose viewport controls to parent via ref
+  useImperativeHandle(ref, () => ({
+    resetZoom: () => {
+      _setStageScale(1)
+      setStagePos({ x: 0, y: 0 })
+    },
+    fitToView: () => {
+      if (items.length === 0) return
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      for (const item of items) {
+        const w = item.width * ((item as ImageItem).scaleX ?? 1)
+        const h = item.height * ((item as ImageItem).scaleY ?? 1)
+        minX = Math.min(minX, item.x)
+        minY = Math.min(minY, item.y)
+        maxX = Math.max(maxX, item.x + w)
+        maxY = Math.max(maxY, item.y + h)
+      }
+      const contentWidth = maxX - minX
+      const contentHeight = maxY - minY
+      const padding = 50
+      const scale = Math.min(
+        (stageSize.width - padding * 2) / contentWidth,
+        (stageSize.height - padding * 2) / contentHeight,
+        5,
+      )
+      const centerX = (minX + maxX) / 2
+      const centerY = (minY + maxY) / 2
+      _setStageScale(scale)
+      setStagePos({
+        x: stageSize.width / 2 - centerX * scale,
+        y: stageSize.height / 2 - centerY * scale,
+      })
+    },
+  }), [items, stageSize])
 
   // 2. Image loader hook
   const { loadedImages } = useImageLoader(items)
@@ -1289,6 +1329,6 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
       )}
     </div>
   )
-}
+})
 
 export default InfiniteCanvas

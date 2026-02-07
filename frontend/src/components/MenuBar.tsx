@@ -25,6 +25,8 @@ interface MenuBarProps {
   onLogout?: () => void
   onNewWorkspace?: () => void
   onSwitchWorkspace?: () => void
+  onResetZoom?: () => void
+  onFitToView?: () => void
 }
 
 interface MenuItemDef {
@@ -72,6 +74,8 @@ function MenuBar({
   onLogout,
   onNewWorkspace,
   onSwitchWorkspace,
+  onResetZoom,
+  onFitToView,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
@@ -131,6 +135,13 @@ function MenuBar({
         { label: 'Undo', onClick: onUndo, disabled: !canUndo, shortcut: 'Ctrl+Z' },
         { label: 'Redo', onClick: onRedo, disabled: !canRedo, shortcut: 'Ctrl+Y' },
         { label: 'Settings...', onClick: onOpenSettings, shortcut: 'Ctrl+,' },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        { label: 'Reset Zoom', onClick: onResetZoom },
+        { label: 'Fit to View', onClick: onFitToView },
       ],
     },
     {

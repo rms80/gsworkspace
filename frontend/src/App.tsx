@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import InfiniteCanvas from './components/InfiniteCanvas'
+import InfiniteCanvas, { CanvasHandle } from './components/InfiniteCanvas'
 import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
@@ -57,6 +57,7 @@ function App() {
   const { activeCount: backgroundOpsCount, startOperation, endOperation } = useBackgroundOperations()
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
+  const canvasRef = useRef<CanvasHandle>(null)
   const pendingDropFilesRef = useRef<File[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
@@ -1972,6 +1973,8 @@ function App() {
         onLogout={authRequired ? handleLogout : undefined}
         onNewWorkspace={storageMode !== 'offline' ? () => setNewWorkspaceDialogOpen(true) : undefined}
         onSwitchWorkspace={storageMode !== 'offline' ? () => setSwitchWorkspaceDialogOpen(true) : undefined}
+        onResetZoom={() => canvasRef.current?.resetZoom()}
+        onFitToView={() => canvasRef.current?.fitToView()}
       />
       <TabBar
         scenes={openScenes}
@@ -1986,6 +1989,7 @@ function App() {
       />
       {activeScene ? (
         <InfiniteCanvas
+          ref={canvasRef}
           items={items}
           selectedIds={selectedIds}
           sceneId={activeSceneId || ''}
