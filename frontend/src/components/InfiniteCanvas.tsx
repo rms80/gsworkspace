@@ -288,7 +288,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     stageRef,
     transformers: [
       { type: 'text', ref: textTransformerRef },
-      { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId },
+      { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId, childName: 'transform-target' },
       { type: 'video', ref: videoTransformerRef },
       { type: 'prompt', ref: promptTransformerRef },
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
