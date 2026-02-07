@@ -211,7 +211,7 @@ function MenuBar({
 
   async function handleOpenAbout() {
     try {
-      const response = await fetch('/about.html')
+      const response = await fetch(`${import.meta.env.BASE_URL}about.html`)
       if (response.ok) {
         const html = await response.text()
         setAboutContent(html)

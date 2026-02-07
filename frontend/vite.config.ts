@@ -5,14 +5,17 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const port = parseInt(env.VITE_PORT || '3000', 10)
   const apiPort = env.VITE_API_PORT || '4000'
+  const isOffline = env.VITE_OFFLINE_MODE === 'true'
 
   return {
+    base: isOffline ? './' : '/',
     plugins: [
       react(),
       {
         name: 'favicon-swap',
         transformIndexHtml(html, ctx) {
-          const favicon = ctx.server ? '/favicon_dev.png' : '/favicon.svg'
+          const prefix = isOffline ? '.' : ''
+          const favicon = ctx.server ? '/favicon_dev.png' : `${prefix}/favicon.svg`
           return html.replace(/href="\/favicon[^"]*"/, `href="${favicon}"`)
         },
       },
