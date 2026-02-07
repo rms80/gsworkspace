@@ -1,0 +1,36 @@
+<style>
+  .splash { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #e0e0e0; line-height: 1.6; }
+  .splash h1 { color: #fff; font-weight: 600; font-size: 22px; margin: 0 0 12px 0; }
+  .splash h1 em { color: #7cb3f0; font-style: normal; font-weight: 400; font-size: 18px; }
+  .splash h3 { color: #b0b0b0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; margin: 20px 0 8px 0; }
+  .splash p { margin: 6px 0; font-size: 14px; }
+  .splash ul { margin: 6px 0; padding-left: 20px; font-size: 14px; }
+  .splash li { margin: 4px 0; }
+  .splash strong { color: #fff; }
+  .splash a { color: #7cb3f0; text-decoration: none; }
+  .splash a:hover { text-decoration: underline; }
+</style>
+
+<div class="splash">
+  <h1>Welcome to gsworkspace <em>(Offline Mode)</em></h1>
+
+  <p>You are running gsworkspace in <strong>Offline Mode</strong>. In Offline Mode, the app runs entirely in your browser. No data is sent to any remote server.</p>
+
+  <h3>What this means</h3>
+  <ul>
+    <li><strong>Storage</strong> — Your scenes and data are saved in the browser's IndexedDB. They persist across sessions but are local to this browser. Your browser may automatically clear IndexedDB!</li>
+    <li><strong>No video support</strong> — Video items are not available in offline mode.</li>
+    <li><strong>No GIF cropping</strong> — GIF crop operations are not available without a server.</li>
+  </ul>
+
+  <h3>AI Features</h3>
+  <p>To use AI-powered prompts, you need to provide your own API keys. Keys are stored in your browser's localStorage and are never sent anywhere except directly to the AI provider.</p>
+
+  <p>Supported providers:</p>
+  <ul>
+    <li><strong>Anthropic Claude</strong> — for text generation (<a href="https://platform.claude.com">get key</a>)</li>
+    <li><strong>Google Gemini</strong> — for text and image generation (<a href="https://ai.google.dev/gemini-api/docs/api-key">get key</a>)</li>
+  </ul>
+
+  <p>You can configure your API keys in <strong>Settings &rarr; API Keys</strong>.</p>
+</div>

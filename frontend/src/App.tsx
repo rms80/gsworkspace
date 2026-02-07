@@ -8,6 +8,7 @@ import ConflictDialog from './components/ConflictDialog'
 import NewWorkspaceDialog from './components/NewWorkspaceDialog'
 import SwitchWorkspaceDialog from './components/SwitchWorkspaceDialog'
 import SettingsDialog from './components/SettingsDialog'
+import OfflineSplashDialog, { isOfflineSplashDismissed } from './components/OfflineSplashDialog'
 import StatusBar, { SaveStatus } from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
@@ -76,6 +77,7 @@ function App() {
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
   const [newWorkspaceDialogOpen, setNewWorkspaceDialogOpen] = useState(false)
   const [switchWorkspaceDialogOpen, setSwitchWorkspaceDialogOpen] = useState(false)
+  const [offlineSplashOpen, setOfflineSplashOpen] = useState(() => isOfflineMode() && !isOfflineSplashDismissed())
   const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [videoPlaceholders, setVideoPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -2081,6 +2083,11 @@ function App() {
         currentWorkspace={ACTIVE_WORKSPACE}
         onSwitch={handleSwitchWorkspace}
         onCancel={() => setSwitchWorkspaceDialogOpen(false)}
+      />
+      <OfflineSplashDialog
+        isOpen={offlineSplashOpen}
+        onClose={() => setOfflineSplashOpen(false)}
+        onOpenSettings={() => setSettingsDialogOpen(true)}
       />
     </div>
   )
