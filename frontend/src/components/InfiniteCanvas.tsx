@@ -23,6 +23,7 @@ import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
+import GifOverlay from './canvas/overlays/GifOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
 import ImageCropOverlay from './canvas/overlays/ImageCropOverlay'
 import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
@@ -33,6 +34,7 @@ import { useCropMode } from '../hooks/useCropMode'
 import { useVideoCropMode } from '../hooks/useVideoCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
 import { usePulseAnimation } from '../hooks/usePulseAnimation'
+import { useGifAnimation } from '../hooks/useGifAnimation'
 import { useMenuState } from '../hooks/useMenuState'
 import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
@@ -259,6 +261,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
   // 10. Remaining UI state
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [videoItemTransforms, setVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [gifItemTransforms, setGifItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
   const [editingVideoLabelId, setEditingVideoLabelId] = useState<string | null>(null)
@@ -273,6 +276,9 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     runningHtmlGenPromptIds,
     layerRef,
   })
+
+  // 11b. GIF detection — identifies which image items are animated GIFs
+  const gifIds = useGifAnimation(items)
 
   // 12. Transformer sync hook
   useTransformerSync({
@@ -639,12 +645,14 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             if (croppingImageId === item.id) return null
             const img = loadedImages.get(item.src)
             if (!img) return null
+            const itemIsGif = gifIds.has(item.id)
             return (
               <ImageItemRenderer
                 key={item.id}
                 item={item}
                 image={img}
                 isSelected={selectedIds.includes(item.id)}
+                isGif={itemIsGif}
                 editingImageLabelId={editingImageLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
@@ -655,6 +663,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 }}
                 onUpdateItem={onUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
+                setGifItemTransforms={itemIsGif ? setGifItemTransforms : undefined}
               />
             )
           } else if (item.type === 'video') {
@@ -912,6 +921,25 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
                 }}
               />
             </div>
+          )
+        })}
+
+      {/* GIF image overlays */}
+      {items
+        .filter((item) => item.type === 'image' && gifIds.has(item.id))
+        .map((item) => {
+          if (item.type !== 'image') return null
+          if (croppingImageId === item.id) return null
+          const transform = gifItemTransforms.get(item.id)
+          return (
+            <GifOverlay
+              key={`gif-${item.id}`}
+              item={item}
+              stageScale={stageScale}
+              stagePos={stagePos}
+              isSelected={selectedIds.includes(item.id)}
+              transform={transform}
+            />
           )
         })}
 

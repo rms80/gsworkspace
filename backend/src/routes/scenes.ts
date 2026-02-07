@@ -329,7 +329,18 @@ router.post('/:id', async (req, res) => {
           text: item.text,
         })
       } else if (item.type === 'image') {
-        const imageFile = `${item.id}.png`
+        // Determine file extension from source URL or default to png
+        let imageExt = 'png'
+        if (item.src.startsWith('data:image/')) {
+          const match = item.src.match(/^data:image\/(\w+);/)
+          if (match) imageExt = match[1]
+        } else if (item.src.includes('.')) {
+          const urlExt = item.src.split('.').pop()?.split('?')[0]
+          if (urlExt && ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(urlExt)) {
+            imageExt = urlExt
+          }
+        }
+        const imageFile = `${item.id}.${imageExt}`
         let imageSaved = false
 
         // If src is a data URL, extract and save the image

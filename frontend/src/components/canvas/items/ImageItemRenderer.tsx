@@ -7,11 +7,13 @@ interface ImageItemRendererProps {
   item: ImageItem
   image: HTMLImageElement
   isSelected: boolean
+  isGif: boolean
   editingImageLabelId: string | null
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
   onLabelDblClick: (id: string) => void
+  setGifItemTransforms?: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
 }
 
 /**
@@ -28,15 +30,18 @@ export default function ImageItemRenderer({
   item,
   image,
   isSelected,
+  isGif,
   editingImageLabelId,
   onItemClick,
   onContextMenu,
   onUpdateItem,
   onLabelDblClick,
+  setGifItemTransforms,
 }: ImageItemRendererProps) {
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
   const displayWidth = item.width * scaleX
+  const displayHeight = item.height * scaleY
 
   // Header is only visible when selected
   const headerHeight = isSelected ? IMAGE_HEADER_HEIGHT : 0
@@ -67,8 +72,39 @@ export default function ImageItemRenderer({
         e.cancelBubble = true
         onContextMenu(e, item.id)
       }}
+      onDragStart={() => {
+        if (isGif && setGifItemTransforms) {
+          setGifItemTransforms((prev) => {
+            const newMap = new Map(prev)
+            newMap.set(item.id, { x: item.x, y: item.y, width: displayWidth, height: displayHeight })
+            return newMap
+          })
+        }
+      }}
+      onDragMove={(e) => {
+        if (isGif && setGifItemTransforms) {
+          const node = e.target
+          setGifItemTransforms((prev) => {
+            const newMap = new Map(prev)
+            newMap.set(item.id, {
+              x: node.x(),
+              y: node.y() + headerHeight,
+              width: displayWidth,
+              height: displayHeight,
+            })
+            return newMap
+          })
+        }
+      }}
       onDragEnd={(e) => {
         const node = e.target
+        if (isGif && setGifItemTransforms) {
+          setGifItemTransforms((prev) => {
+            const newMap = new Map(prev)
+            newMap.delete(item.id)
+            return newMap
+          })
+        }
         // Save position adjusted for header
         onUpdateItem(item.id, { x: node.x(), y: node.y() + headerHeight })
       }}
@@ -129,19 +165,30 @@ export default function ImageItemRenderer({
         </>
       )}
 
-      {/* Image content */}
-      <KonvaImage
-        y={headerHeight}
-        image={image}
-        width={item.width}
-        height={item.height}
-        crop={item.cropRect ? { x: item.cropRect.x, y: item.cropRect.y, width: item.cropRect.width, height: item.cropRect.height } : undefined}
-        scaleX={scaleX}
-        scaleY={scaleY}
-        rotation={item.rotation ?? 0}
-        stroke={isSelected ? COLOR_SELECTED : undefined}
-        strokeWidth={isSelected ? 2 : 0}
-      />
+      {/* Image content: GIFs use transparent rect (overlay handles display), others use Konva Image */}
+      {isGif ? (
+        <Rect
+          y={headerHeight}
+          width={displayWidth}
+          height={displayHeight}
+          fill="transparent"
+          stroke={isSelected ? COLOR_SELECTED : 'transparent'}
+          strokeWidth={isSelected ? 2 : 0}
+        />
+      ) : (
+        <KonvaImage
+          y={headerHeight}
+          image={image}
+          width={item.width}
+          height={item.height}
+          crop={item.cropRect ? { x: item.cropRect.x, y: item.cropRect.y, width: item.cropRect.width, height: item.cropRect.height } : undefined}
+          scaleX={scaleX}
+          scaleY={scaleY}
+          rotation={item.rotation ?? 0}
+          stroke={isSelected ? COLOR_SELECTED : undefined}
+          strokeWidth={isSelected ? 2 : 0}
+        />
+      )}
     </Group>
   )
 }
