@@ -1942,7 +1942,7 @@ function App() {
         onGetServerSceneJson={async () => {
           if (!activeSceneId) return '{}'
           try {
-            const response = await fetch(`/api/scenes/${activeSceneId}/raw`)
+            const response = await fetch(`/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/raw`)
             if (!response.ok) throw new Error(`HTTP ${response.status}`)
             const text = await response.text()
             // Pretty-print if it's valid JSON
