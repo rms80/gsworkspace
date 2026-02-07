@@ -84,5 +84,17 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 - Major work (eg a top-level TODO task) should always be done in a feature branch
 - Never merge a feature branch back into main automatically, always ask me for confirmation
 - Do not push the main branch unless I tell you to
+- Don't commit until the user has tested the change
 
 
+## Claude Memory
+
+### Project Patterns
+- Backend routes are mounted at `/api/w/:workspace/...` — don't forget the workspace prefix
+- Video, GIF, and HTML items use DOM overlays positioned over the Konva canvas, with Konva rects for hit detection
+- `videoItemTransforms` / `gifItemTransforms` state tracks live position during drag for overlay sync
+
+### GIF + Canvas Rendering
+Animated GIFs don't work on HTML canvas — Konva's `Image` calls `drawImage()` which only captures a single frame. Approaches that fail: batchDraw loops, Konva.Animation, React state tick redraws, attaching Image to DOM before/after load, gifuct-js frame parsing (memory explosion).
+
+**Solution**: DOM `<img>` overlay (same pattern as video items). Konva transparent `Rect` for hit detection/selection/drag/transform, `<img src={gif_url}>` positioned absolutely over canvas. Server-side GIF cropping uses ffmpeg (not sharp, which strips animation) with `crop,split,palettegen,paletteuse` filter to preserve animation.

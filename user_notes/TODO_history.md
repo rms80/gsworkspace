@@ -1686,3 +1686,89 @@ Update the offline mode indicator to show all three modes:
 - Users who want to migrate data between modes would need to export/import scenes
 - Local mode is ideal for users running both client and server on their machine
 - Local mode still requires the backend server (unlike offline mode)
+
+
+
+
+
+
+
+# GIF Support Implementation
+
+## Context
+Animated GIFs dropped onto the canvas displayed as static images because `canvas.drawImage()` cannot reliably access animated GIF frames — Chrome decodes images in "static" mode when loaded via `new Image()`, and no combination of `batchDraw()`, `Konva.Animation`, or DOM attachment after load fixes this. Additionally, server-side image cropping always output PNG via `sharp`, stripping GIF animation, and the scene save endpoint hardcoded `.png` for all image files.
+
+## Solution
+GIF items use a DOM `<img>` overlay positioned over the Konva canvas (the same pattern used for video and HTML iframe items). The browser handles GIF animation natively with zero extra memory cost.
+
+## Changes
+
+### 1. GIF detection utility
+**New file:** `frontend/src/utils/gif.ts`
+- `isGifSrc(src: string): boolean` — checks if source is a GIF by data URL MIME type (`data:image/gif`) or URL extension (`.gif`)
+
+### 2. GIF detection hook
+**New file:** `frontend/src/hooks/useGifAnimation.ts`
+- Takes `items: CanvasItem[]`, returns `Set<string>` of image item IDs that are GIFs
+- Pure detection — no animation logic needed since the DOM overlay handles playback
+
+### 3. GIF overlay component
+**New file:** `frontend/src/components/canvas/overlays/GifOverlay.tsx`
+- DOM `<img>` element positioned absolutely over the Konva canvas
+- Tracks the Konva item's position live during drag via `transform` prop (same pattern as `VideoOverlay`)
+- Supports CSS-based cropping while waiting for server-side crop result
+- Uses `cropSrc` when available (server-generated `.crop.gif`)
+
+### 4. ImageItemRenderer changes
+**Modified:** `frontend/src/components/canvas/items/ImageItemRenderer.tsx`
+- Added `isGif` and `setGifItemTransforms` props
+- When `isGif` is true, renders a transparent `Rect` for hit detection instead of Konva `Image`
+- Tracks drag transforms via `onDragStart/Move/End` to keep the overlay in sync (same pattern as `VideoItemRenderer`)
+
+### 5. InfiniteCanvas wiring
+**Modified:** `frontend/src/components/InfiniteCanvas.tsx`
+- Added `gifItemTransforms` state for live drag tracking
+- Calls `useGifAnimation(items)` to get the set of GIF item IDs
+- Passes `isGif` and `setGifItemTransforms` to `ImageItemRenderer`
+- Renders `GifOverlay` components for GIF items (positioned after the Stage)
+- Shows `ProcessingOverlay` with "Processing GIF..." during server-side crop
+
+### 6. Processing spinner for GIF crops
+**Modified:** `frontend/src/hooks/useCropMode.ts`
+- Added `processingImageId` state, set during the server-side `cropImage()` call
+- Exposed in the `CropMode` interface so InfiniteCanvas can show a spinner for GIF crops
+- Non-GIF image crops are unaffected (their Konva client-side crop looks correct immediately)
+
+### 7. Server-side GIF cropping with ffmpeg
+**Modified:** `backend/src/routes/items.ts` — `crop-image` endpoint
+- Tracks which file extension matched when finding the source file
+- If extension is `gif`, uses ffmpeg with palette-preserving complex filter instead of sharp:
+  ```
+  [0:v]crop=w:h:x:y,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse
+  ```
+- Saves as `{imageId}.crop.gif` with content type `image/gif`
+- Non-GIF images continue using existing sharp path unchanged
+
+### 8. Scene save/load fix for image extensions
+**Modified:** `backend/src/routes/scenes.ts`
+- Scene save was hardcoding `${itemId}.png` for all image files
+- Now extracts the actual extension from the source URL (data URL MIME or URL path), matching the existing video pattern
+- Supports png, jpg, jpeg, gif, webp, svg, bmp
+
+### 9. Debug menu fix (unrelated)
+**Modified:** `frontend/src/App.tsx`
+- Fixed server scene.json fetch URL: was `/api/scenes/:id/raw`, should be `/api/w/:workspace/scenes/:id/raw`
+
+## Files Summary
+| File | Action |
+|------|--------|
+| `frontend/src/utils/gif.ts` | Create |
+| `frontend/src/hooks/useGifAnimation.ts` | Create |
+| `frontend/src/components/canvas/overlays/GifOverlay.tsx` | Create |
+| `frontend/src/components/canvas/items/ImageItemRenderer.tsx` | Add GIF mode (transparent rect + transform tracking) |
+| `frontend/src/components/InfiniteCanvas.tsx` | Wire up GIF detection, overlays, transforms, processing spinner |
+| `frontend/src/hooks/useCropMode.ts` | Add processingImageId state |
+| `backend/src/routes/items.ts` | Branch crop-image on GIF format (ffmpeg) |
+| `backend/src/routes/scenes.ts` | Preserve image file extension |
+| `frontend/src/App.tsx` | Fix debug menu URL |
+
