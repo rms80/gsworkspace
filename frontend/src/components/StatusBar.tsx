@@ -189,36 +189,42 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
             >
               Settings...
             </div>
-            {(['online', 'local', 'offline'] as StorageMode[]).map((mode) => (
-              <div
-                key={mode}
-                style={{
-                  padding: '6px 12px',
-                  cursor: 'pointer',
-                  color: mode === storageMode ? '#fff' : '#ccc',
-                  backgroundColor: mode === storageMode ? '#555' : 'transparent',
-                  fontSize: 11,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-                onMouseEnter={(e) => {
-                  if (mode !== storageMode) e.currentTarget.style.backgroundColor = '#4a4a4a'
-                }}
-                onMouseLeave={(e) => {
-                  if (mode !== storageMode) e.currentTarget.style.backgroundColor = 'transparent'
-                }}
-                onClick={() => {
-                  setMenuOpen(false)
-                  if (mode !== storageMode) {
-                    onStorageModeChange?.(mode)
-                  }
-                }}
-              >
-                <span>{storageModeDisplay[mode].icon}</span>
-                <span>{storageModeDisplay[mode].label}</span>
-              </div>
-            ))}
+            {(['online', 'local', 'offline'] as StorageMode[]).map((mode) => {
+              const explicitOffline = import.meta.env.VITE_OFFLINE_MODE === 'true'
+              const disabled = explicitOffline && mode !== 'offline'
+              return (
+                <div
+                  key={mode}
+                  style={{
+                    padding: '6px 12px',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    color: disabled ? '#666' : mode === storageMode ? '#fff' : '#ccc',
+                    backgroundColor: mode === storageMode ? '#555' : 'transparent',
+                    fontSize: 11,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                  title={disabled ? 'Not available in offline build (no backend server)' : undefined}
+                  onMouseEnter={(e) => {
+                    if (!disabled && mode !== storageMode) e.currentTarget.style.backgroundColor = '#4a4a4a'
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!disabled && mode !== storageMode) e.currentTarget.style.backgroundColor = 'transparent'
+                  }}
+                  onClick={() => {
+                    if (disabled) return
+                    setMenuOpen(false)
+                    if (mode !== storageMode) {
+                      onStorageModeChange?.(mode)
+                    }
+                  }}
+                >
+                  <span>{storageModeDisplay[mode].icon}</span>
+                  <span>{storageModeDisplay[mode].label}</span>
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

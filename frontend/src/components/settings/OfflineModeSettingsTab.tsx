@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import {
   getAnthropicApiKey,
   setAnthropicApiKey,
@@ -10,7 +10,7 @@ import {
 
 interface ApiKeyFieldProps {
   label: string
-  helpText: string
+  helpText: ReactNode
   value: string
   onChange: (value: string) => void
   onSave: () => void
@@ -222,7 +222,7 @@ export default function OfflineModeSettingsTab() {
 
       <ApiKeyField
         label="Anthropic API Key"
-        helpText="Required for LLM prompts (Claude) and HTML generation in offline mode. Get your key from console.anthropic.com"
+        helpText={<>Required for LLM prompts (Claude) and HTML generation in offline mode. Get your key from <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></>}
         value={anthropicKey}
         onChange={(v) => {
           setAnthropicKey_(v)
@@ -237,7 +237,7 @@ export default function OfflineModeSettingsTab() {
 
       <ApiKeyField
         label="Google API Key"
-        helpText="Required for image generation (Imagen) and Gemini models in offline mode. Get your key from console.cloud.google.com or aistudio.google.com"
+        helpText={<>Required for image generation (Imagen) and Gemini models in offline mode. Get your key from <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer">console.cloud.google.com</a> or <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">aistudio.google.com</a></>}
         value={googleKey}
         onChange={(v) => {
           setGoogleKey_(v)
