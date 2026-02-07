@@ -14,6 +14,7 @@ export interface CropMode {
   croppingImageId: string | null
   pendingCropRect: CropRect | null
   lockAspectRatio: boolean
+  processingImageId: string | null
   setCroppingImageId: (id: string | null) => void
   setPendingCropRect: (rect: CropRect | null) => void
   setLockAspectRatio: (locked: boolean) => void
@@ -31,6 +32,7 @@ export function useCropMode({
   const [croppingImageId, setCroppingImageId] = useState<string | null>(null)
   const [pendingCropRect, setPendingCropRect] = useState<CropRect | null>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(false)
+  const [processingImageId, setProcessingImageId] = useState<string | null>(null)
 
   const applyCrop = () => {
     if (!croppingImageId || !pendingCropRect) {
@@ -120,6 +122,7 @@ export function useCropMode({
       return
     }
 
+    setProcessingImageId(itemId)
     cropImage(sceneId, itemId, cropRect)
       .then((cropUrl) => {
         // Add cache-busting timestamp to force browser to fetch fresh image
@@ -128,6 +131,9 @@ export function useCropMode({
       })
       .catch((err) => {
         console.error('Failed to create server-side crop, LLM canvas crop still works:', err)
+      })
+      .finally(() => {
+        setProcessingImageId(null)
       })
   }
 
@@ -158,6 +164,7 @@ export function useCropMode({
     croppingImageId,
     pendingCropRect,
     lockAspectRatio,
+    processingImageId,
     setCroppingImageId,
     setPendingCropRect,
     setLockAspectRatio,

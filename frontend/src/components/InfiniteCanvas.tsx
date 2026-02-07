@@ -120,6 +120,7 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
     croppingImageId,
     pendingCropRect,
     lockAspectRatio,
+    processingImageId,
     setCroppingImageId,
     setPendingCropRect,
     setLockAspectRatio,
@@ -1025,6 +1026,25 @@ function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectIte
             stageScale={stageScale}
             stagePos={stagePos}
             message="Processing video..."
+          />
+        )
+      })()}
+
+      {/* Processing overlay for GIF crop */}
+      {processingImageId && gifIds.has(processingImageId) && (() => {
+        const imageItem = items.find((i) => i.id === processingImageId && i.type === 'image') as ImageItem | undefined
+        if (!imageItem) return null
+        const scaleX = imageItem.scaleX ?? 1
+        const scaleY = imageItem.scaleY ?? 1
+        return (
+          <ProcessingOverlay
+            x={imageItem.x}
+            y={imageItem.y}
+            width={imageItem.width * scaleX}
+            height={imageItem.height * scaleY}
+            stageScale={stageScale}
+            stagePos={stagePos}
+            message="Processing GIF..."
           />
         )
       })()}
