@@ -94,6 +94,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   // Background operations tracking
   const { startOperation, endOperation } = useBackgroundOperations()
 
+  // Conversion placeholders (video→GIF, GIF→video)
+  const [conversionPlaceholders, setConversionPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
+
   // Tooltip state for Run button
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
   const handleShowTooltip = useCallback((t: { text: string; x: number; y: number } | null) => {
@@ -425,6 +428,22 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
   // Handle video → GIF conversion
   const handleConvertVideoToGif = useCallback(async (videoItem: VideoItem) => {
+    // Compute placeholder position (same logic as convertToGif in sceneOperations)
+    const scaleX = videoItem.scaleX ?? 1
+    const scaleY = videoItem.scaleY ?? 1
+    const visualWidth = Math.round(videoItem.width * scaleX)
+    const visualHeight = Math.round(videoItem.height * scaleY)
+    const gap = 20
+    const placeholderId = videoItem.id + '_converting'
+    const placeholder = {
+      id: placeholderId,
+      x: videoItem.x + visualWidth + gap,
+      y: videoItem.y,
+      width: visualWidth,
+      height: visualHeight,
+      name: (videoItem.name || 'Video') + ' → GIF',
+    }
+    setConversionPlaceholders(prev => [...prev, placeholder])
     try {
       startOperation()
       const result = await convertToGif(sceneId, videoItem)
@@ -444,11 +463,29 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     } catch (error) {
       console.error('Failed to convert video to GIF:', error)
       endOperation()
+    } finally {
+      setConversionPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
     }
   }, [sceneId, onAddImageAt, startOperation, endOperation])
 
   // Handle GIF → video conversion
   const handleConvertGifToVideo = useCallback(async (imageItem: ImageItem) => {
+    // Compute placeholder position (same logic as convertToVideo in sceneOperations)
+    const scaleX = imageItem.scaleX ?? 1
+    const scaleY = imageItem.scaleY ?? 1
+    const visualWidth = Math.round(imageItem.width * scaleX)
+    const visualHeight = Math.round(imageItem.height * scaleY)
+    const gap = 20
+    const placeholderId = imageItem.id + '_converting'
+    const placeholder = {
+      id: placeholderId,
+      x: imageItem.x + visualWidth + gap,
+      y: imageItem.y,
+      width: visualWidth,
+      height: visualHeight,
+      name: (imageItem.name || 'Image') + ' → Video',
+    }
+    setConversionPlaceholders(prev => [...prev, placeholder])
     try {
       startOperation()
       const result = await convertToVideo(sceneId, imageItem)
@@ -468,6 +505,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     } catch (error) {
       console.error('Failed to convert GIF to video:', error)
       endOperation()
+    } finally {
+      setConversionPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
     }
   }, [sceneId, onAddVideoAt, startOperation, endOperation])
 
@@ -899,6 +938,30 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             />
             <Text
               text={`Uploading ${ph.name}...`}
+              width={ph.width}
+              height={ph.height}
+              align="center"
+              verticalAlign="middle"
+              fill="#888"
+              fontSize={16}
+            />
+          </Group>
+        ))}
+
+        {/* Conversion placeholders (video→GIF, GIF→video) */}
+        {conversionPlaceholders.map((ph) => (
+          <Group key={`conversion-${ph.id}`} x={ph.x} y={ph.y}>
+            <Rect
+              width={ph.width}
+              height={ph.height}
+              fill="#1a1a2e"
+              stroke="#666"
+              strokeWidth={2}
+              dash={[10, 5]}
+              cornerRadius={4}
+            />
+            <Text
+              text={`Converting ${ph.name}...`}
               width={ph.width}
               height={ph.height}
               align="center"
