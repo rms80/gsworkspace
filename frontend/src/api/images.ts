@@ -15,17 +15,18 @@ export interface UploadImageResult {
  */
 export interface CropImageResult {
   url: string
+  fileSize: number
 }
 
 /**
  * Crop an image on the server and save the cropped version to storage.
- * Returns the URL of the cropped image.
+ * Returns the URL and file size of the cropped image.
  */
 export async function cropImage(
   sceneId: string,
   imageId: string,
   cropRect: { x: number; y: number; width: number; height: number }
-): Promise<string> {
+): Promise<CropImageResult> {
   validateUuid(sceneId, 'scene ID')
   validateUuid(imageId, 'image ID')
   const response = await fetch(`${API_BASE}/crop-image`, {
@@ -36,8 +37,7 @@ export async function cropImage(
   if (!response.ok) {
     throw new Error(`Failed to crop image: ${response.statusText}`)
   }
-  const result: CropImageResult = await response.json()
-  return result.url
+  return response.json()
 }
 
 export async function uploadImage(

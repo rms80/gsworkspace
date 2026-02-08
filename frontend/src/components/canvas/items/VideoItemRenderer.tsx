@@ -66,8 +66,9 @@ export default function VideoItemRenderer({
   } else if (item.originalWidth && item.originalHeight) {
     metadataParts.push(`${Math.round(item.originalWidth)}×${Math.round(item.originalHeight)}`)
   }
-  if (item.fileSize) {
-    metadataParts.push(formatFileSize(item.fileSize))
+  const displayFileSize = item.cropSrcFileSize ?? item.fileSize
+  if (displayFileSize) {
+    metadataParts.push(formatFileSize(displayFileSize))
   }
   const metadataText = metadataParts.join(' • ')
 

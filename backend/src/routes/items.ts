@@ -198,6 +198,7 @@ router.post('/crop-image', async (req, res) => {
 
     let outputKey: string
     let contentType: string
+    let outputSize: number = 0
 
     if (matchedExt === 'gif') {
       // Use ffmpeg with palette-preserving crop to keep animation
@@ -235,6 +236,7 @@ router.post('/crop-image', async (req, res) => {
         const croppedGifBuffer = fs.readFileSync(gifOutputPath)
         outputKey = `${sceneFolder}/${imageId}.crop.gif`
         contentType = 'image/gif'
+        outputSize = croppedGifBuffer.length
         await save(outputKey, croppedGifBuffer, contentType)
         cleanupGif()
       } catch (err) {
@@ -250,11 +252,12 @@ router.post('/crop-image', async (req, res) => {
 
       outputKey = `${sceneFolder}/${imageId}.crop.png`
       contentType = 'image/png'
+      outputSize = croppedBuffer.length
       await save(outputKey, croppedBuffer, contentType)
     }
 
     const url = getPublicUrl(outputKey)
-    res.json({ success: true, url })
+    res.json({ success: true, url, fileSize: outputSize })
   } catch (error) {
     console.error('Error cropping image:', error)
     res.status(500).json({ error: 'Failed to crop image' })
@@ -473,7 +476,7 @@ router.post('/crop-video', async (req, res) => {
     await save(outputKey, processedBuffer, 'video/mp4')
 
     cleanup()
-    res.json({ success: true })
+    res.json({ success: true, fileSize: processedBuffer.length })
   } catch (error) {
     cleanup()
     console.error('Error processing video:', error)

@@ -38,6 +38,7 @@ export interface ImageItem extends BaseItem {
   rotation?: number
   cropRect?: CropRect
   cropSrc?: string
+  cropSrcFileSize?: number  // file size of cropped version in bytes
 }
 
 export interface VideoItem extends BaseItem {
@@ -57,6 +58,7 @@ export interface VideoItem extends BaseItem {
   playbackRate?: number // default 1 (0.5, 1, 1.5, 2, 3)
   cropRect?: CropRect   // crop region in source video pixels
   cropSrc?: string      // S3 URL of cropped video file
+  cropSrcFileSize?: number  // file size of cropped version in bytes
   speedFactor?: number  // encoded speed multiplier (0.25, 0.5, 1, 1.5, 2, 3, 4)
   removeAudio?: boolean // remove audio track from encoded video
   trim?: boolean        // whether trim is enabled

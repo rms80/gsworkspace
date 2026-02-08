@@ -140,6 +140,7 @@ export default function VideoContextMenu({
       src: newSrc,
       cropRect: undefined,
       cropSrc: undefined,
+      cropSrcFileSize: undefined,
       speedFactor: undefined,
       removeAudio: undefined,
     })

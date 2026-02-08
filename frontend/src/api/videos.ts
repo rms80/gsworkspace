@@ -57,7 +57,7 @@ export async function cropVideo(
   removeAudio?: boolean,
   trim?: { start: number; end: number },
   extension?: string
-): Promise<void> {
+): Promise<{ fileSize: number }> {
   const requestBody = { sceneId, videoId, cropRect, speed, removeAudio, trim, extension }
   const response = await fetch(`${API_BASE}/crop-video`, {
     method: 'POST',
@@ -77,6 +77,7 @@ export async function cropVideo(
     })
     throw new Error(`Failed to process video: ${errorDetail}`)
   }
+  return response.json()
 }
 
 /**

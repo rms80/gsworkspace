@@ -113,6 +113,7 @@ export default function ImageContextMenu({
       height: natH * displayScale,
       cropRect: undefined,
       cropSrc: undefined,
+      cropSrcFileSize: undefined,
     })
     onClose()
   }

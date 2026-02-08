@@ -88,6 +88,7 @@ export function useCropMode({
         height: newHeight,
         cropRect: undefined,
         cropSrc: undefined,
+        cropSrcFileSize: undefined,
       })
 
       setCroppingImageId(null)
@@ -124,10 +125,10 @@ export function useCropMode({
 
     setProcessingImageId(itemId)
     cropImage(sceneId, itemId, cropRect)
-      .then((cropUrl) => {
+      .then((result) => {
         // Add cache-busting timestamp to force browser to fetch fresh image
-        const cacheBustedUrl = `${cropUrl}${cropUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
-        onUpdateItem(itemId, { cropSrc: cacheBustedUrl })
+        const cacheBustedUrl = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`
+        onUpdateItem(itemId, { cropSrc: cacheBustedUrl, cropSrcFileSize: result.fileSize })
       })
       .catch((err) => {
         console.error('Failed to create server-side crop, LLM canvas crop still works:', err)

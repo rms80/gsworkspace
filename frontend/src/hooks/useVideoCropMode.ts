@@ -200,12 +200,12 @@ export function useVideoCropMode({
     const extensionToSend = getVideoExtension(videoItem.src)
 
     cropVideo(sceneId, itemId, cropRectToSend, speedToSend, removeAudioToSend, trimToSend, extensionToSend)
-      .then(async () => {
+      .then(async (result) => {
         // Get the URL for the processed video using the content-url endpoint
         const cropUrl = await getContentUrl(sceneId, itemId, 'video', 'mp4', true)
         // Add cache-busting timestamp to force browser to fetch fresh video
         const cacheBustedUrl = `${cropUrl}${cropUrl.includes('?') ? '&' : '?'}t=${Date.now()}`
-        onUpdateItem(itemId, { cropSrc: cacheBustedUrl })
+        onUpdateItem(itemId, { cropSrc: cacheBustedUrl, cropSrcFileSize: result.fileSize })
         setProcessingVideoId(null)
       })
       .catch((err) => {
