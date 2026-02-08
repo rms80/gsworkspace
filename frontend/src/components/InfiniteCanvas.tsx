@@ -56,7 +56,7 @@ interface InfiniteCanvasProps {
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
-  onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
+  onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   onDeleteSelected: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
@@ -436,7 +436,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         result.name,
         result.pixelWidth,
         result.pixelHeight,
-        undefined
+        result.fileSize
       )
       endOperation()
     } catch (error) {
@@ -458,7 +458,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         result.visualWidth,
         result.visualHeight,
         result.name,
-        undefined
+        result.fileSize,
+        result.pixelWidth,
+        result.pixelHeight
       )
       endOperation()
     } catch (error) {

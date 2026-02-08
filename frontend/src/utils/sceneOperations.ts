@@ -173,6 +173,7 @@ export interface ConvertToGifResult {
   positionX: number
   positionY: number
   name: string
+  fileSize: number
 }
 
 export interface ConvertToVideoResult {
@@ -185,6 +186,7 @@ export interface ConvertToVideoResult {
   positionX: number
   positionY: number
   name: string
+  fileSize: number
 }
 
 /**
@@ -221,6 +223,7 @@ export async function convertToGif(
     positionX,
     positionY,
     name: (videoItem.name || 'Video') + '_gif',
+    fileSize: result.fileSize,
   }
 }
 
@@ -258,5 +261,6 @@ export async function convertToVideo(
     positionX,
     positionY,
     name: (imageItem.name || 'Image') + '_mp4',
+    fileSize: result.fileSize,
   }
 }

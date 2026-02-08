@@ -580,7 +580,7 @@ router.post('/convert-media', async (req, res) => {
     try { if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile) } catch { /* ignore */ }
     try { if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile) } catch { /* ignore */ }
 
-    res.json({ success: true, url, newItemId, width, height })
+    res.json({ success: true, url, newItemId, width, height, fileSize: outputBuffer.length })
   } catch (error) {
     cleanup()
     // Also try cleaning up files with extensions

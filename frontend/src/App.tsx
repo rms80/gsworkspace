@@ -976,7 +976,7 @@ function App() {
   )
 
   const addVideoAt = useCallback(
-    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => {
       // Generate unique name using the utility
       const existingNames = getExistingVideoNames(items)
       const uniqueName = generateUniqueName(name || 'Video', existingNames)
@@ -999,8 +999,8 @@ function App() {
         name: uniqueName,
         width: w,
         height: h,
-        originalWidth: width,
-        originalHeight: height,
+        originalWidth: originalWidth ?? width,
+        originalHeight: originalHeight ?? height,
         fileSize,
         muted: true,
         loop: false,

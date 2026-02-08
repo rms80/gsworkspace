@@ -149,6 +149,7 @@ export interface ConvertMediaResult {
   newItemId: string
   width: number
   height: number
+  fileSize: number
 }
 
 /**
