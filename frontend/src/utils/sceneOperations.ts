@@ -20,6 +20,7 @@ export interface DuplicateImageResult {
   positionX: number
   positionY: number
   name: string
+  fileSize: number
 }
 
 export interface DuplicateVideoResult {
@@ -32,6 +33,7 @@ export interface DuplicateVideoResult {
   positionX: number
   positionY: number
   name: string
+  fileSize: number
 }
 
 /**
@@ -91,6 +93,7 @@ export async function duplicateImage(
     positionX,
     positionY,
     name: imageItem.name || 'Image',
+    fileSize: blob.size,
   }
 }
 
@@ -151,6 +154,7 @@ export async function duplicateVideo(
     positionX,
     positionY,
     name: videoItem.name || 'Video',
+    fileSize: blob.size,
   }
 }
 

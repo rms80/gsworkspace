@@ -390,7 +390,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         result.name,
         result.pixelWidth,
         result.pixelHeight,
-        undefined
+        result.fileSize
       )
       endOperation()
     } catch (error) {
@@ -409,10 +409,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         result.positionX,
         result.positionY,
         result.url,
-        result.pixelWidth,
-        result.pixelHeight,
+        result.visualWidth,
+        result.visualHeight,
         result.name,
-        undefined
+        result.fileSize,
+        result.pixelWidth,
+        result.pixelHeight
       )
       endOperation()
     } catch (error) {
