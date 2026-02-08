@@ -27,6 +27,9 @@ interface MenuBarProps {
   onSwitchWorkspace?: () => void
   onResetZoom?: () => void
   onFitToView?: () => void
+  serverName?: string
+  workspaceName?: string
+  sceneName?: string
 }
 
 interface MenuItemDef {
@@ -76,6 +79,9 @@ function MenuBar({
   onSwitchWorkspace,
   onResetZoom,
   onFitToView,
+  serverName,
+  workspaceName,
+  sceneName,
 }: MenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
@@ -498,6 +504,18 @@ function MenuBar({
         </div>
       ))}
 
+      {/* Centered workspace/scene info (absolutely positioned for true centering) */}
+      <span style={{
+        position: 'absolute',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        color: '#666',
+        fontSize: '12px',
+        whiteSpace: 'nowrap',
+        pointerEvents: 'none',
+      }}>
+        {serverName || 'gsworkspace'}{workspaceName ? ` / ${workspaceName}` : ''}{sceneName ? ` / ${sceneName}` : ''}
+      </span>
       {/* Spacer to push right menus to the right */}
       <div style={{ flex: 1 }} />
 

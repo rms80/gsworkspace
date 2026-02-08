@@ -95,8 +95,9 @@ function App() {
 
   // Update browser tab title
   useEffect(() => {
-    document.title = `[GSW] ${serverName} / ${ACTIVE_WORKSPACE}`
-  }, [serverName])
+    const scenePart = activeScene?.name ? ` / ${activeScene.name}` : ''
+    document.title = `${ACTIVE_WORKSPACE}${scenePart}`
+  }, [activeScene?.name])
 
   // Selection for active scene (stored separately from items)
   const selectedIds = activeSceneId ? (selectionMap.get(activeSceneId) ?? []) : []
@@ -1984,6 +1985,9 @@ function App() {
         onSwitchWorkspace={storageMode !== 'offline' ? () => setSwitchWorkspaceDialogOpen(true) : undefined}
         onResetZoom={() => canvasRef.current?.resetZoom()}
         onFitToView={() => canvasRef.current?.fitToView()}
+        serverName={serverName}
+        workspaceName={ACTIVE_WORKSPACE}
+        sceneName={activeScene?.name}
       />
       <TabBar
         scenes={openScenes}
