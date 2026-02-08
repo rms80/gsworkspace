@@ -352,16 +352,25 @@ function App() {
       }
     }
 
+    // Save current workspace for current mode before switching
+    if (currentMode !== 'offline' && !isHiddenWorkspaceRef.current) {
+      setLastWorkspace(ACTIVE_WORKSPACE, currentMode)
+    }
+
     setStorageMode(mode)
     setStorageModeState(mode)
     setIsOffline(mode === 'offline')
-    // Reload scenes from the new storage provider
-    await loadAllScenes(mode)
 
-    // Save the active workspace for the new mode (skip hidden workspaces)
-    if (mode !== 'offline' && !isHiddenWorkspaceRef.current) {
-      setLastWorkspace(ACTIVE_WORKSPACE, mode)
+    // Navigate to the correct workspace for the new mode (full reload to reinitialize)
+    if (mode !== 'offline') {
+      const lastWs = getLastWorkspace(mode)
+      const targetWs = lastWs || 'default'
+      window.location.href = `/${targetWs}/`
+      return
     }
+
+    // Offline mode: reload scenes in place
+    await loadAllScenes(mode)
   }, [loadAllScenes])
 
   // Handler for syncing storage mode when backend reports a different mode
