@@ -83,8 +83,10 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 
 - Major work (eg a top-level TODO task) should always be done in a feature branch
 - Never merge a feature branch back into main automatically, always ask me for confirmation
-- Do not push the main branch unless I tell you to
 - Don't commit until the user has tested the change
+
+- Do not push the main branch unless I tell you to. Also before pushing to the main branch, run a full npm build to catch any errors.
+
 
 
 ## Claude Memory

@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { TextItem } from '../../../types'
-import { MIN_TEXT_WIDTH, COLOR_SELECTED, COLOR_BORDER_DEFAULT } from '../../../constants/canvas'
+import { MIN_TEXT_WIDTH, COLOR_SELECTED } from '../../../constants/canvas'
 
 interface TextItemRendererProps {
   item: TextItem
