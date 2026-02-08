@@ -68,8 +68,10 @@ export async function duplicateImage(
   })
 
   // Generate item ID and upload to scene folder
+  // Preserve source extension (e.g. gif) instead of always using png
+  const ext = getExtensionFromSrc(imageItem.src, 'png')
   const id = uuidv4()
-  const url = await uploadImage(dataUrl, sceneId, id, `${imageItem.name || 'image'}.png`)
+  const url = await uploadImage(dataUrl, sceneId, id, `${imageItem.name || 'image'}.${ext}`)
 
   // Calculate the visual size the original is displayed at
   const scaleX = imageItem.scaleX ?? 1
