@@ -6,7 +6,7 @@ import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLG
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { isVideoFile } from '../api/videos'
-import { duplicateImage, duplicateVideo } from '../utils/sceneOperations'
+import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
@@ -420,6 +420,52 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       endOperation()
     }
   }, [sceneId, onAddVideoAt, isOffline, startOperation, endOperation])
+
+  // Handle video → GIF conversion
+  const handleConvertVideoToGif = useCallback(async (videoItem: VideoItem) => {
+    try {
+      startOperation()
+      const result = await convertToGif(sceneId, videoItem)
+      onAddImageAt(
+        result.id,
+        result.positionX,
+        result.positionY,
+        result.url,
+        result.visualWidth,
+        result.visualHeight,
+        result.name,
+        result.pixelWidth,
+        result.pixelHeight,
+        undefined
+      )
+      endOperation()
+    } catch (error) {
+      console.error('Failed to convert video to GIF:', error)
+      endOperation()
+    }
+  }, [sceneId, onAddImageAt, startOperation, endOperation])
+
+  // Handle GIF → video conversion
+  const handleConvertGifToVideo = useCallback(async (imageItem: ImageItem) => {
+    try {
+      startOperation()
+      const result = await convertToVideo(sceneId, imageItem)
+      onAddVideoAt(
+        result.id,
+        result.positionX,
+        result.positionY,
+        result.url,
+        result.pixelWidth,
+        result.pixelHeight,
+        result.name,
+        undefined
+      )
+      endOperation()
+    } catch (error) {
+      console.error('Failed to convert GIF to video:', error)
+      endOperation()
+    }
+  }, [sceneId, onAddVideoAt, startOperation, endOperation])
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
@@ -1280,6 +1326,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             setPendingCropRect(initialCrop)
           }}
           onDuplicate={handleDuplicateImage}
+          onConvertToVideo={handleConvertGifToVideo}
           onClose={imageContextMenuState.closeMenu}
         />
       )}
@@ -1308,6 +1355,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             }
           }}
           onDuplicate={handleDuplicateVideo}
+          onConvertToGif={handleConvertVideoToGif}
           onClose={videoContextMenuState.closeMenu}
         />
       )}

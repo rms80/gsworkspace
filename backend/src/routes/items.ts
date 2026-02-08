@@ -4,14 +4,18 @@ import { v4 as uuidv4, validate as uuidValidate } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
+import ffprobeStatic from 'ffprobe-static'
 import multer from 'multer'
 import * as fs from 'fs'
 import * as path from 'path'
 import * as os from 'os'
 
-// Configure ffmpeg to use the bundled binary from ffmpeg-static
+// Configure ffmpeg/ffprobe to use the bundled binaries
 if (ffmpegStatic) {
   ffmpeg.setFfmpegPath(ffmpegStatic)
+}
+if (ffprobeStatic?.path) {
+  ffmpeg.setFfprobePath(ffprobeStatic.path)
 }
 
 // Browser-native video formats that don't need transcoding
@@ -474,6 +478,115 @@ router.post('/crop-video', async (req, res) => {
     cleanup()
     console.error('Error processing video:', error)
     res.status(500).json({ error: 'Failed to process video' })
+  }
+})
+
+// Convert media between video and GIF formats
+router.post('/convert-media', async (req, res) => {
+  const tempDir = os.tmpdir()
+  const tempId = uuidv4()
+  const inputPath = path.join(tempDir, `convert-input-${tempId}`)
+  const outputPath = path.join(tempDir, `convert-output-${tempId}`)
+
+  const cleanup = () => {
+    try { if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath) } catch { /* ignore */ }
+  }
+
+  try {
+    const { sceneId, itemId, targetFormat, isEdit, extension } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+    if (targetFormat !== 'gif' && targetFormat !== 'mp4') {
+      return res.status(400).json({ error: 'targetFormat must be "gif" or "mp4"' })
+    }
+    if (!extension) {
+      return res.status(400).json({ error: 'extension is required' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const sourceKey = `${sceneFolder}/${itemId}${isEdit ? '.crop' : ''}.${extension}`
+
+    // Load source file from storage
+    const sourceBuffer = await loadAsBuffer(sourceKey)
+    if (!sourceBuffer) {
+      return res.status(404).json({ error: 'Source file not found' })
+    }
+
+    // Write source to temp file
+    const inputExt = extension
+    const inputFile = `${inputPath}.${inputExt}`
+    const outputExt = targetFormat === 'gif' ? 'gif' : 'mp4'
+    const outputFile = `${outputPath}.${outputExt}`
+    fs.writeFileSync(inputFile, sourceBuffer)
+
+    if (targetFormat === 'gif') {
+      // Video → GIF: palette-preserving conversion
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputFile)
+          .complexFilter([
+            '[0:v]split[s0][s1]',
+            '[s0]palettegen[p]',
+            '[s1][p]paletteuse',
+          ])
+          .output(outputFile)
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .run()
+      })
+    } else {
+      // GIF → MP4: H.264 encode
+      await new Promise<void>((resolve, reject) => {
+        ffmpeg(inputFile)
+          .outputOptions([
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-movflags', '+faststart',
+            '-pix_fmt', 'yuv420p',
+          ])
+          .noAudio()
+          .output(outputFile)
+          .on('end', () => resolve())
+          .on('error', (err) => reject(err))
+          .run()
+      })
+    }
+
+    // Get output dimensions using ffprobe
+    const { width, height } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+      ffmpeg.ffprobe(outputFile, (err, metadata) => {
+        if (err) return reject(err)
+        const videoStream = metadata.streams.find(s => s.codec_type === 'video')
+        if (!videoStream?.width || !videoStream?.height) {
+          return reject(new Error('Could not determine output dimensions'))
+        }
+        resolve({ width: videoStream.width, height: videoStream.height })
+      })
+    })
+
+    // Save converted file with new item ID
+    const newItemId = uuidv4()
+    const outputKey = `${sceneFolder}/${newItemId}.${outputExt}`
+    const outputBuffer = fs.readFileSync(outputFile)
+    const contentType = targetFormat === 'gif' ? 'image/gif' : 'video/mp4'
+    await save(outputKey, outputBuffer, contentType)
+
+    const url = getPublicUrl(outputKey)
+
+    // Clean up temp files (with extensions)
+    try { if (fs.existsSync(inputFile)) fs.unlinkSync(inputFile) } catch { /* ignore */ }
+    try { if (fs.existsSync(outputFile)) fs.unlinkSync(outputFile) } catch { /* ignore */ }
+
+    res.json({ success: true, url, newItemId, width, height })
+  } catch (error) {
+    cleanup()
+    // Also try cleaning up files with extensions
+    try { fs.readdirSync(os.tmpdir()).filter(f => f.includes(tempId)).forEach(f => fs.unlinkSync(path.join(os.tmpdir(), f))) } catch { /* ignore */ }
+    console.error('Error converting media:', error)
+    res.status(500).json({ error: 'Failed to convert media' })
   }
 })
 

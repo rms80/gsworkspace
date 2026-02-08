@@ -10,6 +10,7 @@ interface VideoContextMenuProps {
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
   onCrop: (videoId: string) => void
   onDuplicate: (videoItem: VideoItem) => void
+  onConvertToGif: (videoItem: VideoItem) => void
   onClose: () => void
 }
 
@@ -43,6 +44,7 @@ export default function VideoContextMenu({
   onUpdateItem,
   onCrop,
   onDuplicate,
+  onConvertToGif,
   onClose,
 }: VideoContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -59,6 +61,12 @@ export default function VideoContextMenu({
   const handleDuplicate = () => {
     if (!videoItem) { onClose(); return }
     onDuplicate(videoItem)
+    onClose()
+  }
+
+  const handleConvertToGif = () => {
+    if (!videoItem) { onClose(); return }
+    onConvertToGif(videoItem)
     onClose()
   }
 
@@ -261,6 +269,20 @@ export default function VideoContextMenu({
         title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
       >
         Duplicate
+      </button>
+      <button
+        onClick={handleConvertToGif}
+        style={{
+          ...buttonStyle,
+          opacity: isOffline ? 0.5 : 1,
+          cursor: isOffline ? 'not-allowed' : 'pointer',
+        }}
+        disabled={isOffline}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        title={isOffline ? 'Convert unavailable in offline mode' : undefined}
+      >
+        Convert to GIF
       </button>
       <button
         onClick={handleExport}

@@ -1,6 +1,7 @@
 import { ImageItem, CropRect } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
 import { getContentData } from '../../../api/scenes'
+import { isGifSrc } from '../../../utils/gif'
 
 interface ImageContextMenuProps {
   position: { x: number; y: number }
@@ -11,6 +12,7 @@ interface ImageContextMenuProps {
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
   onStartCrop: (id: string, initialCrop: CropRect) => void
   onDuplicate: (imageItem: ImageItem) => void
+  onConvertToVideo: (imageItem: ImageItem) => void
   onClose: () => void
 }
 
@@ -45,6 +47,7 @@ export default function ImageContextMenu({
   onUpdateItem,
   onStartCrop,
   onDuplicate,
+  onConvertToVideo,
   onClose,
 }: ImageContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -61,6 +64,12 @@ export default function ImageContextMenu({
   const handleDuplicate = () => {
     if (!imageItem) { onClose(); return }
     onDuplicate(imageItem)
+    onClose()
+  }
+
+  const handleConvertToVideo = () => {
+    if (!imageItem) { onClose(); return }
+    onConvertToVideo(imageItem)
     onClose()
   }
 
@@ -213,6 +222,22 @@ export default function ImageContextMenu({
       >
         Duplicate
       </button>
+      {imageItem && isGifSrc(imageItem.src) && (
+        <button
+          onClick={handleConvertToVideo}
+          style={{
+            ...buttonStyle,
+            opacity: isOffline ? 0.5 : 1,
+            cursor: isOffline ? 'not-allowed' : 'pointer',
+          }}
+          disabled={isOffline}
+          onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          title={isOffline ? 'Convert unavailable in offline mode' : undefined}
+        >
+          Convert to Video
+        </button>
+      )}
       <button
         onClick={handleExport}
         style={buttonStyle}

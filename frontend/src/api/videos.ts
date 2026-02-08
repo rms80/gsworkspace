@@ -144,6 +144,44 @@ export function getVideoDimensionsFromUrl(url: string): Promise<{ width: number;
   })
 }
 
+export interface ConvertMediaResult {
+  url: string
+  newItemId: string
+  width: number
+  height: number
+}
+
+/**
+ * Convert a media item between video and GIF formats on the server.
+ * @param sceneId - The scene containing the item
+ * @param itemId - The source item ID
+ * @param targetFormat - 'gif' to convert video→GIF, 'mp4' to convert GIF→video
+ * @param isEdit - Whether to use the edited (.crop) version of the source
+ * @param extension - The source file extension (e.g., 'mp4', 'gif', 'webm')
+ */
+export async function convertMedia(
+  sceneId: string,
+  itemId: string,
+  targetFormat: 'gif' | 'mp4',
+  isEdit: boolean,
+  extension: string
+): Promise<ConvertMediaResult> {
+  const response = await fetch(`${API_BASE}/convert-media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId, itemId, targetFormat, isEdit, extension }),
+  })
+  if (!response.ok) {
+    let errorDetail = response.statusText
+    try {
+      const errorJson = await response.json()
+      errorDetail = errorJson.error || errorDetail
+    } catch { /* ignore parse error */ }
+    throw new Error(`Failed to convert media: ${errorDetail}`)
+  }
+  return response.json()
+}
+
 /** Video extensions recognized beyond MIME type detection */
 const VIDEO_EXTENSIONS = new Set([
   'mp4', 'webm', 'ogg', 'ogv', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'm4v', 'ts', 'mts',

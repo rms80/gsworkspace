@@ -7,7 +7,7 @@
 import { ImageItem, VideoItem } from '../types'
 import { getContentData } from '../api/scenes'
 import { uploadImage } from '../api/images'
-import { uploadVideo } from '../api/videos'
+import { uploadVideo, convertMedia } from '../api/videos'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface DuplicateImageResult {
@@ -151,5 +151,112 @@ export async function duplicateVideo(
     positionX,
     positionY,
     name: videoItem.name || 'Video',
+  }
+}
+
+/**
+ * Get file extension from a src URL.
+ */
+function getExtensionFromSrc(src: string, fallback: string): string {
+  const match = src.match(/\.(\w+)(?:\?|$)/)
+  if (match) return match[1].toLowerCase()
+  return fallback
+}
+
+export interface ConvertToGifResult {
+  id: string
+  url: string
+  pixelWidth: number
+  pixelHeight: number
+  visualWidth: number
+  visualHeight: number
+  positionX: number
+  positionY: number
+  name: string
+}
+
+export interface ConvertToVideoResult {
+  id: string
+  url: string
+  pixelWidth: number
+  pixelHeight: number
+  visualWidth: number
+  visualHeight: number
+  positionX: number
+  positionY: number
+  name: string
+}
+
+/**
+ * Convert a video item to a GIF.
+ * Calls the server to do ffmpeg conversion, returns info to add the new GIF as an image item.
+ */
+export async function convertToGif(
+  sceneId: string,
+  videoItem: VideoItem
+): Promise<ConvertToGifResult> {
+  const hasEdit = !!(videoItem.cropRect || videoItem.speedFactor || videoItem.removeAudio || videoItem.trim)
+  // Edited videos are always saved as mp4; original uses source extension
+  const extension = hasEdit ? 'mp4' : getExtensionFromSrc(videoItem.src, 'mp4')
+
+  const result = await convertMedia(sceneId, videoItem.id, 'gif', hasEdit, extension)
+
+  // Calculate visual size from source item
+  const scaleX = videoItem.scaleX ?? 1
+  const scaleY = videoItem.scaleY ?? 1
+  const visualWidth = Math.round(videoItem.width * scaleX)
+  const visualHeight = Math.round(videoItem.height * scaleY)
+  const gap = 20
+
+  const positionX = videoItem.x + visualWidth + gap + visualWidth / 2
+  const positionY = videoItem.y + visualHeight / 2
+
+  return {
+    id: result.newItemId,
+    url: result.url,
+    pixelWidth: result.width,
+    pixelHeight: result.height,
+    visualWidth,
+    visualHeight,
+    positionX,
+    positionY,
+    name: (videoItem.name || 'Video') + '_gif',
+  }
+}
+
+/**
+ * Convert a GIF image item to a video.
+ * Calls the server to do ffmpeg conversion, returns info to add the new video item.
+ */
+export async function convertToVideo(
+  sceneId: string,
+  imageItem: ImageItem
+): Promise<ConvertToVideoResult> {
+  const hasEdit = !!imageItem.cropRect
+  // Edited GIFs are always saved as gif; original uses source extension
+  const extension = 'gif'
+
+  const result = await convertMedia(sceneId, imageItem.id, 'mp4', hasEdit, extension)
+
+  // Calculate visual size from source item
+  const scaleX = imageItem.scaleX ?? 1
+  const scaleY = imageItem.scaleY ?? 1
+  const visualWidth = Math.round(imageItem.width * scaleX)
+  const visualHeight = Math.round(imageItem.height * scaleY)
+  const gap = 20
+
+  const positionX = imageItem.x + visualWidth + gap + visualWidth / 2
+  const positionY = imageItem.y + visualHeight / 2
+
+  return {
+    id: result.newItemId,
+    url: result.url,
+    pixelWidth: result.width,
+    pixelHeight: result.height,
+    visualWidth,
+    visualHeight,
+    positionX,
+    positionY,
+    name: (imageItem.name || 'Image') + '_mp4',
   }
 }
