@@ -33,7 +33,13 @@
       "Bash(pkill:*)",
       "Bash(git stash:*)",
       "Bash(git branch:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(git -C /d/git/workspaceapp status)",
+      "Bash(git -C /d/git/workspaceapp diff)",
+      "Bash(git -C /d/git/workspaceapp log --oneline -5)",
+      "Bash(git -C /d/git/workspaceapp add:*)",
+      "Bash(git -C /d/git/workspaceapp commit -m \"$\\(cat <<''EOF''\nUse relative asset paths for offline builds\n\nSet Vite base to ''./'' when VITE_OFFLINE_MODE is true so the built\nindex.html references assets and favicon with relative paths. Also\nuse import.meta.env.BASE_URL for the about.html fetch so it resolves\ncorrectly in both online and offline modes.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(npx vite:*)"
     ]
   }
 }

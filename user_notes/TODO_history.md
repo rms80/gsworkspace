@@ -1772,3 +1772,118 @@ GIF items use a DOM `<img>` overlay positioned over the Konva canvas (the same p
 | `backend/src/routes/scenes.ts` | Preserve image file extension |
 | `frontend/src/App.tsx` | Fix debug menu URL |
 
+
+
+
+
+
+
+# Plan: Video ↔ GIF Conversion
+
+do this work in a feature stream
+
+## Context
+Users want to convert video objects to GIFs and GIF objects (which are `ImageItem` with `.gif` src) to videos. The conversion uses ffmpeg on the server, and the result is added to the canvas as a new item (like duplicate does).
+
+## Design
+
+### 1. Backend: New endpoint `POST /api/w/:workspace/items/convert-media`
+
+**File:** `backend/src/routes/items.ts`
+
+Request body:
+```json
+{
+  "sceneId": "uuid",
+  "itemId": "uuid",
+  "targetFormat": "gif" | "mp4",
+  "isEdit": boolean,
+  "extension": "mp4" | "gif" | "webm" | etc.
+}
+```
+
+Logic:
+- Validates sceneId/itemId are UUIDs, targetFormat is "gif" or "mp4"
+- Client specifies `isEdit` (true = use `.crop.{ext}`, false = use `.{ext}`) and `extension` (source file extension)
+- Constructs the storage key: `{workspace}/{sceneId}/{itemId}{isEdit ? '.crop' : ''}.{extension}`
+- Loads the source file from storage
+- Writes source to temp file
+- Uses ffmpeg to convert:
+  - **Video → GIF**: `ffmpeg -i input.mp4 → split → palettegen → paletteuse → output.gif` (same palette-preserving pattern used by crop-image for GIFs)
+  - **GIF → MP4**: `ffmpeg -i input.gif -c:v libx264 -preset fast -crf 23 -movflags +faststart -pix_fmt yuv420p output.mp4` (standard H.264 encode, `pix_fmt yuv420p` needed because GIFs can have odd pixel formats)
+- Generates a new itemId for the result
+- Saves to `{sceneFolder}/{newItemId}.{gif|mp4}`
+- Returns `{ success: true, url, newItemId, width, height }` (uses ffprobe to get output dimensions)
+- Cleans up temp files
+
+### 2. Frontend: New API function `convertMedia`
+
+**File:** `frontend/src/api/videos.ts` (add to existing file)
+
+```typescript
+export async function convertMedia(
+  sceneId: string,
+  itemId: string,
+  targetFormat: 'gif' | 'mp4',
+  isEdit: boolean,
+  extension: string
+): Promise<{ url: string; newItemId: string; width: number; height: number }>
+```
+
+### 3. Frontend: New conversion function in `sceneOperations.ts`
+
+**File:** `frontend/src/utils/sceneOperations.ts`
+
+Add `convertToGif(sceneId, videoItem)` and `convertToVideo(sceneId, imageItem)` functions that:
+1. Determine `isEdit` from item state (e.g., video has cropRect/speedFactor/removeAudio/trim; GIF has cropRect)
+2. Determine `extension` from item src (edited videos are always `mp4`; edited GIFs are always `gif`)
+3. Call `convertMedia` API with the explicit parameters
+4. Return the info needed to add the new item (similar to `DuplicateImageResult`/`DuplicateVideoResult`)
+5. Position the new item to the right of the source (same gap pattern as duplicate)
+
+### 4. Frontend: Add "Convert to GIF" to VideoContextMenu
+
+**File:** `frontend/src/components/canvas/menus/VideoContextMenu.tsx`
+
+- Add new prop: `onConvertToGif: (videoItem: VideoItem) => void`
+- Add "Convert to GIF" menu button (disabled when offline, like Edit/Duplicate)
+- Calls `onConvertToGif(videoItem)` and closes menu
+
+### 5. Frontend: Add "Convert to Video" to ImageContextMenu
+
+**File:** `frontend/src/components/canvas/menus/ImageContextMenu.tsx`
+
+- Add new prop: `onConvertToVideo: (imageItem: ImageItem) => void`
+- Only show the button when the image is a GIF (use `isGifSrc()` from `utils/gif.ts`)
+- Add "Convert to Video" menu button (disabled when offline)
+- Calls `onConvertToVideo(imageItem)` and closes menu
+
+### 6. Frontend: Wire up handlers in InfiniteCanvas.tsx
+
+**File:** `frontend/src/components/InfiniteCanvas.tsx`
+
+- Add `handleConvertVideoToGif` callback (similar to `handleDuplicateVideo`):
+  - Calls `convertToGif()` from sceneOperations
+  - Calls `onAddImageAt()` with the result to add as new GIF image item
+- Add `handleConvertGifToVideo` callback (similar to `handleDuplicateImage`):
+  - Calls `convertToVideo()` from sceneOperations
+  - Calls `onAddVideoAt()` with the result to add as new video item
+- Pass these as props to the context menus
+
+## Files Modified
+
+1. `backend/src/routes/items.ts` — new `convert-media` endpoint
+2. `frontend/src/api/videos.ts` — new `convertMedia()` API function
+3. `frontend/src/utils/sceneOperations.ts` — new `convertToGif()` and `convertToVideo()` functions
+4. `frontend/src/components/canvas/menus/VideoContextMenu.tsx` — "Convert to GIF" button + handler prop
+5. `frontend/src/components/canvas/menus/ImageContextMenu.tsx` — "Convert to Video" button (GIF only) + handler prop
+6. `frontend/src/components/InfiniteCanvas.tsx` — wire up conversion handlers and pass to menus
+
+## Verification
+
+1. Start backend (`npm run dev` in `/backend`) and frontend (`npm run dev` in `/frontend`)
+2. Add a video to the canvas → right-click → "Convert to GIF" → new GIF image item appears to the right
+3. Add a GIF to the canvas → right-click → "Convert to Video" → new video item appears to the right
+4. Test with edited video (cropped/trimmed) → should convert the edited version
+5. Test with cropped GIF → should convert the cropped version
+6. Verify offline mode disables the conversion buttons
