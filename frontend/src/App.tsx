@@ -929,8 +929,8 @@ function App() {
   }, [updateActiveSceneItems, pushChange])
 
   const addTextAt = useCallback(
-    (x: number, y: number, text: string): string => {
-      const width = 400
+    (x: number, y: number, text: string, optWidth?: number): string => {
+      const width = optWidth ?? 400
       const height = 100
       const id = uuidv4()
       const newItem: CanvasItem = {

@@ -54,7 +54,7 @@ interface InfiniteCanvasProps {
   sceneId: string
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onSelectItems: (ids: string[]) => void
-  onAddTextAt: (x: number, y: number, text: string) => string
+  onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
   onDeleteSelected: () => void
@@ -252,8 +252,40 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       if (isEditing) {
         return
       }
-      // Only trigger on 't' key without modifiers
-      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // Shift+T: create new text block below the selected text block
+      if (e.key === 'T' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (selectedIds.length === 1) {
+          const selectedItem = items.find(item => item.id === selectedIds[0])
+          if (selectedItem && selectedItem.type === 'text') {
+            e.preventDefault()
+            // Compute actual visual height of text block (same as TextItemRenderer)
+            const padding = 8
+            const measuredText = new Konva.Text({
+              text: selectedItem.text || '',
+              fontSize: (selectedItem as CanvasItem & { fontSize: number }).fontSize || 14,
+              width: selectedItem.width,
+            })
+            const visualHeight = measuredText.height() + padding * 2
+            // addTextAt centers the item, so compute center of desired position
+            const desiredX = selectedItem.x
+            const desiredY = selectedItem.y + visualHeight + 2
+            const itemWidth = selectedItem.width
+            const itemHeight = 100 // addTextAt's default height
+            const centerX = desiredX + itemWidth / 2
+            const centerY = desiredY + itemHeight / 2
+            const newId = onAddTextAt(centerX, centerY, '', itemWidth)
+            onSelectItems([newId])
+            setEditingTextId(newId)
+            setTimeout(() => {
+              textareaRef.current?.focus()
+            }, 0)
+            return
+          }
+        }
+      }
+
+      // 't' (no modifiers): create/edit text block at cursor
+      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
         e.preventDefault()
 
         // If a single text item is selected, edit it
@@ -288,7 +320,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems])
+  }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems, onUpdateItem])
 
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()

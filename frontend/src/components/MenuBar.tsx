@@ -676,6 +676,7 @@ function MenuBar({
                   { shortcut: 'Ctrl+C', action: 'Copy selected item' },
                   { shortcut: 'Ctrl+V', action: 'Paste at cursor' },
                   { shortcut: 'T', action: 'New text block at cursor (when nothing selected)' },
+                  { shortcut: 'Shift+T', action: 'New text block below selected text block' },
                   { shortcut: 'Delete / Backspace', action: 'Delete selected items' },
                   { shortcut: 'Escape', action: 'Deselect all / Cancel crop' },
                 ].map((row, index) => (
