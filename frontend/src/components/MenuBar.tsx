@@ -335,12 +335,13 @@ function MenuBar({
       style={{
         display: 'flex',
         alignItems: 'center',
-        backgroundColor: '#f5f5f5',
-        borderBottom: '1px solid #ccc',
+        backgroundColor: '#2d2d2d',
+        borderBottom: '1px solid #404040',
         padding: '0 8px',
         height: '32px',
         position: 'relative',
         zIndex: 60,
+        fontFamily: 'sans-serif',
       }}
     >
       {leftMenus.map((menu) => (
@@ -349,12 +350,13 @@ function MenuBar({
             onClick={() => handleMenuClick(menu)}
             style={{
               padding: '4px 12px',
-              backgroundColor: openMenu === menu.label ? '#e0e0e0' : 'transparent',
+              backgroundColor: openMenu === menu.label ? '#4a4a4a' : 'transparent',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
               fontFamily: 'inherit',
               fontSize: '14px',
+              color: '#aaa',
             }}
           >
             {menu.label}
@@ -366,17 +368,17 @@ function MenuBar({
                 position: 'absolute',
                 top: '100%',
                 left: 0,
-                backgroundColor: '#fff',
-                border: '1px solid #ccc',
+                backgroundColor: '#3a3a3a',
+                border: '1px solid #555',
                 borderRadius: '4px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                 minWidth: menu.minWidth ?? '160px',
                 zIndex: 200,
               }}
             >
               {menu.items.map((item, index) =>
                 item.separator ? (
-                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
+                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #555' }} />
                 ) : item.submenu ? (
                 <div
                   key={index}
@@ -391,13 +393,13 @@ function MenuBar({
                       alignItems: 'center',
                       width: '100%',
                       padding: '8px 12px',
-                      backgroundColor: openSubmenu === item.label ? '#f0f0f0' : 'transparent',
+                      backgroundColor: openSubmenu === item.label ? '#4a4a4a' : 'transparent',
                       border: 'none',
                       cursor: 'pointer',
                       fontFamily: 'inherit',
                       fontSize: '14px',
                       textAlign: 'left',
-                      color: '#333',
+                      color: '#ddd',
                     }}
                   >
                     <span>{item.label}</span>
@@ -409,10 +411,10 @@ function MenuBar({
                         position: 'absolute',
                         top: 0,
                         left: '100%',
-                        backgroundColor: '#fff',
-                        border: '1px solid #ccc',
+                        backgroundColor: '#3a3a3a',
+                        border: '1px solid #555',
                         borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                         minWidth: '160px',
                         zIndex: 201,
                       }}
@@ -434,10 +436,10 @@ function MenuBar({
                             fontFamily: 'inherit',
                             fontSize: '14px',
                             textAlign: 'left',
-                            color: sub.disabled ? '#aaa' : '#333',
+                            color: sub.disabled ? '#666' : '#ddd',
                           }}
                           onMouseEnter={(e) => {
-                            if (!sub.disabled) e.currentTarget.style.backgroundColor = '#f0f0f0'
+                            if (!sub.disabled) e.currentTarget.style.backgroundColor = '#4a4a4a'
                           }}
                           onMouseLeave={(e) => {
                             e.currentTarget.style.backgroundColor = 'transparent'
@@ -471,11 +473,11 @@ function MenuBar({
                     fontFamily: 'inherit',
                     fontSize: '14px',
                     textAlign: 'left',
-                    color: item.disabled ? '#aaa' : '#333',
+                    color: item.disabled ? '#666' : '#ddd',
                   }}
                   onMouseEnter={(e) => {
                     if (!item.disabled) {
-                      e.currentTarget.style.backgroundColor = '#f0f0f0'
+                      e.currentTarget.style.backgroundColor = '#4a4a4a'
                     }
                   }}
                   onMouseLeave={(e) => {
@@ -505,12 +507,13 @@ function MenuBar({
             onClick={() => handleMenuClick(menu)}
             style={{
               padding: '4px 12px',
-              backgroundColor: openMenu === menu.label ? '#e0e0e0' : 'transparent',
+              backgroundColor: openMenu === menu.label ? '#4a4a4a' : 'transparent',
               border: 'none',
               borderRadius: '4px',
               cursor: 'pointer',
               fontFamily: 'inherit',
               fontSize: '14px',
+              color: '#aaa',
               ...menu.style,
             }}
           >
@@ -523,17 +526,17 @@ function MenuBar({
                 position: 'absolute',
                 top: '100%',
                 right: 0,
-                backgroundColor: '#fff',
-                border: '1px solid #ccc',
+                backgroundColor: '#3a3a3a',
+                border: '1px solid #555',
                 borderRadius: '4px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                 minWidth: '160px',
                 zIndex: 200,
               }}
             >
               {menu.items.map((item, index) =>
                 item.separator ? (
-                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e0e0e0' }} />
+                  <hr key={index} style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #555' }} />
                 ) : (
                 <button
                   key={index}
@@ -551,11 +554,11 @@ function MenuBar({
                     fontFamily: 'inherit',
                     fontSize: '14px',
                     textAlign: 'left',
-                    color: item.disabled ? '#aaa' : '#333',
+                    color: item.disabled ? '#666' : '#ddd',
                   }}
                   onMouseEnter={(e) => {
                     if (!item.disabled) {
-                      e.currentTarget.style.backgroundColor = '#f0f0f0'
+                      e.currentTarget.style.backgroundColor = '#4a4a4a'
                     }
                   }}
                   onMouseLeave={(e) => {

@@ -132,6 +132,7 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         padding: '0 12px',
         gap: 12,
         fontSize: 12,
+        fontFamily: 'sans-serif',
         color: '#aaa',
         zIndex: 100,
       }}
@@ -140,7 +141,8 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
       <div ref={menuRef} style={{ position: 'relative' }}>
         <span
           style={{
-            padding: '2px 8px',
+            padding: '0 8px',
+            height: 20,
             backgroundColor: storageModeDisplay[storageMode].bg,
             color: '#fff',
             borderRadius: 3,
@@ -231,7 +233,8 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
       {!isOffline && serverStatus !== null && (
         <span
           style={{
-            padding: '2px 8px',
+            padding: '0 8px',
+            height: 20,
             backgroundColor:
               serverStatus === 'connected' ? '#166534' :
               serverStatus === 'misconfigured' ? '#d97706' :
@@ -240,6 +243,8 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
             borderRadius: 3,
             fontSize: 11,
             fontWeight: 500,
+            display: 'inline-flex',
+            alignItems: 'center',
           }}
           title={
             serverStatus === 'connected' ? 'Server is responding' :

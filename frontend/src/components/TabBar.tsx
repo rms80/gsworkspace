@@ -173,14 +173,15 @@ function TabBar({
         style={{
           display: 'flex',
           alignItems: 'flex-end',
-          backgroundColor: '#e0e0e0',
-          borderBottom: '1px solid #ccc',
+          backgroundColor: '#353535',
+          borderBottom: '1px solid #404040',
+          fontFamily: 'sans-serif',
           padding: '4px 8px 0 8px',
           gap: '4px',
           overflowX: 'auto',
           overflowY: 'hidden',
           minHeight: '28px',
-          fontSize: '14px',
+          fontSize: '12px',
           position: 'relative',
           zIndex: 50,
         }}
@@ -197,9 +198,10 @@ function TabBar({
               alignItems: 'center',
               gap: '6px',
               padding: '4px 10px',
-              backgroundColor: scene.id === activeSceneId ? '#fff' : '#f0f0f0',
-              border: '1px solid #ccc',
-              borderBottom: scene.id === activeSceneId ? '1px solid #fff' : '1px solid #ccc',
+              backgroundColor: scene.id === activeSceneId ? '#4a4a4a' : '#333',
+              border: '1px solid #555',
+              borderBottom: scene.id === activeSceneId ? '1px solid #4a4a4a' : '1px solid #555',
+              color: scene.id === activeSceneId ? '#fff' : '#aaa',
               borderRadius: '4px 4px 0 0',
               marginBottom: '-1px',
               cursor: 'pointer',
@@ -216,7 +218,7 @@ function TabBar({
                 cursor: 'pointer',
                 padding: '0 2px',
                 fontSize: '12px',
-                color: '#888',
+                color: '#999',
                 lineHeight: 1,
               }}
               title="Close scene"
@@ -230,14 +232,15 @@ function TabBar({
           style={{
             padding: '2px 6px',
             marginBottom: '4px',
-            backgroundColor: '#f0f0f0',
-            border: '1px solid #ccc',
+            backgroundColor: '#444',
+            border: '1px solid #555',
             borderRadius: '3px',
             cursor: 'pointer',
             fontFamily: 'inherit',
             fontSize: '12px',
             lineHeight: 1,
             alignSelf: 'center',
+            color: '#aaa',
           }}
           title="Add new scene"
         >
@@ -250,14 +253,15 @@ function TabBar({
             style={{
               padding: '2px 6px',
               marginBottom: '4px',
-              backgroundColor: sceneDropdownOpen ? '#e0e0e0' : '#f0f0f0',
-              border: '1px solid #ccc',
+              backgroundColor: sceneDropdownOpen ? '#555' : '#444',
+              border: '1px solid #555',
               borderRadius: '3px',
               cursor: 'pointer',
               fontFamily: 'inherit',
               fontSize: '12px',
               lineHeight: 1,
               alignSelf: 'center',
+              color: '#aaa',
             }}
             title="Open scene..."
           >
@@ -274,14 +278,15 @@ function TabBar({
             position: 'fixed',
             top: dropdownPos.top,
             left: dropdownPos.left,
-            backgroundColor: '#fff',
-            border: '1px solid #ccc',
+            backgroundColor: '#3a3a3a',
+            border: '1px solid #555',
             borderRadius: '4px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
             minWidth: '180px',
             maxHeight: '300px',
             overflowY: 'auto',
             zIndex: 200,
+            color: '#ddd',
           }}
         >
           {onPinCurrentScenes && (
@@ -302,13 +307,14 @@ function TabBar({
                   fontSize: '13px',
                   fontFamily: 'inherit',
                   whiteSpace: 'nowrap',
+                  color: '#ddd',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f0f0f0' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4a4a4a' }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
               >
                 Pin Current Scenes
               </button>
-              <div style={{ borderTop: '1px solid #e0e0e0', margin: '2px 0' }} />
+              <div style={{ borderTop: '1px solid #555', margin: '2px 0' }} />
             </>
           )}
           {dropdownLoading ? (
@@ -339,8 +345,9 @@ function TabBar({
                   fontSize: '13px',
                   fontFamily: 'inherit',
                   whiteSpace: 'nowrap',
+                  color: '#ddd',
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#f0f0f0' }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = '#4a4a4a' }}
                 onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'transparent' }}
               >
                 {scene.name}
@@ -358,10 +365,10 @@ function TabBar({
             position: 'fixed',
             top: contextMenu.y,
             left: contextMenu.x,
-            background: 'white',
-            border: '1px solid #ccc',
+            background: '#3a3a3a',
+            border: '1px solid #555',
             borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
             zIndex: 1000,
             minWidth: 120,
           }}
@@ -378,8 +385,9 @@ function TabBar({
               textAlign: 'left',
               cursor: 'pointer',
               fontSize: 14,
+              color: '#ddd',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
           >
             Rename
@@ -395,9 +403,9 @@ function TabBar({
               textAlign: 'left',
               cursor: 'pointer',
               fontSize: 14,
-              color: '#c00',
+              color: '#f87171',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
             onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
           >
             Delete
