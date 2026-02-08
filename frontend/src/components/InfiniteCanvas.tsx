@@ -455,8 +455,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         result.positionX,
         result.positionY,
         result.url,
-        result.pixelWidth,
-        result.pixelHeight,
+        result.visualWidth,
+        result.visualHeight,
         result.name,
         undefined
       )
