@@ -10,6 +10,7 @@ interface VideoItemRendererProps {
   item: VideoItem
   isSelected: boolean
   editingVideoLabelId: string | null
+  stageScale: number
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onContextMenu: (e: Konva.KonvaEventObject<PointerEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<VideoItem>) => void
@@ -36,6 +37,7 @@ export default function VideoItemRenderer({
   item,
   isSelected,
   editingVideoLabelId,
+  stageScale,
   onItemClick,
   onContextMenu,
   onUpdateItem,
@@ -47,8 +49,13 @@ export default function VideoItemRenderer({
   const displayWidth = item.width * scaleX
   const displayHeight = item.height * scaleY
 
+  // When zoomed in past 100%, shrink the header in canvas space so it stays
+  // the same visual size on screen. When zoomed out, it scales normally.
+  const zoomFactor = Math.max(1, stageScale)
+  const effectiveHeaderHeight = VIDEO_HEADER_HEIGHT / zoomFactor
+
   // Header is only visible when selected
-  const headerHeight = isSelected ? VIDEO_HEADER_HEIGHT : 0
+  const headerHeight = isSelected ? effectiveHeaderHeight : 0
   const totalHeight = displayHeight + headerHeight
 
   // Build metadata string (dimensions and file size)
@@ -110,35 +117,20 @@ export default function VideoItemRenderer({
         // Save position adjusted for header
         onUpdateItem(item.id, { x: node.x(), y: node.y() + headerHeight })
       }}
-      onTransformEnd={(e) => {
-        const node = e.target
-        // Capture the transform scale before resetting
-        const newScaleX = (item.scaleX ?? 1) * node.scaleX()
-        const newScaleY = (item.scaleY ?? 1) * node.scaleY()
-        // Reset node scale since we bake it into item.scaleX/Y
-        node.scaleX(1)
-        node.scaleY(1)
-        onUpdateItem(item.id, {
-          x: node.x(),
-          y: node.y() + headerHeight,
-          scaleX: newScaleX,
-          scaleY: newScaleY,
-          rotation: node.rotation(),
-        })
-      }}
     >
-      {/* Header bar - only visible when selected */}
+      {/* Header bar - only visible when selected. Scaled inversely when zoomed
+           in so it stays a constant visual size on screen. */}
       {isSelected && (
-        <>
+        <Group scaleX={1 / zoomFactor} scaleY={1 / zoomFactor}>
           <Rect
-            width={displayWidth}
+            width={displayWidth * zoomFactor}
             height={VIDEO_HEADER_HEIGHT}
             fill="#2a2a4e"
             stroke={COLOR_SELECTED}
             strokeWidth={2}
             cornerRadius={[4, 4, 0, 0]}
           />
-          {/* Label text (left-aligned) */}
+          {/* Label text (left-aligned, always has priority) */}
           <Text
             x={8}
             y={4}
@@ -146,15 +138,16 @@ export default function VideoItemRenderer({
             fontSize={14}
             fontStyle="bold"
             fill="#e0e0e0"
-            width={displayWidth - 16 - (metadataText ? 150 : 0)}
+            width={displayWidth * zoomFactor - 16}
+            wrap="none"
             ellipsis={true}
             onDblClick={() => onLabelDblClick(item.id)}
             visible={editingVideoLabelId !== item.id}
           />
-          {/* Metadata text (right-aligned) */}
-          {metadataText && (
+          {/* Metadata text (right-aligned, hidden when too narrow) */}
+          {metadataText && displayWidth * zoomFactor > 200 && (
             <Text
-              x={displayWidth - 158}
+              x={displayWidth * zoomFactor - 158}
               y={5}
               text={metadataText}
               fontSize={11}
@@ -164,18 +157,58 @@ export default function VideoItemRenderer({
               listening={false}
             />
           )}
-        </>
+        </Group>
       )}
 
-      {/* Video content area - transparent but clickable */}
-      <Rect
+      {/* Selection border - outside transform-target so it doesn't affect transformer bounds */}
+      {isSelected && (
+        <Rect
+          y={headerHeight}
+          width={displayWidth}
+          height={displayHeight}
+          fill="transparent"
+          stroke={COLOR_SELECTED}
+          strokeWidth={2 / stageScale}
+          listening={false}
+        />
+      )}
+
+      {/* Video content wrapper - transformer targets this group (not the header) */}
+      <Group
+        name="transform-target"
         y={headerHeight}
-        width={displayWidth}
-        height={displayHeight}
-        fill="transparent"
-        stroke={isSelected ? COLOR_SELECTED : 'transparent'}
-        strokeWidth={isSelected ? 2 : 0}
-      />
+        onTransformEnd={(e) => {
+          const node = e.target
+          const parent = node.parent!
+          // Capture the transform scale before resetting
+          const newScaleX = (item.scaleX ?? 1) * node.scaleX()
+          const newScaleY = (item.scaleY ?? 1) * node.scaleY()
+          // Calculate absolute position
+          const newX = parent.x() + node.x()
+          const newY = parent.y() + node.y()
+          // Reset inner node
+          node.scaleX(1)
+          node.scaleY(1)
+          node.x(0)
+          node.y(headerHeight)
+          // Update outer group to match until React re-renders
+          parent.x(newX)
+          parent.y(newY - headerHeight)
+          onUpdateItem(item.id, {
+            x: newX,
+            y: newY,
+            scaleX: newScaleX,
+            scaleY: newScaleY,
+            rotation: node.rotation(),
+          })
+        }}
+      >
+        <Rect
+          width={displayWidth}
+          height={displayHeight}
+          fill="transparent"
+        />
+      </Group>
     </Group>
   )
 }

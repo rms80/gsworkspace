@@ -329,7 +329,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     transformers: [
       { type: 'text', ref: textTransformerRef },
       { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId, childName: 'transform-target' },
-      { type: 'video', ref: videoTransformerRef },
+      { type: 'video', ref: videoTransformerRef, childName: 'transform-target' },
       { type: 'prompt', ref: promptTransformerRef },
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
@@ -705,6 +705,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onUpdateItem={onUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
                 setGifItemTransforms={itemIsGif ? setGifItemTransforms : undefined}
+                stageScale={stageScale}
               />
             )
           } else if (item.type === 'video') {
@@ -726,6 +727,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onUpdateItem={onUpdateItem}
                 onLabelDblClick={handleVideoLabelDblClick}
                 setVideoItemTransforms={setVideoItemTransforms}
+                stageScale={stageScale}
               />
             )
           } else if (item.type === 'prompt') {

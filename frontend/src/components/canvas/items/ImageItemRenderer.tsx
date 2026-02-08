@@ -9,6 +9,7 @@ interface ImageItemRendererProps {
   isSelected: boolean
   isGif: boolean
   editingImageLabelId: string | null
+  stageScale: number
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<ImageItem>) => void
@@ -37,14 +38,20 @@ export default function ImageItemRenderer({
   onUpdateItem,
   onLabelDblClick,
   setGifItemTransforms,
+  stageScale,
 }: ImageItemRendererProps) {
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
   const displayWidth = item.width * scaleX
   const displayHeight = item.height * scaleY
 
+  // When zoomed in past 100%, shrink the header in canvas space so it stays
+  // the same visual size on screen. When zoomed out, it scales normally.
+  const zoomFactor = Math.max(1, stageScale)
+  const effectiveHeaderHeight = IMAGE_HEADER_HEIGHT / zoomFactor
+
   // Header is only visible when selected
-  const headerHeight = isSelected ? IMAGE_HEADER_HEIGHT : 0
+  const headerHeight = isSelected ? effectiveHeaderHeight : 0
 
   // Build metadata string (dimensions and file size)
   // Show cropped dimensions if crop exists, otherwise original dimensions
@@ -109,11 +116,12 @@ export default function ImageItemRenderer({
         onUpdateItem(item.id, { x: node.x(), y: node.y() + headerHeight })
       }}
     >
-      {/* Header bar - only visible when selected */}
+      {/* Header bar - only visible when selected. Scaled inversely when zoomed
+           in so it stays a constant visual size on screen. */}
       {isSelected && (
-        <>
+        <Group scaleX={1 / zoomFactor} scaleY={1 / zoomFactor}>
           <Rect
-            width={displayWidth}
+            width={displayWidth * zoomFactor}
             height={IMAGE_HEADER_HEIGHT}
             fill="#2a2a4e"
             stroke={COLOR_SELECTED}
@@ -128,16 +136,16 @@ export default function ImageItemRenderer({
             fontSize={14}
             fontStyle="bold"
             fill="#e0e0e0"
-            width={displayWidth - 16}
+            width={displayWidth * zoomFactor - 16}
             wrap="none"
             ellipsis={true}
             onDblClick={() => onLabelDblClick(item.id)}
             visible={editingImageLabelId !== item.id}
           />
           {/* Metadata text (right-aligned, hidden when too narrow) */}
-          {metadataText && displayWidth > 200 && (
+          {metadataText && displayWidth * zoomFactor > 200 && (
             <Text
-              x={displayWidth - 158}
+              x={displayWidth * zoomFactor - 158}
               y={5}
               text={metadataText}
               fontSize={11}
@@ -147,7 +155,7 @@ export default function ImageItemRenderer({
               listening={false}
             />
           )}
-        </>
+        </Group>
       )}
 
       {/* Selection border - outside transform-target so it doesn't affect transformer bounds */}
@@ -158,7 +166,7 @@ export default function ImageItemRenderer({
           height={displayHeight}
           fill="transparent"
           stroke={COLOR_SELECTED}
-          strokeWidth={2}
+          strokeWidth={2 / stageScale}
           listening={false}
         />
       )}

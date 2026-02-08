@@ -136,7 +136,7 @@ export default function VideoOverlay({
     height: '100%',
     objectFit: 'contain',
     backgroundColor: '#1a1a2e',
-    borderRadius: 4,
+    borderRadius: 0,
     pointerEvents: 'none',
   }
 
