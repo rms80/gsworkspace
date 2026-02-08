@@ -57,7 +57,7 @@ export default function TextItemRenderer({
       <Rect
         width={item.width + padding * 2}
         height={textHeight + padding * 2}
-        stroke={isSelected ? COLOR_SELECTED : COLOR_BORDER_DEFAULT}
+        stroke={isSelected ? COLOR_SELECTED : 'rgba(204, 204, 204, 0.5)'}
         strokeWidth={1}
         cornerRadius={4}
       />
@@ -67,7 +67,7 @@ export default function TextItemRenderer({
         text={item.text}
         fontSize={item.fontSize}
         width={item.width}
-        fill={isSelected ? COLOR_SELECTED : '#000'}
+        fill="#ddd"
       />
     </Group>
   )

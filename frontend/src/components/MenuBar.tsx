@@ -509,7 +509,7 @@ function MenuBar({
         position: 'absolute',
         left: '50%',
         transform: 'translateX(-50%)',
-        color: '#666',
+        color: '#888',
         fontSize: '12px',
         whiteSpace: 'nowrap',
         pointerEvents: 'none',
