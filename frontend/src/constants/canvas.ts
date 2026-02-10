@@ -8,6 +8,12 @@ export const MODEL_BUTTON_WIDTH = 20
 export const BUTTON_HEIGHT = 20
 export const BUTTON_GAP = 4
 
+// --- Coding Robot dimensions ---
+
+export const CODING_ROBOT_HEADER_HEIGHT = 28
+export const CODING_ROBOT_INPUT_HEIGHT = 60
+export const CODING_ROBOT_SEND_BUTTON_WIDTH = 50
+
 // --- HTML item dimensions ---
 
 export const HTML_HEADER_HEIGHT = 24
@@ -115,7 +121,7 @@ export const CODING_ROBOT_THEME: PromptThemeColors = {
   itemBg: '#fff5f0',
   headerText: '#7c2d12',
   contentText: '#333',
-  runButton: '#c2410c',
+  runButton: '#22c55e',
   pulseBorder: { base: [224, 80, 32], delta: [31, 100, 68] },
   pulseRunButton: { base: [194, 65, 12], delta: [61, 110, 68] },
   inputBorder: '#e05020',

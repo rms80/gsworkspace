@@ -168,6 +168,8 @@ interface StoredCodingRobotItem extends StoredItemBase {
   fontSize: number
   label: string
   text: string
+  sessionId?: string | null
+  chatHistoryFile?: string
 }
 
 type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem
@@ -622,6 +624,11 @@ router.post('/:id', async (req, res) => {
           model: item.model || 'claude-sonnet',
         })
       } else if (item.type === 'coding-robot') {
+        // Save chat history to a separate file
+        const chatHistoryFile = `${item.id}.chat.json`
+        if (item.chatHistory && item.chatHistory.length > 0) {
+          await save(`${sceneFolder}/${chatHistoryFile}`, JSON.stringify(item.chatHistory, null, 2), 'application/json')
+        }
         storedItems.push({
           id: item.id,
           type: 'coding-robot',
@@ -632,6 +639,8 @@ router.post('/:id', async (req, res) => {
           fontSize: item.fontSize,
           label: item.label,
           text: item.text,
+          sessionId: item.sessionId ?? null,
+          chatHistoryFile: (item.chatHistory && item.chatHistory.length > 0) ? chatHistoryFile : undefined,
         })
       } else if (item.type === 'html') {
         const htmlFile = `${item.id}.html`
@@ -824,6 +833,18 @@ router.get('/:id', async (req, res) => {
             model: item.model || 'claude-sonnet',
           }
         } else if (item.type === 'coding-robot') {
+          // Load chat history from file if it exists
+          let chatHistory: Array<{ role: string; content: string; timestamp?: string }> = []
+          if (item.chatHistoryFile) {
+            const chatJson = await load(`${sceneFolder}/${item.chatHistoryFile}`)
+            if (chatJson) {
+              try {
+                chatHistory = JSON.parse(chatJson)
+              } catch {
+                console.error(`Failed to parse chat history for ${item.id}`)
+              }
+            }
+          }
           return {
             id: item.id,
             type: 'coding-robot' as const,
@@ -834,6 +855,8 @@ router.get('/:id', async (req, res) => {
             fontSize: item.fontSize,
             label: item.label,
             text: item.text,
+            chatHistory,
+            sessionId: item.sessionId ?? null,
           }
         } else {
           // For HTML items, load the HTML file

@@ -193,16 +193,16 @@ router.post('/generate-html', async (req, res) => {
 
 router.post('/generate-claude-code', async (req, res) => {
   try {
-    const { items, prompt } = req.body as { items: LLMRequestItem[]; prompt: string }
+    const { items, prompt, sessionId } = req.body as { items: LLMRequestItem[]; prompt: string; sessionId?: string | null }
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
     const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
-    const result = await generateWithClaudeCode(resolved, prompt)
+    const { result, sessionId: newSessionId } = await generateWithClaudeCode(resolved, prompt, sessionId)
 
-    res.json({ result })
+    res.json({ result, sessionId: newSessionId })
   } catch (error) {
     console.error('Error generating with Claude Code:', error)
     const message = error instanceof Error ? error.message : 'Claude Code request failed.'

@@ -168,15 +168,21 @@ export async function generateHtml(
   return data.html
 }
 
+export interface ClaudeCodeResponse {
+  result: string
+  sessionId: string | null
+}
+
 export async function generateWithClaudeCode(
   items: ContentItem[],
-  prompt: string
-): Promise<string> {
+  prompt: string,
+  sessionId?: string | null
+): Promise<ClaudeCodeResponse> {
   // Always goes through backend (no offline mode for Claude Code)
   const response = await fetch(`${API_BASE}/generate-claude-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: toBackendItems(items), prompt }),
+    body: JSON.stringify({ items: toBackendItems(items), prompt, sessionId }),
   })
 
   if (!response.ok) {
@@ -184,8 +190,8 @@ export async function generateWithClaudeCode(
     throw new Error(errorData.error || `Failed to generate with Claude Code: ${response.statusText}`)
   }
 
-  const data: GenerateResponse = await response.json()
-  return data.result
+  const data = await response.json() as { result: string; sessionId: string | null }
+  return { result: data.result, sessionId: data.sessionId }
 }
 
 /**

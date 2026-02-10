@@ -14,7 +14,7 @@ import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene } from './types'
+import { CanvasItem, Scene, ChatMessage } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
@@ -937,10 +937,12 @@ function App() {
       x: 100 + Math.random() * 200,
       y: 100 + Math.random() * 200,
       label: 'Coding Robot',
-      text: 'Describe what you want Claude Code to do...',
+      text: '',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width: 400,
+      height: 350,
+      chatHistory: [],
+      sessionId: null,
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
@@ -1506,17 +1508,22 @@ function App() {
     }
   }, [items, selectedIds, updateActiveSceneItems])
 
-  const handleRunCodingRobot = useCallback(async (promptId: string) => {
-    const promptItem = items.find((item) => item.id === promptId && item.type === 'coding-robot')
-    if (!promptItem || promptItem.type !== 'coding-robot') return
+  const handleSendCodingRobotMessage = useCallback(async (itemId: string, message: string) => {
+    const robotItem = items.find((item) => item.id === itemId && item.type === 'coding-robot')
+    if (!robotItem || robotItem.type !== 'coding-robot') return
 
-    // Mark prompt as running
-    setRunningCodingRobotIds((prev) => new Set(prev).add(promptId))
+    // Append user message to chat history and clear input
+    const userMessage: ChatMessage = { role: 'user', content: message, timestamp: new Date().toISOString() }
+    const updatedHistory = [...robotItem.chatHistory, userMessage]
+    updateActiveSceneItems((prev) => prev.map((item) =>
+      item.id === itemId ? { ...item, text: '', chatHistory: updatedHistory } : item
+    ))
 
-    // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
+    // Mark as running
+    setRunningCodingRobotIds((prev) => new Set(prev).add(itemId))
 
-    // Build content items for the API
+    // Gather selected items (excluding the robot itself) as context
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== itemId)
     const contentItems: ContentItem[] = selectedItems.map((item) => {
       if (item.type === 'text') {
         return { type: 'text' as const, text: item.text }
@@ -1529,63 +1536,34 @@ function App() {
     }).filter((item) => item.text || item.src || item.id)
 
     try {
-      const result = await generateWithClaudeCode(contentItems, promptItem.text)
+      const { result, sessionId: newSessionId } = await generateWithClaudeCode(contentItems, message, robotItem.sessionId)
 
-      // Position output to the right of the prompt
-      const outputX = promptItem.x + promptItem.width + 20
-      const existingOutputsToRight = items.filter(item =>
-        item.x >= outputX - 10 &&
-        item.x <= outputX + 10 &&
-        item.y >= promptItem.y - 10
-      )
-      const outputY = existingOutputsToRight.length > 0
-        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
-        : promptItem.y
-
-      // Check if the result looks like HTML
-      if (isHtmlContent(result)) {
-        const html = DOMPurify.sanitize(stripCodeFences(result), {
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-        })
-        const newItem: CanvasItem = {
-          id: uuidv4(),
-          type: 'html',
-          label: 'CodingRobotOutput',
-          x: outputX,
-          y: outputY,
-          html,
-          width: 800,
-          height: 600,
-          zoom: 0.75,
+      // Append assistant response
+      const assistantMessage: ChatMessage = { role: 'assistant', content: result, timestamp: new Date().toISOString() }
+      updateActiveSceneItems((prev) => prev.map((item) => {
+        if (item.id !== itemId || item.type !== 'coding-robot') return item
+        return {
+          ...item,
+          chatHistory: [...item.chatHistory, assistantMessage],
+          sessionId: newSessionId ?? item.sessionId,
         }
-        updateActiveSceneItems((prev) => [...prev, newItem])
-      } else {
-        // Create text item with the result
-        const newItem: CanvasItem = {
-          id: uuidv4(),
-          type: 'text',
-          x: outputX,
-          y: outputY,
-          text: result,
-          fontSize: 14,
-          width: 400,
-          height: 200,
-        }
-        pushChange(new AddObjectChange(newItem))
-        updateActiveSceneItems((prev) => [...prev, newItem])
-      }
+      }))
     } catch (error) {
       console.error('Failed to run coding robot:', error)
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to run Coding Robot: ${message}`)
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage: ChatMessage = { role: 'assistant', content: `Error: ${errorMsg}`, timestamp: new Date().toISOString() }
+      updateActiveSceneItems((prev) => prev.map((item) => {
+        if (item.id !== itemId || item.type !== 'coding-robot') return item
+        return { ...item, chatHistory: [...item.chatHistory, errorMessage] }
+      }))
     } finally {
       setRunningCodingRobotIds((prev) => {
         const next = new Set(prev)
-        next.delete(promptId)
+        next.delete(itemId)
         return next
       })
     }
-  }, [items, selectedIds, activeSceneId, updateActiveSceneItems, pushChange])
+  }, [items, selectedIds, activeSceneId, updateActiveSceneItems])
 
   // Export current scene to ZIP
   const handleExportScene = useCallback(async () => {
@@ -2117,7 +2095,7 @@ function App() {
           runningImageGenPromptIds={runningImageGenPromptIds}
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
-          onRunCodingRobot={handleRunCodingRobot}
+          onSendCodingRobotMessage={handleSendCodingRobotMessage}
           runningCodingRobotIds={runningCodingRobotIds}
           isOffline={isOffline}
           onAddText={addTextItem}

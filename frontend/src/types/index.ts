@@ -109,6 +109,12 @@ export interface HTMLGenPromptItem extends BaseItem {
   model: LLMModel
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  timestamp?: string
+}
+
 export interface CodingRobotItem extends BaseItem {
   type: 'coding-robot'
   label: string
@@ -116,6 +122,8 @@ export interface CodingRobotItem extends BaseItem {
   fontSize: number
   width: number
   height: number
+  chatHistory: ChatMessage[]
+  sessionId: string | null
 }
 
 export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem

@@ -1,10 +1,16 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { ResolvedContentItem } from './llmTypes.js'
 
+export interface ClaudeCodeResult {
+  result: string
+  sessionId: string | null
+}
+
 export async function generateWithClaudeCode(
   items: ResolvedContentItem[],
-  prompt: string
-): Promise<string> {
+  prompt: string,
+  sessionId?: string | null
+): Promise<ClaudeCodeResult> {
   // Build a text prompt with content blocks described inline
   const parts: string[] = []
 
@@ -22,27 +28,44 @@ export async function generateWithClaudeCode(
 
   console.log('[ClaudeCode] Starting query with prompt length:', fullPrompt.length)
 
+  const queryOptions: Record<string, unknown> = {
+    maxTurns: 50,
+    systemPrompt: 'You are a coding assistant integrated into an infinite canvas application. The user sends you text and image content from their canvas along with a request. Respond with helpful, concise results. If the user asks you to create or modify files, do so. Return your final answer as plain text.',
+    permissionMode: 'acceptEdits',
+    allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash', 'Task', 'WebSearch', 'WebFetch'],
+    stderr: (data: string) => {
+      console.error('[ClaudeCode stderr]', data.trim())
+    },
+  }
+
+  if (sessionId) {
+    console.log('[ClaudeCode] Resuming session:', sessionId)
+    ;(queryOptions as Record<string, unknown>).resume = sessionId
+  }
+
   const conversation = query({
     prompt: fullPrompt,
-    options: {
-      maxTurns: 50,
-      systemPrompt: 'You are a coding assistant integrated into an infinite canvas application. The user sends you text and image content from their canvas along with a request. Respond with helpful, concise results. If the user asks you to create or modify files, do so. Return your final answer as plain text.',
-      permissionMode: 'acceptEdits',
-      allowedTools: ['Read', 'Edit', 'Write', 'Glob', 'Grep', 'Bash', 'Task', 'WebSearch', 'WebFetch'],
-      stderr: (data: string) => {
-        console.error('[ClaudeCode stderr]', data.trim())
-      },
-    },
+    options: queryOptions,
   })
 
   let resultText = ''
+  let capturedSessionId: string | null = null
 
   for await (const message of conversation) {
     console.log('[ClaudeCode] Message type:', message.type, 'subtype' in message ? message.subtype : '')
 
+    // Capture session_id from any message that has it
+    if ('session_id' in message && typeof (message as Record<string, unknown>).session_id === 'string') {
+      capturedSessionId = (message as Record<string, unknown>).session_id as string
+      console.log('[ClaudeCode] Captured session_id:', capturedSessionId)
+    }
+
     if (message.type === 'result') {
       if (message.subtype === 'success') {
         resultText = message.result
+        if ('session_id' in message && typeof (message as Record<string, unknown>).session_id === 'string') {
+          capturedSessionId = (message as Record<string, unknown>).session_id as string
+        }
       } else {
         console.error('[ClaudeCode] Error result:', JSON.stringify(message, null, 2))
         // For max_turns, there may still be useful partial output in the last assistant message
@@ -64,6 +87,6 @@ export async function generateWithClaudeCode(
     }
   }
 
-  console.log('[ClaudeCode] Result length:', resultText.length)
-  return resultText
+  console.log('[ClaudeCode] Result length:', resultText.length, 'sessionId:', capturedSessionId)
+  return { result: resultText, sessionId: capturedSessionId }
 }
