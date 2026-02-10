@@ -4,6 +4,7 @@ An infinite canvas webapp for combining text, images, videos, and AI-generated c
 
 Design by [rms80](https://www.rms80.com), Coding by [Claude Code](https://claude.com/product/claude-code)
 
+Check out **[gsworkspace.com](https://www.gsworkspace.com)** for more info, and a functional demo of Offline mode.
 
 ## Development Note
 
@@ -32,7 +33,7 @@ gsworkspace provides an infinite pan/zoom canvas where you can:
 - **Videos** - Drag-drop video files with playback controls (play/pause, seek, loop, mute)
 - **Selection** - Click to select, Ctrl+click for multi-select, drag for marquee selection
 - **Transform** - Move, resize
-- **Edit** - Images (crop) and Videos (crop/trim/speed/mute)
+- **Edit** - Images (crop) and Videos (crop/trim/speed/mute). Edits are non-destructive and can be reverted.
 
 ### AI Integration
 - **LLM Prompts** - Create prompt blocks that generate text output using Claude or Gemini
@@ -65,42 +66,45 @@ gsworkspace provides an infinite pan/zoom canvas where you can:
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- npm
 
-### Installation
+Node.js 18+ and npm are required. Install Node.js for your platform:
+
+```bash
+[Windows]  winget install OpenJS.NodeJS.LTS
+[MacOS]    brew install node
+[Linux]    sudo apt install nodejs npm
+```
+
+### Run the Development Version
 
 1. Clone the repository
 2. Install dependencies:
    ```bash
-   # Frontend
-   cd frontend
-   npm install
-
-   # Backend
-   cd ../backend
-   npm install
+   npm install --prefix frontend && npm install --prefix backend
    ```
 
 3. Configure environment variables:
    ```bash
-   cd backend
-   cp .env.example .env
-   # Edit .env with your settings
+   cp backend/.env.example backend/.env
+   # Edit backend/.env with your settings
    ```
 
-4. Start development servers:
+4. Start development servers (in separate terminals):
    ```bash
-   # Terminal 1 - Backend
-   cd backend
-   npm run dev
-
-   # Terminal 2 - Frontend
-   cd frontend
-   npm run dev
+   npm run dev --prefix backend
+   npm run dev --prefix frontend
    ```
 
 5. Open http://localhost:3000 in your browser
+
+### Windows App Installation
+
+A batch script is provided that installs gsworkspace as a local app on Windows:
+
+1. Ensure Node.js is installed (see Prerequisites above)
+2. Run `install\local\install-windows-localappdata.bat`. This script will install and configure a copy of the app in your local user account at `%LocalAppData%\gsworkspace`.
+4. Launch by searching for "gsworkspace" in the Start Menu
+5. Optionally add your API keys to `%LocalAppData%\gsworkspace\backend\.env` for AI features
 
 ### Environment Variables
 
