@@ -3,16 +3,18 @@ import { Z_MENU } from '../../../constants/canvas'
 
 interface CanvasContextMenuProps {
   position: { x: number; y: number }
+  canvasPosition?: { x: number; y: number }
   onPaste: () => void
-  onAddText?: () => void
-  onAddPrompt?: () => void
-  onAddImageGenPrompt?: () => void
-  onAddHtmlGenPrompt?: () => void
+  onAddText?: (x?: number, y?: number) => void
+  onAddPrompt?: (x?: number, y?: number) => void
+  onAddImageGenPrompt?: (x?: number, y?: number) => void
+  onAddHtmlGenPrompt?: (x?: number, y?: number) => void
   onClose: () => void
 }
 
 export default function CanvasContextMenu({
   position,
+  canvasPosition,
   onPaste,
   onAddText,
   onAddPrompt,
@@ -71,7 +73,7 @@ export default function CanvasContextMenu({
             }}
           >
             <button
-              onClick={() => { onAddText?.(); onClose() }}
+              onClick={() => { onAddText?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -88,7 +90,7 @@ export default function CanvasContextMenu({
               Text Block
             </button>
             <button
-              onClick={() => { onAddPrompt?.(); onClose() }}
+              onClick={() => { onAddPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -105,7 +107,7 @@ export default function CanvasContextMenu({
               LLM Prompt
             </button>
             <button
-              onClick={() => { onAddImageGenPrompt?.(); onClose() }}
+              onClick={() => { onAddImageGenPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
               style={{
                 display: 'block',
                 width: '100%',
@@ -122,7 +124,7 @@ export default function CanvasContextMenu({
               ImageGen Prompt
             </button>
             <button
-              onClick={() => { onAddHtmlGenPrompt?.(); onClose() }}
+              onClick={() => { onAddHtmlGenPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
               style={{
                 display: 'block',
                 width: '100%',

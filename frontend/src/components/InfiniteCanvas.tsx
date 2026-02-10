@@ -65,10 +65,10 @@ interface InfiniteCanvasProps {
   onRunHtmlGenPrompt: (promptId: string) => void
   runningHtmlGenPromptIds: Set<string>
   isOffline: boolean
-  onAddText?: () => void
-  onAddPrompt?: () => void
-  onAddImageGenPrompt?: () => void
-  onAddHtmlGenPrompt?: () => void
+  onAddText?: (x?: number, y?: number) => void
+  onAddPrompt?: (x?: number, y?: number) => void
+  onAddImageGenPrompt?: (x?: number, y?: number) => void
+  onAddHtmlGenPrompt?: (x?: number, y?: number) => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
 }
@@ -1319,6 +1319,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       {contextMenuState.menuPosition && (
         <CanvasContextMenu
           position={contextMenuState.menuPosition}
+          canvasPosition={contextMenuState.menuData ? { x: contextMenuState.menuData.canvasX, y: contextMenuState.menuData.canvasY } : undefined}
           onPaste={handleContextMenuPaste}
           onAddText={onAddText}
           onAddPrompt={onAddPrompt}

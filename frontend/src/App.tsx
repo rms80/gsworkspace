@@ -738,16 +738,18 @@ function App() {
   }, [activeSceneId])
 
   // Item management (operates on active scene)
-  const addTextItem = useCallback(() => {
+  const addTextItem = useCallback((x?: number, y?: number) => {
+    const width = 200
+    const height = 100
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
+      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
       text: 'Double-click to edit',
       fontSize: 14,
-      width: 200,
-      height: 100,
+      width,
+      height,
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
@@ -878,51 +880,57 @@ function App() {
     }
   }, [isOffline, activeSceneId, addVideoItem, startOperation, endOperation])
 
-  const addPromptItem = useCallback(() => {
+  const addPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
+      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'claude-sonnet',
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addImageGenPromptItem = useCallback(() => {
+  const addImageGenPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
+      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'gemini-imagen',
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addHtmlGenPromptItem = useCallback(() => {
+  const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
+      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
       label: 'HTML Gen',
       text: 'Describe the webpage you want to create...',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'claude-sonnet',
     }
     pushChange(new AddObjectChange(newItem))
