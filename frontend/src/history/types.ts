@@ -13,6 +13,7 @@ export type ChangeRecordType =
   | 'update_model'
   | 'update_name'
   | 'selection'
+  | 'multi_step'
 
 /**
  * Combined state that change records operate on

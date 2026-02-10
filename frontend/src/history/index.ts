@@ -19,6 +19,7 @@ export {
   UpdateModelChange,
   UpdateNameChange,
   SelectionChange,
+  MultiStepChange,
   deserializeChangeRecord,
 } from './changeRecords'
 

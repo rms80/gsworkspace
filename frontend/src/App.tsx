@@ -40,6 +40,7 @@ import {
   UpdateModelChange,
   UpdateNameChange,
   SelectionChange,
+  MultiStepChange,
   ChangeRecord,
 } from './history'
 import type { TransformEntry } from './history'
@@ -1170,10 +1171,12 @@ function App() {
           })
         )
 
-    // Record deletion for each selected item (using S3 URLs where possible)
-    itemsForHistory.forEach((item) => {
-      pushChange(new DeleteObjectChange(item))
-    })
+    // Record deletion for selected items (using S3 URLs where possible)
+    if (itemsForHistory.length === 1) {
+      pushChange(new DeleteObjectChange(itemsForHistory[0]))
+    } else if (itemsForHistory.length > 1) {
+      pushChange(new MultiStepChange(itemsForHistory.map((item) => new DeleteObjectChange(item))))
+    }
 
     // Clear selection and remove items
     setSelectionMap((prev) => {

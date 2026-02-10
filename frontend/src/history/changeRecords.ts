@@ -547,6 +547,43 @@ export class SelectionChange extends BaseChangeRecord {
 }
 
 /**
+ * Record that wraps multiple sub-records into one undo/redo step
+ */
+export class MultiStepChange extends BaseChangeRecord {
+  type: ChangeRecordType = 'multi_step'
+  private changes: ChangeRecord[]
+
+  constructor(changes: ChangeRecord[], timestamp?: number) {
+    super('', timestamp)
+    this.changes = changes
+  }
+
+  apply(state: HistoryState): HistoryState {
+    return this.changes.reduce((s, change) => change.apply(s), state)
+  }
+
+  reverse(state: HistoryState): HistoryState {
+    return [...this.changes].reverse().reduce((s, change) => change.reverse(s), state)
+  }
+
+  serialize(): SerializedChangeRecord {
+    return {
+      type: this.type,
+      objectId: this.objectId,
+      timestamp: this.timestamp,
+      data: { changes: this.changes.map((c) => c.serialize()) },
+    }
+  }
+
+  static deserialize(record: SerializedChangeRecord): MultiStepChange {
+    const subRecords = (record.data.changes as SerializedChangeRecord[]).map(
+      (r) => deserializeChangeRecord(r)
+    )
+    return new MultiStepChange(subRecords, record.timestamp)
+  }
+}
+
+/**
  * Deserialize a change record from its serialized form
  */
 export function deserializeChangeRecord(
@@ -571,6 +608,8 @@ export function deserializeChangeRecord(
       return UpdateNameChange.deserialize(record)
     case 'selection':
       return SelectionChange.deserialize(record)
+    case 'multi_step':
+      return MultiStepChange.deserialize(record)
     default:
       throw new Error(`Unknown change record type: ${record.type}`)
   }
