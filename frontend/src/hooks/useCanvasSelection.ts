@@ -40,6 +40,8 @@ export function useCanvasSelection({
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionStartRef = useRef({ x: 0, y: 0 })
+  const marqueeModifierRef = useRef<'shift' | 'ctrl' | null>(null)
+  const marqueeBaseSelectionRef = useRef<string[]>([])
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // If in image crop mode and clicking on empty canvas, apply crop
@@ -57,14 +59,13 @@ export function useCanvasSelection({
       return
     }
     if (e.target !== stageRef.current) return
-    if (e.evt.ctrlKey || e.evt.metaKey) return
+    if (e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey) return
     onSelectItems([])
   }
 
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (e.evt.button === 1) return
+    if (e.evt.button !== 0) return
     if (e.target !== stageRef.current) return
-    if (!e.evt.ctrlKey && !e.evt.metaKey) return
 
     const stage = stageRef.current
     if (!stage) return
@@ -77,6 +78,8 @@ export function useCanvasSelection({
     }
 
     selectionStartRef.current = pos
+    marqueeModifierRef.current = e.evt.shiftKey ? 'shift' : (e.evt.ctrlKey || e.evt.metaKey) ? 'ctrl' : null
+    marqueeBaseSelectionRef.current = [...selectedIds]
     setSelectionRect({ x: pos.x, y: pos.y, width: 0, height: 0 })
     setIsSelecting(true)
   }
@@ -122,7 +125,17 @@ export function useCanvasSelection({
       })
       .map((item) => item.id)
 
-    onSelectItems(foundIds)
+    const base = marqueeBaseSelectionRef.current
+    if (marqueeModifierRef.current === 'shift') {
+      // Add marqueed items to existing selection
+      onSelectItems([...new Set([...base, ...foundIds])])
+    } else if (marqueeModifierRef.current === 'ctrl') {
+      // Subtract marqueed items from existing selection
+      const removeSet = new Set(foundIds)
+      onSelectItems(base.filter((id) => !removeSet.has(id)))
+    } else {
+      onSelectItems(foundIds)
+    }
     setIsSelecting(false)
     setSelectionRect(null)
   }

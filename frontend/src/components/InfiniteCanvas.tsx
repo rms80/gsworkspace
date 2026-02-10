@@ -122,9 +122,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     isViewportTransforming,
     isMiddleMousePanning: _isMiddleMousePanning,
     isAnyDragActive,
+    rightMouseDidDragRef,
     setStagePos,
     setStageScale: _setStageScale,
-    setIsAnyDragActive,
+    setIsAnyDragActive: _setIsAnyDragActive,
     setIsViewportTransforming,
     handleWheel,
     screenToCanvas,
@@ -338,6 +339,87 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems, onUpdateItem])
+
+  // 8c. Viewport hotkeys: Shift+V = fit-to-view, C = center at cursor, Shift+C = fit-to-view at 100%
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+      if (isEditing) return
+
+      // Shift+V: fit to view
+      if (e.key === 'V' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        if (items.length === 0) return
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of items) {
+          const w = item.width * ((item as ImageItem).scaleX ?? 1)
+          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          minX = Math.min(minX, item.x)
+          minY = Math.min(minY, item.y)
+          maxX = Math.max(maxX, item.x + w)
+          maxY = Math.max(maxY, item.y + h)
+        }
+        const contentWidth = maxX - minX
+        const contentHeight = maxY - minY
+        const padding = 50
+        const scale = Math.min(
+          (stageSize.width - padding * 2) / contentWidth,
+          (stageSize.height - padding * 2) / contentHeight,
+          5,
+        )
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+        _setStageScale(scale)
+        setStagePos({
+          x: stageSize.width / 2 - centerX * scale,
+          y: stageSize.height / 2 - centerY * scale,
+        })
+        return
+      }
+
+      // Shift+C: center on content at 100% zoom
+      if (e.key === 'C' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        if (items.length === 0) return
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of items) {
+          const w = item.width * ((item as ImageItem).scaleX ?? 1)
+          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          minX = Math.min(minX, item.x)
+          minY = Math.min(minY, item.y)
+          maxX = Math.max(maxX, item.x + w)
+          maxY = Math.max(maxY, item.y + h)
+        }
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+        _setStageScale(1)
+        setStagePos({
+          x: stageSize.width / 2 - centerX,
+          y: stageSize.height / 2 - centerY,
+        })
+        return
+      }
+
+      // C: center viewport at cursor
+      if (e.key === 'c' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        setStagePos({
+          x: stageSize.width / 2 - canvasPos.x * stageScale,
+          y: stageSize.height / 2 - canvasPos.y * stageScale,
+        })
+        return
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, items, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
 
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
@@ -758,9 +840,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     }
   }
 
-  // Handle right-click context menu
+  // Handle right-click context menu (suppressed when right-drag panned)
   const handleContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault()
+    if (rightMouseDidDragRef.current) return
+
     const stage = stageRef.current
     if (!stage) return
 
@@ -932,36 +1016,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         y={stagePos.y}
         scaleX={stageScale}
         scaleY={stageScale}
-        draggable={!croppingImageId}
-        onDragStart={(e) => {
-          // Prevent dragging when Ctrl is held (for marquee selection)
-          if (e.evt.ctrlKey || e.evt.metaKey) {
-            e.target.stopDrag()
-            return
-          }
-          // Disable iframe pointer events during any drag
-          setIsAnyDragActive(true)
-          // Hide HTML overlays while panning
-          if (e.target === stageRef.current && config.features.hideHtmlDuringTransform) {
-            setIsViewportTransforming(true)
-          }
-        }}
-        onDragMove={(e) => {
-          // Update stage position in real-time during panning for HTML iframe sync
-          if (e.target === stageRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() })
-          }
-        }}
-        onDragEnd={(e) => {
-          // Re-enable iframe pointer events
-          setIsAnyDragActive(false)
-          if (e.target === stageRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() })
-            if (config.features.hideHtmlDuringTransform) {
-              setIsViewportTransforming(false)
-            }
-          }
-        }}
         onWheel={handleWheel}
         onClick={handleStageClick}
         onMouseDown={handleMouseDown}
@@ -1000,6 +1054,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingImageLabelId={editingImageLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
                   imageContextMenuState.openMenu(
                     { imageId: id },
                     { x: e.evt.clientX, y: e.evt.clientY },
@@ -1022,6 +1077,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingVideoLabelId={editingVideoLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
                   videoContextMenuState.openMenu(
                     { videoId: id },
                     { x: e.evt.clientX, y: e.evt.clientY },
