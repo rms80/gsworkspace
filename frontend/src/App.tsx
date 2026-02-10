@@ -16,7 +16,7 @@ import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
-import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
+import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
@@ -67,6 +67,7 @@ function App() {
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
+  const [runningCodingRobotIds, setRunningCodingRobotIds] = useState<Set<string>>(new Set())
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
@@ -929,6 +930,22 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
+  const addCodingRobotItem = useCallback(() => {
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'coding-robot',
+      x: 100 + Math.random() * 200,
+      y: 100 + Math.random() * 200,
+      label: 'Coding Robot',
+      text: 'Describe what you want Claude Code to do...',
+      fontSize: 14,
+      width: 300,
+      height: 150,
+    }
+    pushChange(new AddObjectChange(newItem))
+    updateActiveSceneItems((prev) => [...prev, newItem])
+  }, [updateActiveSceneItems, pushChange])
+
   const addTextAt = useCallback(
     (x: number, y: number, text: string, optWidth?: number): string => {
       const width = optWidth ?? 400
@@ -1065,7 +1082,7 @@ function App() {
         'cropRect' in changes || 'cropSrc' in changes
       const hasText = 'text' in changes && item.type === 'text'
       const hasPromptText = ('text' in changes || 'label' in changes) &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
+        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')
       const hasModel = 'model' in changes &&
         (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
       const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
@@ -1075,7 +1092,7 @@ function App() {
         if (item.text !== changes.text) {
           pushChange(new UpdateTextChange(id, item.text, changes.text as string))
         }
-      } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+      } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')) {
         const newLabel = ('label' in changes ? changes.label : item.label) as string
         const newText = ('text' in changes ? changes.text : item.text) as string
         // Only record if label or text actually changed
@@ -1488,6 +1505,87 @@ function App() {
       })
     }
   }, [items, selectedIds, updateActiveSceneItems])
+
+  const handleRunCodingRobot = useCallback(async (promptId: string) => {
+    const promptItem = items.find((item) => item.id === promptId && item.type === 'coding-robot')
+    if (!promptItem || promptItem.type !== 'coding-robot') return
+
+    // Mark prompt as running
+    setRunningCodingRobotIds((prev) => new Set(prev).add(promptId))
+
+    // Gather selected items (excluding the prompt itself)
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
+
+    // Build content items for the API
+    const contentItems: ContentItem[] = selectedItems.map((item) => {
+      if (item.type === 'text') {
+        return { type: 'text' as const, text: item.text }
+      } else if (item.type === 'image') {
+        return { type: 'image' as const, src: item.cropSrc || item.src, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropSrc }
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot') {
+        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      }
+      return { type: 'text' as const, text: '' }
+    }).filter((item) => item.text || item.src || item.id)
+
+    try {
+      const result = await generateWithClaudeCode(contentItems, promptItem.text)
+
+      // Position output to the right of the prompt
+      const outputX = promptItem.x + promptItem.width + 20
+      const existingOutputsToRight = items.filter(item =>
+        item.x >= outputX - 10 &&
+        item.x <= outputX + 10 &&
+        item.y >= promptItem.y - 10
+      )
+      const outputY = existingOutputsToRight.length > 0
+        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
+        : promptItem.y
+
+      // Check if the result looks like HTML
+      if (isHtmlContent(result)) {
+        const html = DOMPurify.sanitize(stripCodeFences(result), {
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        })
+        const newItem: CanvasItem = {
+          id: uuidv4(),
+          type: 'html',
+          label: 'CodingRobotOutput',
+          x: outputX,
+          y: outputY,
+          html,
+          width: 800,
+          height: 600,
+          zoom: 0.75,
+        }
+        updateActiveSceneItems((prev) => [...prev, newItem])
+      } else {
+        // Create text item with the result
+        const newItem: CanvasItem = {
+          id: uuidv4(),
+          type: 'text',
+          x: outputX,
+          y: outputY,
+          text: result,
+          fontSize: 14,
+          width: 400,
+          height: 200,
+        }
+        pushChange(new AddObjectChange(newItem))
+        updateActiveSceneItems((prev) => [...prev, newItem])
+      }
+    } catch (error) {
+      console.error('Failed to run coding robot:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to run Coding Robot: ${message}`)
+    } finally {
+      setRunningCodingRobotIds((prev) => {
+        const next = new Set(prev)
+        next.delete(promptId)
+        return next
+      })
+    }
+  }, [items, selectedIds, activeSceneId, updateActiveSceneItems, pushChange])
 
   // Export current scene to ZIP
   const handleExportScene = useCallback(async () => {
@@ -1942,6 +2040,7 @@ function App() {
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
+        onAddCodingRobot={addCodingRobotItem}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
@@ -2018,11 +2117,14 @@ function App() {
           runningImageGenPromptIds={runningImageGenPromptIds}
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
+          onRunCodingRobot={handleRunCodingRobot}
+          runningCodingRobotIds={runningCodingRobotIds}
           isOffline={isOffline}
           onAddText={addTextItem}
           onAddPrompt={addPromptItem}
           onAddImageGenPrompt={addImageGenPromptItem}
           onAddHtmlGenPrompt={addHtmlGenPromptItem}
+          onAddCodingRobot={addCodingRobotItem}
           videoPlaceholders={videoPlaceholders}
           onUploadVideoAt={handleUploadVideoAt}
         />

@@ -168,6 +168,26 @@ export async function generateHtml(
   return data.html
 }
 
+export async function generateWithClaudeCode(
+  items: ContentItem[],
+  prompt: string
+): Promise<string> {
+  // Always goes through backend (no offline mode for Claude Code)
+  const response = await fetch(`${API_BASE}/generate-claude-code`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: toBackendItems(items), prompt }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Failed to generate with Claude Code: ${response.statusText}`)
+  }
+
+  const data: GenerateResponse = await response.json()
+  return data.result
+}
+
 /**
  * Generate a short PascalCase title (1-3 words) for HTML content using Claude Haiku.
  * This is a fire-and-forget operation - errors are caught and a default is returned.

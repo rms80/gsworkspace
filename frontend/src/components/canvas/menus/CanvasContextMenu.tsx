@@ -8,6 +8,7 @@ interface CanvasContextMenuProps {
   onAddPrompt?: () => void
   onAddImageGenPrompt?: () => void
   onAddHtmlGenPrompt?: () => void
+  onAddCodingRobot?: () => void
   onClose: () => void
 }
 
@@ -18,6 +19,7 @@ export default function CanvasContextMenu({
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
+  onAddCodingRobot,
   onClose,
 }: CanvasContextMenuProps) {
   const [newSubmenuOpen, setNewSubmenuOpen] = useState(false)
@@ -137,6 +139,23 @@ export default function CanvasContextMenu({
               onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
             >
               HTMLGen Prompt
+            </button>
+            <button
+              onClick={() => { onAddCodingRobot?.(); onClose() }}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Coding Robot
             </button>
           </div>
         )}

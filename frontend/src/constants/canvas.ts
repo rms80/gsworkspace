@@ -109,6 +109,21 @@ export const HTML_GEN_PROMPT_THEME: PromptThemeColors = {
   textareaBg: '#ccfbf1',
 }
 
+export const CODING_ROBOT_THEME: PromptThemeColors = {
+  border: '#e05020',
+  headerBg: '#fdd0b8',
+  itemBg: '#fff5f0',
+  headerText: '#7c2d12',
+  contentText: '#333',
+  runButton: '#c2410c',
+  pulseBorder: { base: [224, 80, 32], delta: [31, 100, 68] },
+  pulseRunButton: { base: [194, 65, 12], delta: [61, 110, 68] },
+  inputBorder: '#e05020',
+  inputBg: '#fdd0b8',
+  inputText: '#7c2d12',
+  textareaBg: '#fff5f0',
+}
+
 // --- Pulse color helper ---
 
 export function getPulseColor(

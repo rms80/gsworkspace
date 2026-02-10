@@ -109,7 +109,16 @@ export interface HTMLGenPromptItem extends BaseItem {
   model: LLMModel
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem
+export interface CodingRobotItem extends BaseItem {
+  type: 'coding-robot'
+  label: string
+  text: string
+  fontSize: number
+  width: number
+  height: number
+}
+
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem
 
 export interface SelectionRect {
   x: number

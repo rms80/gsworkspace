@@ -5,6 +5,7 @@ interface UsePulseAnimationParams {
   runningPromptIds: Set<string>
   runningImageGenPromptIds: Set<string>
   runningHtmlGenPromptIds: Set<string>
+  runningCodingRobotIds: Set<string>
   layerRef: RefObject<Konva.Layer | null>
 }
 
@@ -16,13 +17,14 @@ export function usePulseAnimation({
   runningPromptIds,
   runningImageGenPromptIds,
   runningHtmlGenPromptIds,
+  runningCodingRobotIds,
   layerRef,
 }: UsePulseAnimationParams): PulseAnimation {
   const [pulsePhase, setPulsePhase] = useState(0)
 
   // Pulse animation loop
   useEffect(() => {
-    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0) {
+    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0 && runningCodingRobotIds.size === 0) {
       setPulsePhase(0)
       return
     }
@@ -40,7 +42,7 @@ export function usePulseAnimation({
     animationId = requestAnimationFrame(animate)
 
     return () => cancelAnimationFrame(animationId)
-  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size])
+  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size, runningCodingRobotIds.size])
 
   // Force Konva layer redraw when pulse phase changes
   useEffect(() => {

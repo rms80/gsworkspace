@@ -66,7 +66,8 @@ export function useClipboard({
         (selectedItems[0].type === 'text' ||
          selectedItems[0].type === 'prompt' ||
          selectedItems[0].type === 'image-gen-prompt' ||
-         selectedItems[0].type === 'html-gen-prompt')
+         selectedItems[0].type === 'html-gen-prompt' ||
+         selectedItems[0].type === 'coding-robot')
         ? selectedItems[0] : null
 
       const text = e.clipboardData?.getData('text/plain')
@@ -150,7 +151,7 @@ export function useClipboard({
       if (item.type === 'text') {
         e.preventDefault()
         e.clipboardData?.setData('text/plain', item.text)
-      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot') {
         e.preventDefault()
         e.clipboardData?.setData('text/plain', item.text)
       }

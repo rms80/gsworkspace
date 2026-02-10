@@ -163,7 +163,14 @@ interface StoredHtmlGenPromptItem extends StoredItemBase {
   model: string
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
+interface StoredCodingRobotItem extends StoredItemBase {
+  type: 'coding-robot'
+  fontSize: number
+  label: string
+  text: string
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem
 
 interface StoredScene {
   id: string
@@ -614,6 +621,18 @@ router.post('/:id', async (req, res) => {
           text: item.text,
           model: item.model || 'claude-sonnet',
         })
+      } else if (item.type === 'coding-robot') {
+        storedItems.push({
+          id: item.id,
+          type: 'coding-robot',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          fontSize: item.fontSize,
+          label: item.label,
+          text: item.text,
+        })
       } else if (item.type === 'html') {
         const htmlFile = `${item.id}.html`
         await save(`${sceneFolder}/${htmlFile}`, item.html, 'text/html')
@@ -803,6 +822,18 @@ router.get('/:id', async (req, res) => {
             label: item.label,
             text: item.text,
             model: item.model || 'claude-sonnet',
+          }
+        } else if (item.type === 'coding-robot') {
+          return {
+            id: item.id,
+            type: 'coding-robot' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            fontSize: item.fontSize,
+            label: item.label,
+            text: item.text,
           }
         } else {
           // For HTML items, load the HTML file

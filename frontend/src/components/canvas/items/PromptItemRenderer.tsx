@@ -11,7 +11,7 @@ import { PromptEditing } from '../../../hooks/usePromptEditing'
 import { hasAnthropicApiKey, hasGoogleApiKey } from '../../../utils/apiKeyStorage'
 
 interface PromptItemRendererProps {
-  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model: string }
+  item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model?: string }
   theme: PromptThemeColors
   isSelected: boolean
   isRunning: boolean
@@ -20,7 +20,7 @@ interface PromptItemRendererProps {
   editing: PromptEditing
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
-  onOpenModelMenu: (id: string, position: { x: number; y: number }) => void
+  onOpenModelMenu?: (id: string, position: { x: number; y: number }) => void
   onRun: (id: string) => void
   onShowTooltip?: (tooltip: { text: string; x: number; y: number } | null) => void
 }
@@ -43,10 +43,11 @@ export default function PromptItemRenderer({
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
   // Check if we can run based on mode and API keys
-  const needsAnthropicKey = item.model.startsWith('claude-')
-  const needsGoogleKey = item.model.startsWith('gemini-')
+  const hasModel = !!item.model
+  const needsAnthropicKey = hasModel && item.model!.startsWith('claude-')
+  const needsGoogleKey = hasModel && item.model!.startsWith('gemini-')
   const hasRequiredKey = needsAnthropicKey ? hasAnthropicApiKey() : needsGoogleKey ? hasGoogleApiKey() : false
-  const isMissingApiKey = isOffline && !hasRequiredKey
+  const isMissingApiKey = hasModel && isOffline && !hasRequiredKey
   const isRunDisabled = isRunning || isMissingApiKey
 
   // Tooltip message for missing API key
@@ -127,32 +128,36 @@ export default function PromptItemRenderer({
         onDblClick={() => editing.handleLabelDblClick(item.id)}
         visible={!(isEditingThis && editing.editingField === 'label')}
       />
-      {/* Model selector button */}
-      <Rect
-        x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-        y={4}
-        width={MODEL_BUTTON_WIDTH}
-        height={BUTTON_HEIGHT}
-        fill="#666"
-        cornerRadius={3}
-        onClick={(e) => {
-          e.cancelBubble = true
-          onOpenModelMenu(item.id, { x: e.evt.clientX, y: e.evt.clientY })
-        }}
-      />
-      <Text
-        x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
-        y={4}
-        text="..."
-        width={MODEL_BUTTON_WIDTH}
-        height={BUTTON_HEIGHT}
-        fontSize={12}
-        fontStyle="bold"
-        fill="#fff"
-        align="center"
-        verticalAlign="middle"
-        listening={false}
-      />
+      {/* Model selector button (only shown when item has a model) */}
+      {onOpenModelMenu && hasModel && (
+        <>
+          <Rect
+            x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
+            y={4}
+            width={MODEL_BUTTON_WIDTH}
+            height={BUTTON_HEIGHT}
+            fill="#666"
+            cornerRadius={3}
+            onClick={(e) => {
+              e.cancelBubble = true
+              onOpenModelMenu(item.id, { x: e.evt.clientX, y: e.evt.clientY })
+            }}
+          />
+          <Text
+            x={item.width - RUN_BUTTON_WIDTH - MODEL_BUTTON_WIDTH - BUTTON_GAP - 8}
+            y={4}
+            text="..."
+            width={MODEL_BUTTON_WIDTH}
+            height={BUTTON_HEIGHT}
+            fontSize={12}
+            fontStyle="bold"
+            fill="#fff"
+            align="center"
+            verticalAlign="middle"
+            listening={false}
+          />
+        </>
+      )}
       {/* Run button */}
       <Group
         x={item.width - RUN_BUTTON_WIDTH - 8}

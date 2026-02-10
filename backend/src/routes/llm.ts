@@ -4,6 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
+import { generateWithClaudeCode } from '../services/claudeCode.js'
 import { LLMRequestItem, ResolvedContentItem, resolveImageData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -187,6 +188,25 @@ router.post('/generate-html', async (req, res) => {
     console.error('Error generating HTML:', error)
     const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
     res.status(500).json({ error: getErrorMessage(error, provider) })
+  }
+})
+
+router.post('/generate-claude-code', async (req, res) => {
+  try {
+    const { items, prompt } = req.body as { items: LLMRequestItem[]; prompt: string }
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Prompt is required' })
+    }
+
+    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
+    const result = await generateWithClaudeCode(resolved, prompt)
+
+    res.json({ result })
+  } catch (error) {
+    console.error('Error generating with Claude Code:', error)
+    const message = error instanceof Error ? error.message : 'Claude Code request failed.'
+    res.status(500).json({ error: message })
   }
 })
 

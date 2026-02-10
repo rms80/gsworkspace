@@ -263,7 +263,7 @@ export class UpdatePromptChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt' && item.type !== 'coding-robot') return item
         return { ...item, label: this.newLabel, text: this.newText }
       }),
     }
@@ -274,7 +274,7 @@ export class UpdatePromptChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt') return item
+        if (item.type !== 'prompt' && item.type !== 'image-gen-prompt' && item.type !== 'html-gen-prompt' && item.type !== 'coding-robot') return item
         return { ...item, label: this.oldLabel, text: this.oldText }
       }),
     }

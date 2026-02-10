@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, CodingRobotItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { isVideoFile } from '../api/videos'
@@ -44,7 +44,7 @@ import {
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
-  PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
+  PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME, CODING_ROBOT_THEME,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
 } from '../constants/canvas'
 
@@ -64,11 +64,14 @@ interface InfiniteCanvasProps {
   runningImageGenPromptIds: Set<string>
   onRunHtmlGenPrompt: (promptId: string) => void
   runningHtmlGenPromptIds: Set<string>
+  onRunCodingRobot: (promptId: string) => void
+  runningCodingRobotIds: Set<string>
   isOffline: boolean
   onAddText?: () => void
   onAddPrompt?: () => void
   onAddImageGenPrompt?: () => void
   onAddHtmlGenPrompt?: () => void
+  onAddCodingRobot?: () => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
 }
@@ -78,7 +81,7 @@ export interface CanvasHandle {
   fitToView: () => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onRunCodingRobot, runningCodingRobotIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -88,6 +91,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const promptTransformerRef = useRef<Konva.Transformer>(null)
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
+  const codingRobotTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
 
@@ -195,13 +199,14 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const promptEditing = usePromptEditing({ items, onUpdateItem }, 'prompt')
   const imageGenPromptEditing = usePromptEditing({ items, onUpdateItem }, 'image-gen-prompt')
   const htmlGenPromptEditing = usePromptEditing({ items, onUpdateItem }, 'html-gen-prompt')
+  const codingRobotEditing = usePromptEditing({ items, onUpdateItem }, 'coding-robot')
 
   // 5. Text editing state
   const [editingTextId, setEditingTextId] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // 6. Derive isEditing
-  const isEditing = !!(editingTextId || promptEditing.editingId || imageGenPromptEditing.editingId || htmlGenPromptEditing.editingId)
+  const isEditing = !!(editingTextId || promptEditing.editingId || imageGenPromptEditing.editingId || htmlGenPromptEditing.editingId || codingRobotEditing.editingId)
 
   // 7. Canvas selection hook
   const {
@@ -350,6 +355,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     runningPromptIds,
     runningImageGenPromptIds,
     runningHtmlGenPromptIds,
+    runningCodingRobotIds,
     layerRef,
   })
 
@@ -368,6 +374,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'prompt', ref: promptTransformerRef },
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
+      { type: 'coding-robot', ref: codingRobotTransformerRef },
       { type: 'html', ref: htmlTransformerRef },
     ],
   })
@@ -739,6 +746,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const editingPrompt = promptEditing.getEditingItem() as PromptItem | null
   const editingImageGenPrompt = imageGenPromptEditing.getEditingItem() as ImageGenPromptItem | null
   const editingHtmlGenPrompt = htmlGenPromptEditing.getEditingItem() as HTMLGenPromptItem | null
+  const editingCodingRobot = codingRobotEditing.getEditingItem() as CodingRobotItem | null
 
   return (
     <div ref={containerRef} style={{ position: 'relative', flex: 1, backgroundColor: '#555555' }} onDragOver={handleDragOver} onDrop={handleDrop}>
@@ -905,6 +913,23 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onShowTooltip={handleShowTooltip}
               />
             )
+          } else if (item.type === 'coding-robot') {
+            return (
+              <PromptItemRenderer
+                key={item.id}
+                item={item}
+                theme={CODING_ROBOT_THEME}
+                isSelected={selectedIds.includes(item.id)}
+                isRunning={runningCodingRobotIds.has(item.id)}
+                isOffline={isOffline}
+                pulsePhase={pulsePhase}
+                editing={codingRobotEditing}
+                onItemClick={handleItemClick}
+                onUpdateItem={onUpdateItem}
+                onRun={onRunCodingRobot}
+                onShowTooltip={handleShowTooltip}
+              />
+            )
           } else if (item.type === 'html') {
             return (
               <HtmlItemRenderer
@@ -1035,6 +1060,19 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         {/* Transformer for HTML gen prompts - free resize, no rotation */}
         <Transformer
           ref={htmlGenPromptTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+        {/* Transformer for Coding Robot prompts - free resize, no rotation */}
+        <Transformer
+          ref={codingRobotTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={false}
@@ -1279,6 +1317,16 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         />
       )}
 
+      {editingCodingRobot && (
+        <PromptEditingOverlay
+          item={editingCodingRobot}
+          theme={CODING_ROBOT_THEME}
+          editing={codingRobotEditing}
+          stageScale={stageScale}
+          stagePos={stagePos}
+        />
+      )}
+
       {/* HTML label editing overlay */}
       {editingHtmlItem && (
         <HtmlLabelEditingOverlay
@@ -1324,6 +1372,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           onAddPrompt={onAddPrompt}
           onAddImageGenPrompt={onAddImageGenPrompt}
           onAddHtmlGenPrompt={onAddHtmlGenPrompt}
+          onAddCodingRobot={onAddCodingRobot}
           onClose={contextMenuState.closeMenu}
         />
       )}
