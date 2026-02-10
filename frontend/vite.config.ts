@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => {
         name: 'favicon-swap',
         transformIndexHtml(html, ctx) {
           const prefix = isOffline ? '.' : ''
-          const favicon = ctx.server ? '/favicon_dev.png' : `${prefix}/favicon.svg`
+          const useDevFavicon = ctx.server && env.VITE_PROD_FAVICON !== 'true'
+          const favicon = useDevFavicon ? '/favicon_dev.png' : `${prefix}/favicon.svg`
           return html.replace(/href="\/favicon[^"]*"/, `href="${favicon}"`)
         },
       },

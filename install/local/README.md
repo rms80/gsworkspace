@@ -32,6 +32,19 @@ chmod +x configure-macos.sh launch-macos.sh
 ./launch-macos.sh
 ```
 
+## Windows Program Files Installation
+
+For a more permanent installation that integrates with the Windows Start Menu:
+
+1. Double-click `install-windows-localappdata.bat`
+2. The installer will:
+   - Copy the app to `%LocalAppData%\gsworkspace\`
+   - Install npm dependencies
+   - Create a `gsworkspace` entry in the Start Menu
+3. Launch from the Start Menu by searching for "gsworkspace"
+
+No admin privileges required. To uninstall, run `uninstall-windows-localappdata.bat`.
+
 ## What the Scripts Do
 
 ### Configure Scripts

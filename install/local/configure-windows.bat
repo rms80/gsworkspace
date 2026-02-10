@@ -105,6 +105,9 @@ if exist ".env.local" (
     (
         echo VITE_OFFLINE_MODE=false
         echo.
+        echo # Use production favicon instead of dev favicon
+        echo VITE_PROD_FAVICON=true
+        echo.
         echo # Frontend server port ^(default: 3000^)
         echo VITE_PORT=3000
         echo.

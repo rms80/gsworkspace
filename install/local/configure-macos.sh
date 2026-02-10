@@ -91,6 +91,9 @@ else
     cat > .env.local << 'EOF'
 VITE_OFFLINE_MODE=false
 
+# Use production favicon instead of dev favicon
+VITE_PROD_FAVICON=true
+
 # Frontend server port (default: 3000)
 VITE_PORT=3000
 
