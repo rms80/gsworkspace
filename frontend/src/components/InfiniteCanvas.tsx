@@ -285,14 +285,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             return
           }
         }
+        // No single text block selected — fall through to create at cursor
       }
 
-      // 't' (no modifiers): create/edit text block at cursor
-      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      // 't' or Shift+T (without single text selected): create/edit text block at cursor
+      if ((e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) ||
+          (e.key === 'T' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+        const isShiftT = e.shiftKey
         e.preventDefault()
 
-        // If a single text item is selected, edit it
-        if (selectedIds.length === 1) {
+        // 't' with a single text item selected: edit it
+        if (!isShiftT && selectedIds.length === 1) {
           const selectedItem = items.find(item => item.id === selectedIds[0])
           if (selectedItem && selectedItem.type === 'text') {
             setEditingTextId(selectedItem.id)
@@ -304,8 +307,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           }
         }
 
-        // If nothing selected, create new text block at cursor
-        if (selectedIds.length === 0) {
+        // Create new text block at cursor (for 't' when nothing selected, or Shift+T fallthrough)
+        if (isShiftT || selectedIds.length === 0) {
           const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
           const newId = onAddTextAt(canvasPos.x, canvasPos.y, '')
           // Select the new text block and start editing after it's rendered
