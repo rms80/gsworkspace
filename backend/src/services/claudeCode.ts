@@ -1,5 +1,13 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
+import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { join, dirname, resolve } from 'path'
+import { fileURLToPath } from 'url'
+import { tmpdir } from 'os'
 import { ResolvedContentItem } from './llmTypes.js'
+
+// Resolve cwd to the repo root (one directory up from backend/)
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const CLAUDE_CODE_CWD = resolve(__dirname, '..', '..', '..')
 
 export interface ClaudeCodeResult {
   result: string
@@ -14,11 +22,19 @@ export async function generateWithClaudeCode(
   // Build a text prompt with content blocks described inline
   const parts: string[] = []
 
+  // Save images to temp files so Claude Code can read them via its Read tool
+  const tempDir = join(tmpdir(), 'canvas-images')
+  if (!existsSync(tempDir)) mkdirSync(tempDir, { recursive: true })
+
   for (const item of items) {
     if (item.type === 'text' && item.text) {
       parts.push(`[Text block]: ${item.text}`)
     } else if (item.type === 'image' && item.imageData) {
-      parts.push(`[Image: ${item.imageData.mimeType}, ${Math.round(item.imageData.base64.length * 3 / 4 / 1024)}KB]`)
+      const ext = item.imageData.mimeType.split('/')[1] || 'png'
+      const tempFile = join(tempDir, `image-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`)
+      writeFileSync(tempFile, Buffer.from(item.imageData.base64, 'base64'))
+      console.log('[ClaudeCode] Saved image to temp file:', tempFile)
+      parts.push(`[Image saved to: ${tempFile}] — Use the Read tool to view this image.`)
     }
   }
 
@@ -28,7 +44,10 @@ export async function generateWithClaudeCode(
 
   console.log('[ClaudeCode] Starting query with prompt length:', fullPrompt.length)
 
+  console.log('[ClaudeCode] Using cwd:', CLAUDE_CODE_CWD)
+
   const queryOptions: Record<string, unknown> = {
+    cwd: CLAUDE_CODE_CWD,
     maxTurns: 50,
     systemPrompt: 'You are a coding assistant integrated into an infinite canvas application. The user sends you text and image content from their canvas along with a request. Respond with helpful, concise results. If the user asks you to create or modify files, do so. Return your final answer as plain text.',
     permissionMode: 'acceptEdits',

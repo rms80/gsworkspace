@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { CodingRobotItem, ChatMessage } from '../../../types'
 import {
   CODING_ROBOT_HEADER_HEIGHT,
@@ -6,6 +6,7 @@ import {
   CODING_ROBOT_SEND_BUTTON_WIDTH,
   CODING_ROBOT_THEME,
   Z_IFRAME_OVERLAY,
+  BUTTON_HEIGHT,
 } from '../../../constants/canvas'
 
 interface CodingRobotOverlayProps {
@@ -33,6 +34,7 @@ export default function CodingRobotOverlay({
 }: CodingRobotOverlayProps) {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [copyFeedback, setCopyFeedback] = useState(false)
 
   const theme = CODING_ROBOT_THEME
   const x = transform?.x ?? item.x
@@ -71,8 +73,17 @@ export default function CodingRobotOverlay({
     onUpdateItem(item.id, { text: e.target.value })
   }
 
+  const handleCopySessionId = () => {
+    if (!item.sessionId) return
+    navigator.clipboard.writeText(item.sessionId).then(() => {
+      setCopyFeedback(true)
+      setTimeout(() => setCopyFeedback(false), 1500)
+    })
+  }
+
+  const statusBarHeight = item.sessionId ? 18 * stageScale : 0
   const inputAreaHeight = CODING_ROBOT_INPUT_HEIGHT * stageScale
-  const chatAreaHeight = displayHeight - inputAreaHeight
+  const chatAreaHeight = displayHeight - inputAreaHeight - statusBarHeight
 
   return (
     <div
@@ -91,6 +102,43 @@ export default function CodingRobotOverlay({
         fontFamily: 'system-ui, -apple-system, sans-serif',
       }}
     >
+      {/* Session ID status bar */}
+      {item.sessionId && (
+        <div
+          style={{
+            height: statusBarHeight,
+            display: 'flex',
+            alignItems: 'center',
+            padding: `0 ${4 * stageScale}px`,
+            background: '#f5f0ea',
+            borderBottom: `1px solid ${theme.border}`,
+            fontSize: `${9 * stageScale}px`,
+            color: '#999',
+            gap: `${3 * stageScale}px`,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+            Session: {item.sessionId}
+          </span>
+          <button
+            onClick={handleCopySessionId}
+            title="Copy session ID"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              padding: `0 ${2 * stageScale}px`,
+              fontSize: `${9 * stageScale}px`,
+              color: copyFeedback ? '#22c55e' : '#999',
+              flexShrink: 0,
+            }}
+          >
+            {copyFeedback ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      )}
+
       {/* Chat history area */}
       <div
         style={{
@@ -194,6 +242,7 @@ export default function CodingRobotOverlay({
           disabled={!canSend}
           style={{
             width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
+            height: BUTTON_HEIGHT * stageScale,
             border: 'none',
             borderRadius: `${4 * stageScale}px`,
             background: canSend ? theme.runButton : '#ccc',
