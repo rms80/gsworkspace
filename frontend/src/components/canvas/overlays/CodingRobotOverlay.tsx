@@ -15,6 +15,7 @@ interface CodingRobotOverlayProps {
   isRunning: boolean
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
+  selectedTextContent: string
   onSendMessage: (itemId: string, message: string) => void
   onUpdateItem: (id: string, changes: Partial<CodingRobotItem>) => void
 }
@@ -26,6 +27,7 @@ export default function CodingRobotOverlay({
   isRunning,
   isAnyDragActive,
   transform,
+  selectedTextContent,
   onSendMessage,
   onUpdateItem,
 }: CodingRobotOverlayProps) {
@@ -48,10 +50,14 @@ export default function CodingRobotOverlay({
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [item.chatHistory.length])
 
+  const canSend = !isRunning && (!!item.text.trim() || !!selectedTextContent)
+
   const handleSend = () => {
-    const text = item.text.trim()
-    if (!text || isRunning) return
-    onSendMessage(item.id, text)
+    if (!canSend) return
+    // If there are selected text blocks, use their content as the message
+    const message = selectedTextContent || item.text.trim()
+    if (!message) return
+    onSendMessage(item.id, message)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -185,16 +191,16 @@ export default function CodingRobotOverlay({
         />
         <button
           onClick={handleSend}
-          disabled={isRunning || !item.text.trim()}
+          disabled={!canSend}
           style={{
             width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
             border: 'none',
             borderRadius: `${4 * stageScale}px`,
-            background: (isRunning || !item.text.trim()) ? '#ccc' : theme.runButton,
+            background: canSend ? theme.runButton : '#ccc',
             color: '#fff',
             fontSize: `${12 * stageScale}px`,
             fontWeight: 'bold',
-            cursor: (isRunning || !item.text.trim()) ? 'default' : 'pointer',
+            cursor: canSend ? 'pointer' : 'default',
           }}
         >
           Send

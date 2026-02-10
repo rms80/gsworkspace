@@ -1147,25 +1147,35 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         })}
 
       {/* Coding Robot chat overlays */}
-      {items
-        .filter((item) => item.type === 'coding-robot')
-        .map((item) => {
-          if (item.type !== 'coding-robot') return null
-          const transform = codingRobotItemTransforms.get(item.id)
-          return (
-            <CodingRobotOverlay
-              key={`coding-robot-${item.id}`}
-              item={item}
-              stageScale={stageScale}
-              stagePos={stagePos}
-              isRunning={runningCodingRobotIds.has(item.id)}
-              isAnyDragActive={isAnyDragActive}
-              transform={transform}
-              onSendMessage={onSendCodingRobotMessage}
-              onUpdateItem={onUpdateItem}
-            />
-          )
-        })}
+      {(() => {
+        // Compute selected text blocks sorted top-to-bottom, concatenated with newlines
+        const selectedTextContent = items
+          .filter((item) => item.type === 'text' && selectedIds.includes(item.id))
+          .sort((a, b) => a.y - b.y)
+          .map((item) => item.type === 'text' ? item.text : '')
+          .join('\n')
+
+        return items
+          .filter((item) => item.type === 'coding-robot')
+          .map((item) => {
+            if (item.type !== 'coding-robot') return null
+            const transform = codingRobotItemTransforms.get(item.id)
+            return (
+              <CodingRobotOverlay
+                key={`coding-robot-${item.id}`}
+                item={item}
+                stageScale={stageScale}
+                stagePos={stagePos}
+                isRunning={runningCodingRobotIds.has(item.id)}
+                isAnyDragActive={isAnyDragActive}
+                transform={transform}
+                selectedTextContent={selectedTextContent}
+                onSendMessage={onSendCodingRobotMessage}
+                onUpdateItem={onUpdateItem}
+              />
+            )
+          })
+      })()}
 
       {/* GIF image overlays */}
       {items
