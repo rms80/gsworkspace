@@ -40,7 +40,7 @@ import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -90,6 +90,15 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
+
+  // Multi-select drag coordination ref
+  const multiDragRef = useRef<{
+    dragNodeId: string
+    startNodeX: number
+    startNodeY: number
+    otherNodes: Array<{ id: string; node: Konva.Node; startX: number; startY: number }>
+    savedTransformerState: Map<Konva.Transformer, Konva.Node[]>
+  } | null>(null)
 
   // Background operations tracking
   const { startOperation, endOperation } = useBackgroundOperations()
@@ -374,6 +383,138 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'html', ref: htmlTransformerRef },
     ],
   })
+
+  // 13. Multi-select drag coordination (Layer-level handlers)
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef]
+
+  const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    // Guard: if already tracking a multi-drag (e.g. Transformer started drag on
+    // another node), ignore subsequent dragstart events
+    if (multiDragRef.current) return
+
+    const target = e.target
+    const nodeId = target.id()
+    if (!nodeId || !selectedIds.includes(nodeId) || selectedIds.length <= 1) return
+
+    // Temporarily detach other selected nodes from their Transformers to prevent
+    // Konva's Transformer multi-drag from conflicting with our handler.
+    // The Transformer calls startDrag() on other nodes which creates independent
+    // drag streams that corrupt our state.
+    const savedTransformerState = new Map<Konva.Transformer, Konva.Node[]>()
+    for (const trRef of allTransformerRefs) {
+      const tr = trRef.current
+      if (!tr) continue
+      const trNodes = tr.nodes()
+      if (trNodes.length <= 1) continue
+      const hasOtherSelected = trNodes.some(n => n.id() !== nodeId && selectedIds.includes(n.id()))
+      if (!hasOtherSelected) continue
+      savedTransformerState.set(tr, trNodes.slice())
+      tr.nodes(trNodes.filter(n => n.id() === nodeId || !selectedIds.includes(n.id())))
+    }
+
+    const otherNodes: Array<{ id: string; node: Konva.Node; startX: number; startY: number }> = []
+    for (const id of selectedIds) {
+      if (id === nodeId) continue
+      const node = stageRef.current?.findOne('#' + id) as Konva.Node | undefined
+      if (node) {
+        otherNodes.push({ id, node, startX: node.x(), startY: node.y() })
+      }
+    }
+
+    multiDragRef.current = {
+      dragNodeId: nodeId,
+      startNodeX: target.x(),
+      startNodeY: target.y(),
+      otherNodes,
+      savedTransformerState,
+    }
+  }, [selectedIds])
+
+  const handleLayerDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!multiDragRef.current) return
+    // Only process events from the original user-dragged node
+    if (e.target.id() !== multiDragRef.current.dragNodeId) return
+    const { startNodeX, startNodeY, otherNodes } = multiDragRef.current
+    const dx = e.target.x() - startNodeX
+    const dy = e.target.y() - startNodeY
+
+    for (const { node, startX, startY } of otherNodes) {
+      node.x(startX + dx)
+      node.y(startY + dy)
+    }
+
+    // Update overlay transforms for videos, GIFs, and HTML items being moved
+    for (const { id, node } of otherNodes) {
+      const item = items.find(i => i.id === id)
+      if (!item) continue
+
+      if (item.type === 'video') {
+        const scaleX = item.scaleX ?? 1
+        const scaleY = item.scaleY ?? 1
+        const headerHeight = selectedIds.includes(item.id) ? VIDEO_HEADER_HEIGHT / Math.max(1, stageScale) : 0
+        setVideoItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y() + headerHeight, width: item.width * scaleX, height: item.height * scaleY })
+          return next
+        })
+      } else if (item.type === 'image' && gifIds.has(id)) {
+        const scaleX = item.scaleX ?? 1
+        const scaleY = item.scaleY ?? 1
+        const headerHeight = selectedIds.includes(item.id) ? IMAGE_HEADER_HEIGHT / Math.max(1, stageScale) : 0
+        setGifItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y() + headerHeight, width: item.width * scaleX, height: item.height * scaleY })
+          return next
+        })
+      } else if (item.type === 'html') {
+        setHtmlItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
+          return next
+        })
+      }
+    }
+  }, [items, selectedIds, stageScale, gifIds])
+
+  const handleLayerDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!multiDragRef.current) return
+    // Only process events from the original user-dragged node
+    if (e.target.id() !== multiDragRef.current.dragNodeId) return
+    const { startNodeX, startNodeY, otherNodes, savedTransformerState } = multiDragRef.current
+    const dx = e.target.x() - startNodeX
+    const dy = e.target.y() - startNodeY
+
+    for (const { id } of otherNodes) {
+      const item = items.find(i => i.id === id)
+      if (item) {
+        onUpdateItem(id, { x: item.x + dx, y: item.y + dy })
+      }
+    }
+
+    // Clean up overlay transforms
+    setVideoItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setGifItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setHtmlItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+
+    // Restore Transformer nodes that were detached during drag
+    for (const [tr, nodes] of savedTransformerState) {
+      tr.nodes(nodes)
+    }
+
+    multiDragRef.current = null
+  }, [items, onUpdateItem])
 
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
@@ -790,7 +931,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         onMouseUp={handleMouseUp}
         onContextMenu={handleContextMenu}
       >
-      <Layer ref={layerRef}>
+      <Layer ref={layerRef} onDragStart={handleLayerDragStart} onDragMove={handleLayerDragMove} onDragEnd={handleLayerDragEnd}>
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
