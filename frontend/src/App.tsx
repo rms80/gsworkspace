@@ -20,6 +20,7 @@ import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, Con
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
+import { snapToGrid } from './utils/grid'
 import DOMPurify from 'dompurify'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
@@ -747,8 +748,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
-      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       text: 'Double-click to edit',
       fontSize: 14,
       width,
@@ -763,8 +764,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 200,
+        x: snapToGrid(100 + Math.random() * 200),
+        y: snapToGrid(100 + Math.random() * 200),
         src,
         width,
         height,
@@ -818,8 +819,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 200,
+        x: snapToGrid(100 + Math.random() * 200),
+        y: snapToGrid(100 + Math.random() * 200),
         src,
         name,
         width: w,
@@ -889,8 +890,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
-      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
@@ -908,8 +909,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
-      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
@@ -927,8 +928,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: x != null ? x - width / 2 : 100 + Math.random() * 200,
-      y: y != null ? y - height / 2 : 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'HTML Gen',
       text: 'Describe the webpage you want to create...',
       fontSize: 14,
@@ -948,8 +949,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'text',
-        x: x - width / 2,
-        y: y - height / 2,
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
         text,
         fontSize: 14,
         width,
@@ -971,8 +972,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: x - width / 2,
-        y: y - height / 2,
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
         src,
         name: uniqueName,
         width,
@@ -1005,8 +1006,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: x - w / 2,
-        y: y - h / 2,
+        x: snapToGrid(x - w / 2),
+        y: snapToGrid(y - h / 2),
         src,
         name: uniqueName,
         width: w,

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
 import LocalStorageSettingsTab from './settings/LocalStorageSettingsTab'
 import StorageModeSettingsTab from './settings/StorageModeSettingsTab'
-import { StorageMode } from '../api/storage'
+import ViewportSettingsTab from './settings/ViewportSettingsTab'
+import { StorageMode, getStorageMode } from '../api/storage'
 
 interface SettingsDialogProps {
   isOpen: boolean
@@ -10,7 +11,7 @@ interface SettingsDialogProps {
   onStorageModeChange?: (mode: StorageMode) => void
 }
 
-type TabId = 'storage-mode' | 'api-keys' | 'browser-storage'
+type TabId = 'storage-mode' | 'api-keys' | 'browser-storage' | 'viewport'
 
 interface TabDef {
   id: TabId
@@ -18,6 +19,7 @@ interface TabDef {
 }
 
 const tabs: TabDef[] = [
+  { id: 'viewport', label: 'Viewport' },
   { id: 'storage-mode', label: 'Storage Mode' },
   { id: 'api-keys', label: 'API Keys' },
   { id: 'browser-storage', label: 'Browser Data' },
@@ -25,6 +27,7 @@ const tabs: TabDef[] = [
 
 export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }: SettingsDialogProps) {
   const [activeTab, setActiveTab] = useState<TabId>('storage-mode')
+  const isOffline = getStorageMode() === 'offline'
 
   // Close on Escape
   useEffect(() => {
@@ -61,7 +64,7 @@ export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }:
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
           width: '600px',
           maxWidth: '90vw',
-          maxHeight: '80vh',
+          height: '70vh',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -108,28 +111,33 @@ export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }:
               padding: '8px 0',
             }}
           >
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '10px 16px',
-                  border: 'none',
-                  backgroundColor: activeTab === tab.id ? '#fff' : 'transparent',
-                  textAlign: 'left',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontSize: '14px',
-                  color: activeTab === tab.id ? '#1976d2' : '#333',
-                  fontWeight: activeTab === tab.id ? 600 : 400,
-                  borderLeft: activeTab === tab.id ? '3px solid #1976d2' : '3px solid transparent',
-                }}
-              >
-                {tab.label}
-              </button>
-            ))}
+            {tabs.map((tab) => {
+              const disabled = tab.id === 'api-keys' && !isOffline
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => !disabled && setActiveTab(tab.id)}
+                  disabled={disabled}
+                  title={disabled ? 'In-browser API keys are only used in offline mode. In other modes, set the API keys in the backend .env file' : undefined}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    backgroundColor: activeTab === tab.id ? '#fff' : 'transparent',
+                    textAlign: 'left',
+                    cursor: disabled ? 'default' : 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: '14px',
+                    color: disabled ? '#aaa' : activeTab === tab.id ? '#1976d2' : '#333',
+                    fontWeight: activeTab === tab.id ? 600 : 400,
+                    borderLeft: activeTab === tab.id ? '3px solid #1976d2' : '3px solid transparent',
+                  }}
+                >
+                  {tab.label}
+                </button>
+              )
+            })}
           </div>
 
           {/* Tab content */}
@@ -148,6 +156,9 @@ export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }:
             )}
             {activeTab === 'browser-storage' && (
               <LocalStorageSettingsTab />
+            )}
+            {activeTab === 'viewport' && (
+              <ViewportSettingsTab />
             )}
           </div>
         </div>

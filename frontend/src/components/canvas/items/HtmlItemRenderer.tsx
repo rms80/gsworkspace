@@ -9,6 +9,7 @@ import {
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
 import { MenuState } from '../../../hooks/useMenuState'
+import { snapToGrid } from '../../../utils/grid'
 
 interface HtmlItemRendererProps {
   item: HtmlItem
@@ -44,6 +45,7 @@ export default function HtmlItemRenderer({
       width={item.width}
       height={item.height + HTML_HEADER_HEIGHT}
       draggable
+      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
       onClick={(e) => onItemClick(e, item.id)}
       onDragStart={() => {
         if (config.features.hideHtmlDuringTransform) {
@@ -101,8 +103,8 @@ export default function HtmlItemRenderer({
         node.scaleX(1)
         node.scaleY(1)
         onUpdateItem(item.id, {
-          x: node.x(),
-          y: node.y(),
+          x: snapToGrid(node.x()),
+          y: snapToGrid(node.y()),
           width: Math.max(MIN_PROMPT_WIDTH, node.width() * scaleX),
           height: Math.max(MIN_PROMPT_HEIGHT, (node.height() - HTML_HEADER_HEIGHT) * scaleY),
         })

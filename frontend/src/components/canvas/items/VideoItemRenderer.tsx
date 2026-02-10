@@ -5,6 +5,7 @@ import {
   VIDEO_HEADER_HEIGHT,
   COLOR_SELECTED,
 } from '../../../constants/canvas'
+import { snapToGrid } from '../../../utils/grid'
 
 interface VideoItemRendererProps {
   item: VideoItem
@@ -81,6 +82,7 @@ export default function VideoItemRenderer({
       width={displayWidth}
       height={totalHeight}
       draggable
+      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y + headerHeight) - headerHeight })}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()
@@ -196,8 +198,8 @@ export default function VideoItemRenderer({
           parent.x(newX)
           parent.y(newY - headerHeight)
           onUpdateItem(item.id, {
-            x: newX,
-            y: newY,
+            x: snapToGrid(newX),
+            y: snapToGrid(newY),
             scaleX: newScaleX,
             scaleY: newScaleY,
             rotation: node.rotation(),

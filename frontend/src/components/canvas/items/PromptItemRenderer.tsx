@@ -9,6 +9,7 @@ import {
 } from '../../../constants/canvas'
 import { PromptEditing } from '../../../hooks/usePromptEditing'
 import { hasAnthropicApiKey, hasGoogleApiKey } from '../../../utils/apiKeyStorage'
+import { snapToGrid } from '../../../utils/grid'
 
 interface PromptItemRendererProps {
   item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model: string }
@@ -80,6 +81,7 @@ export default function PromptItemRenderer({
       width={item.width}
       height={item.height}
       draggable={!isRunning}
+      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
       onClick={(e) => onItemClick(e, item.id)}
       onDragEnd={(e) => {
         onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
@@ -91,8 +93,8 @@ export default function PromptItemRenderer({
         node.scaleX(1)
         node.scaleY(1)
         onUpdateItem(item.id, {
-          x: node.x(),
-          y: node.y(),
+          x: snapToGrid(node.x()),
+          y: snapToGrid(node.y()),
           width: Math.max(MIN_PROMPT_WIDTH, item.width * scaleX),
           height: Math.max(MIN_PROMPT_HEIGHT, item.height * scaleY),
         })
