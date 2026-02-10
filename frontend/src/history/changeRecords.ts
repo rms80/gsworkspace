@@ -174,6 +174,73 @@ export class TransformObjectChange extends BaseChangeRecord {
 }
 
 /**
+ * Entry for a single item's transform within a batch
+ */
+export interface TransformEntry {
+  objectId: string
+  oldTransform: TransformData
+  newTransform: TransformData
+}
+
+/**
+ * Record for transforming multiple objects at once (batch move/resize).
+ * Undo/redo applies all transforms as a single operation.
+ */
+export class TransformObjectsChange extends BaseChangeRecord {
+  type: ChangeRecordType = 'transform_objects'
+  private entries: TransformEntry[]
+
+  constructor(entries: TransformEntry[], timestamp?: number) {
+    super('', timestamp)
+    this.entries = entries.map(e => ({
+      objectId: e.objectId,
+      oldTransform: { ...e.oldTransform },
+      newTransform: { ...e.newTransform },
+    }))
+  }
+
+  apply(state: HistoryState): HistoryState {
+    const transformMap = new Map(this.entries.map(e => [e.objectId, e.newTransform]))
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        const t = transformMap.get(item.id)
+        if (!t) return item
+        return { ...item, ...t } as CanvasItem
+      }),
+    }
+  }
+
+  reverse(state: HistoryState): HistoryState {
+    const transformMap = new Map(this.entries.map(e => [e.objectId, e.oldTransform]))
+    return {
+      ...state,
+      items: state.items.map((item) => {
+        const t = transformMap.get(item.id)
+        if (!t) return item
+        return { ...item, ...t } as CanvasItem
+      }),
+    }
+  }
+
+  serialize(): SerializedChangeRecord {
+    return {
+      type: this.type,
+      objectId: this.objectId,
+      timestamp: this.timestamp,
+      data: { entries: this.entries },
+    }
+  }
+
+  static deserialize(record: SerializedChangeRecord): TransformObjectsChange {
+    return new TransformObjectsChange(
+      record.data.entries as TransformEntry[],
+      record.timestamp
+    )
+  }
+}
+
+/**
  * Record for updating text content (for text items)
  */
 export class UpdateTextChange extends BaseChangeRecord {
@@ -492,6 +559,8 @@ export function deserializeChangeRecord(
       return DeleteObjectChange.deserialize(record)
     case 'transform_object':
       return TransformObjectChange.deserialize(record)
+    case 'transform_objects':
+      return TransformObjectsChange.deserialize(record)
     case 'update_text':
       return UpdateTextChange.deserialize(record)
     case 'update_prompt':

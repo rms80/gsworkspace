@@ -13,6 +13,7 @@ export {
   AddObjectChange,
   DeleteObjectChange,
   TransformObjectChange,
+  TransformObjectsChange,
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
@@ -20,6 +21,8 @@ export {
   SelectionChange,
   deserializeChangeRecord,
 } from './changeRecords'
+
+export type { TransformEntry } from './changeRecords'
 
 // History stack
 export { HistoryStack } from './HistoryStack'

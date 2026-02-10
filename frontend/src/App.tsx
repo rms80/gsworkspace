@@ -34,6 +34,7 @@ import {
   AddObjectChange,
   DeleteObjectChange,
   TransformObjectChange,
+  TransformObjectsChange,
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
@@ -41,6 +42,7 @@ import {
   SelectionChange,
   ChangeRecord,
 } from './history'
+import type { TransformEntry } from './history'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -1063,63 +1065,65 @@ function App() {
   }, [isOffline, activeSceneId, addVideoAt, startOperation, endOperation])
 
   const updateItem = useCallback(
-    (id: string, changes: Partial<CanvasItem>) => {
+    (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => {
       const item = items.find((i) => i.id === id)
       if (!item) return
 
-      // Determine change type and create appropriate record
-      const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
-        'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes ||
-        'cropRect' in changes || 'cropSrc' in changes
-      const hasText = 'text' in changes && item.type === 'text'
-      const hasPromptText = ('text' in changes || 'label' in changes) &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-      const hasModel = 'model' in changes &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-      const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
+      if (!skipHistory) {
+        // Determine change type and create appropriate record
+        const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
+          'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes ||
+          'cropRect' in changes || 'cropSrc' in changes
+        const hasText = 'text' in changes && item.type === 'text'
+        const hasPromptText = ('text' in changes || 'label' in changes) &&
+          (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
+        const hasModel = 'model' in changes &&
+          (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
+        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
 
-      if (hasText && item.type === 'text') {
-        // Only record if text actually changed
-        if (item.text !== changes.text) {
-          pushChange(new UpdateTextChange(id, item.text, changes.text as string))
-        }
-      } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
-        const newLabel = ('label' in changes ? changes.label : item.label) as string
-        const newText = ('text' in changes ? changes.text : item.text) as string
-        // Only record if label or text actually changed
-        if (item.label !== newLabel || item.text !== newText) {
-          pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
-        }
-      } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
-        // Only record if model actually changed
-        if (item.model !== changes.model) {
-          pushChange(new UpdateModelChange(id, item.model, changes.model as string))
-        }
-      } else if (hasName && (item.type === 'image' || item.type === 'video')) {
-        // Only record if name actually changed
-        const oldName = item.name
-        const newName = changes.name as string | undefined
-        if (oldName !== newName) {
-          pushChange(new UpdateNameChange(id, oldName, newName))
-        }
-      } else if (hasTransform) {
-        const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
-        if (item.type === 'image') {
-          Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation, cropRect: item.cropRect ?? null, cropSrc: item.cropSrc ?? null })
-        }
-        const newTransform = { ...oldTransform }
-        if ('x' in changes) newTransform.x = changes.x as number
-        if ('y' in changes) newTransform.y = changes.y as number
-        if ('width' in changes) newTransform.width = changes.width as number
-        if ('height' in changes) newTransform.height = changes.height as number
-        if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
-        if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
-        if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
-        if ('cropRect' in changes) (newTransform as Record<string, unknown>).cropRect = (changes as Record<string, unknown>).cropRect ?? null
-        if ('cropSrc' in changes) (newTransform as Record<string, unknown>).cropSrc = (changes as Record<string, unknown>).cropSrc ?? null
-        // Only record if transform actually changed
-        if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
-          pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+        if (hasText && item.type === 'text') {
+          // Only record if text actually changed
+          if (item.text !== changes.text) {
+            pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+          }
+        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+          const newLabel = ('label' in changes ? changes.label : item.label) as string
+          const newText = ('text' in changes ? changes.text : item.text) as string
+          // Only record if label or text actually changed
+          if (item.label !== newLabel || item.text !== newText) {
+            pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+          }
+        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+          // Only record if model actually changed
+          if (item.model !== changes.model) {
+            pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+          }
+        } else if (hasName && (item.type === 'image' || item.type === 'video')) {
+          // Only record if name actually changed
+          const oldName = item.name
+          const newName = changes.name as string | undefined
+          if (oldName !== newName) {
+            pushChange(new UpdateNameChange(id, oldName, newName))
+          }
+        } else if (hasTransform) {
+          const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
+          if (item.type === 'image') {
+            Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation, cropRect: item.cropRect ?? null, cropSrc: item.cropSrc ?? null })
+          }
+          const newTransform = { ...oldTransform }
+          if ('x' in changes) newTransform.x = changes.x as number
+          if ('y' in changes) newTransform.y = changes.y as number
+          if ('width' in changes) newTransform.width = changes.width as number
+          if ('height' in changes) newTransform.height = changes.height as number
+          if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
+          if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
+          if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
+          if ('cropRect' in changes) (newTransform as Record<string, unknown>).cropRect = (changes as Record<string, unknown>).cropRect ?? null
+          if ('cropSrc' in changes) (newTransform as Record<string, unknown>).cropSrc = (changes as Record<string, unknown>).cropSrc ?? null
+          // Only record if transform actually changed
+          if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
+            pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+          }
         }
       }
 
@@ -1130,6 +1134,14 @@ function App() {
       )
     },
     [updateActiveSceneItems, items, pushChange]
+  )
+
+  const batchTransform = useCallback(
+    (entries: TransformEntry[]) => {
+      if (entries.length === 0) return
+      pushChange(new TransformObjectsChange(entries))
+    },
+    [pushChange]
   )
 
   const deleteSelected = useCallback(async () => {
@@ -2015,6 +2027,7 @@ function App() {
           selectedIds={selectedIds}
           sceneId={activeSceneId || ''}
           onUpdateItem={updateItem}
+          onBatchTransform={batchTransform}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}
           onAddImageAt={addImageAt}

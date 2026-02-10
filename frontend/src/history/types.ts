@@ -7,6 +7,7 @@ export type ChangeRecordType =
   | 'add_object'
   | 'delete_object'
   | 'transform_object'
+  | 'transform_objects'
   | 'update_text'
   | 'update_prompt'
   | 'update_model'

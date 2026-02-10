@@ -47,12 +47,13 @@ import {
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
 } from '../constants/canvas'
+import type { TransformEntry } from '../history'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
   selectedIds: string[]
   sceneId: string
-  onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
+  onUpdateItem: (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
@@ -71,6 +72,7 @@ interface InfiniteCanvasProps {
   onAddHtmlGenPrompt?: (x?: number, y?: number) => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
+  onBatchTransform?: (entries: TransformEntry[]) => void
 }
 
 export interface CanvasHandle {
@@ -78,7 +80,7 @@ export interface CanvasHandle {
   fitToView: () => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -388,36 +390,42 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef]
 
   const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
-    // Guard: if already tracking a multi-drag (e.g. Transformer started drag on
+    // Guard: if already tracking a drag (e.g. Transformer started drag on
     // another node), ignore subsequent dragstart events
     if (multiDragRef.current) return
 
     const target = e.target
     const nodeId = target.id()
-    if (!nodeId || !selectedIds.includes(nodeId) || selectedIds.length <= 1) return
+    if (!nodeId) return
 
-    // Temporarily detach other selected nodes from their Transformers to prevent
-    // Konva's Transformer multi-drag from conflicting with our handler.
-    // The Transformer calls startDrag() on other nodes which creates independent
-    // drag streams that corrupt our state.
-    const savedTransformerState = new Map<Konva.Transformer, Konva.Node[]>()
-    for (const trRef of allTransformerRefs) {
-      const tr = trRef.current
-      if (!tr) continue
-      const trNodes = tr.nodes()
-      if (trNodes.length <= 1) continue
-      const hasOtherSelected = trNodes.some(n => n.id() !== nodeId && selectedIds.includes(n.id()))
-      if (!hasOtherSelected) continue
-      savedTransformerState.set(tr, trNodes.slice())
-      tr.nodes(trNodes.filter(n => n.id() === nodeId || !selectedIds.includes(n.id())))
-    }
+    // Only track canvas items (not transformer anchors, etc.)
+    const isCanvasItem = items.some(i => i.id === nodeId)
+    if (!isCanvasItem) return
 
     const otherNodes: Array<{ id: string; node: Konva.Node; startX: number; startY: number }> = []
-    for (const id of selectedIds) {
-      if (id === nodeId) continue
-      const node = stageRef.current?.findOne('#' + id) as Konva.Node | undefined
-      if (node) {
-        otherNodes.push({ id, node, startX: node.x(), startY: node.y() })
+    const savedTransformerState = new Map<Konva.Transformer, Konva.Node[]>()
+
+    // For multi-select drags, coordinate other selected items
+    if (selectedIds.includes(nodeId) && selectedIds.length > 1) {
+      // Temporarily detach other selected nodes from their Transformers to prevent
+      // Konva's Transformer multi-drag from conflicting with our handler.
+      for (const trRef of allTransformerRefs) {
+        const tr = trRef.current
+        if (!tr) continue
+        const trNodes = tr.nodes()
+        if (trNodes.length <= 1) continue
+        const hasOtherSelected = trNodes.some(n => n.id() !== nodeId && selectedIds.includes(n.id()))
+        if (!hasOtherSelected) continue
+        savedTransformerState.set(tr, trNodes.slice())
+        tr.nodes(trNodes.filter(n => n.id() === nodeId || !selectedIds.includes(n.id())))
+      }
+
+      for (const id of selectedIds) {
+        if (id === nodeId) continue
+        const node = stageRef.current?.findOne('#' + id) as Konva.Node | undefined
+        if (node) {
+          otherNodes.push({ id, node, startX: node.x(), startY: node.y() })
+        }
       }
     }
 
@@ -428,7 +436,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       otherNodes,
       savedTransformerState,
     }
-  }, [selectedIds])
+  }, [selectedIds, items])
 
   const handleLayerDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     if (!multiDragRef.current) return
@@ -480,15 +488,34 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     if (!multiDragRef.current) return
     // Only process events from the original user-dragged node
     if (e.target.id() !== multiDragRef.current.dragNodeId) return
-    const { startNodeX, startNodeY, otherNodes, savedTransformerState } = multiDragRef.current
+    const { dragNodeId, startNodeX, startNodeY, otherNodes, savedTransformerState } = multiDragRef.current
     const dx = e.target.x() - startNodeX
     const dy = e.target.y() - startNodeY
 
+    // Update other nodes' state (skipHistory — batch will handle it)
     for (const { id } of otherNodes) {
       const item = items.find(i => i.id === id)
       if (item) {
-        onUpdateItem(id, { x: item.x + dx, y: item.y + dy })
+        onUpdateItem(id, { x: item.x + dx, y: item.y + dy }, true)
       }
+    }
+
+    // Build and push batch transform entry
+    if (onBatchTransform && (dx !== 0 || dy !== 0)) {
+      const entries: TransformEntry[] = []
+      entries.push({
+        objectId: dragNodeId,
+        oldTransform: { x: startNodeX, y: startNodeY },
+        newTransform: { x: e.target.x(), y: e.target.y() },
+      })
+      for (const { id, startX, startY } of otherNodes) {
+        entries.push({
+          objectId: id,
+          oldTransform: { x: startX, y: startY },
+          newTransform: { x: startX + dx, y: startY + dy },
+        })
+      }
+      onBatchTransform(entries)
     }
 
     // Clean up overlay transforms
@@ -514,7 +541,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     }
 
     multiDragRef.current = null
-  }, [items, onUpdateItem])
+  }, [items, onUpdateItem, onBatchTransform])
+
+  // Wrapper that suppresses individual history entries during batch drags.
+  // During an active drag (multiDragRef set), transform history is handled by
+  // the batch in handleLayerDragEnd, so individual updates use skipHistory.
+  const handleUpdateItem = useCallback((id: string, changes: Partial<CanvasItem>) => {
+    if (multiDragRef.current) {
+      onUpdateItem(id, changes, true)
+    } else {
+      onUpdateItem(id, changes)
+    }
+  }, [onUpdateItem])
 
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
@@ -943,7 +981,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isEditing={editingTextId === item.id}
                 onItemClick={handleItemClick}
                 onDblClick={handleTextDblClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
               />
             )
           } else if (item.type === 'image') {
@@ -967,7 +1005,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                     { x: e.evt.clientX, y: e.evt.clientY },
                   )
                 }}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
                 setGifItemTransforms={itemIsGif ? setGifItemTransforms : undefined}
                 stageScale={stageScale}
@@ -989,7 +1027,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                     { x: e.evt.clientX, y: e.evt.clientY },
                   )
                 }}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleVideoLabelDblClick}
                 setVideoItemTransforms={setVideoItemTransforms}
                 stageScale={stageScale}
@@ -1007,7 +1045,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={promptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
                 onRun={onRunPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -1025,7 +1063,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={imageGenPromptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
                 onRun={onRunImageGenPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -1043,7 +1081,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={htmlGenPromptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
                 onRun={onRunHtmlGenPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -1058,7 +1096,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingHtmlLabelId={editingHtmlLabelId}
                 exportMenu={exportMenu}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleHtmlLabelDblClick}
                 setHtmlItemTransforms={setHtmlItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
