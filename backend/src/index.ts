@@ -118,7 +118,7 @@ const generalLimiter = rateLimit({
 
 const llmLimiter = rateLimit({
   windowMs: RATE_WINDOW,
-  max: parseInt(process.env.RATE_LIMIT_LLM || '20'),
+  max: parseInt(process.env.RATE_LIMIT_LLM || '80'),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many LLM requests. Please try again later.' },
