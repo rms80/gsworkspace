@@ -1318,9 +1318,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const y = transform?.y ?? item.y
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
+          const isSelected = selectedIds.includes(item.id)
           return (
             <div
               key={`html-${item.id}`}
+              onWheel={isSelected ? (e) => {
+                // Forward scroll to iframe content when selected
+                const iframe = e.currentTarget.querySelector('iframe')
+                if (iframe?.contentWindow) {
+                  iframe.contentWindow.scrollBy(e.deltaX, e.deltaY)
+                }
+              } : undefined}
               style={{
                 position: 'absolute',
                 top: (y + HTML_HEADER_HEIGHT) * stageScale + stagePos.y,
@@ -1330,6 +1338,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
                 zIndex: Z_IFRAME_OVERLAY,
+                // Let clicks/wheel pass through to Konva canvas when not selected
+                pointerEvents: isSelected ? 'auto' : 'none',
               }}
             >
               <iframe
@@ -1341,8 +1351,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   border: 'none',
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
-                  // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
-                  pointerEvents: (selectedIds.includes(item.id) || isAnyDragActive) ? 'none' : 'auto',
+                  pointerEvents: 'none',
                   background: '#fff',
                 }}
               />
@@ -1673,12 +1682,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         // Build image name map and image id map from canvas items for export
         const imageNameMap = new Map<string, string>()
         const imageIdMap = new Map<string, string>()
+        const cropSrcSet = new Set<string>()
         items.forEach((item) => {
           if (item.type === 'image') {
             if (item.name) {
               imageNameMap.set(item.src, item.name)
+              if (item.cropSrc) imageNameMap.set(item.cropSrc, item.name)
             }
             imageIdMap.set(item.src, item.id)
+            if (item.cropSrc) {
+              imageIdMap.set(item.cropSrc, item.id)
+              cropSrcSet.add(item.cropSrc)
+            }
           }
         })
         return (
@@ -1689,6 +1704,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             imageNameMap={imageNameMap}
             sceneId={sceneId}
             imageIdMap={imageIdMap}
+            cropSrcSet={cropSrcSet}
             onClose={exportMenu.closeMenu}
           />
         )

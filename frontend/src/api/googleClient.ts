@@ -4,7 +4,7 @@
  */
 
 import { getGoogleApiKey } from '../utils/apiKeyStorage'
-import type { SpatialBlock } from '../utils/spatialJson'
+import type { SpatialData } from '../utils/spatialJson'
 
 const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 
@@ -177,23 +177,24 @@ const HTML_GEN_SYSTEM_PROMPT = `You are an expert web designer and HTML develope
 ## Input Format
 
 You will receive:
-1. A JSON array of content blocks, each with:
-   - \`type\`: "text" or "image"
-   - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
-   - \`position\`: { x, y } coordinates
-   - \`size\`: { width, height } dimensions
+1. A JSON object with:
+   - \`page\`: contains \`bounds\` ({ x, y, width, height }) — the total bounding box of all content, with top-left at (0,0)
+   - \`items\`: an array of content blocks, each with:
+     - \`type\`: "text" or "image"
+     - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
+     - \`bounds\`: { x, y, width, height } — top-left corner position and dimensions, relative to the page origin
 
 2. A user prompt describing what kind of webpage to create
 
 Use the content blocks as source material and follow the user's prompt to create the webpage.`
 
 export async function generateHtmlWithGemini(
-  spatialItems: SpatialBlock[],
+  spatialData: SpatialData,
   userPrompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
   // Build the combined prompt with spatial data
-  const spatialDataJson = JSON.stringify(spatialItems, null, 2)
+  const spatialDataJson = JSON.stringify(spatialData, null, 2)
   const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
   const response = await callGemini(MODEL_IDS[model], {

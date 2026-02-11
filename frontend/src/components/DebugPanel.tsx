@@ -3,11 +3,24 @@ import { STATUS_BAR_HEIGHT } from './StatusBar'
 interface DebugPanelProps {
   content: string
   onClose: () => void
+  onClear: () => void
 }
 
 const DEBUG_PANEL_HEIGHT = 250
 
-function DebugPanel({ content, onClose }: DebugPanelProps) {
+const toolbarButtonStyle: React.CSSProperties = {
+  padding: '2px 8px',
+  backgroundColor: 'transparent',
+  border: 'none',
+  color: '#888',
+  cursor: 'pointer',
+  fontSize: 12,
+}
+
+function DebugPanel({ content, onClose, onClear }: DebugPanelProps) {
+  const handleCopy = () => {
+    if (content) navigator.clipboard.writeText(content)
+  }
   return (
     <div
       style={{
@@ -35,17 +48,13 @@ function DebugPanel({ content, onClose }: DebugPanelProps) {
       >
         <span style={{ color: '#ccc', fontSize: 12, fontWeight: 500 }}>Debug Output</span>
         <div style={{ flex: 1 }} />
-        <button
-          onClick={onClose}
-          style={{
-            padding: '2px 8px',
-            backgroundColor: 'transparent',
-            border: 'none',
-            color: '#888',
-            cursor: 'pointer',
-            fontSize: 14,
-          }}
-        >
+        <button onClick={handleCopy} style={toolbarButtonStyle} title="Copy to clipboard">
+          Copy
+        </button>
+        <button onClick={onClear} style={toolbarButtonStyle} title="Clear output">
+          Clear
+        </button>
+        <button onClick={onClose} style={{ ...toolbarButtonStyle, fontSize: 14 }} title="Close">
           ×
         </button>
       </div>

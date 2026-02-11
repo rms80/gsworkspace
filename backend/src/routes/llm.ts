@@ -146,18 +146,26 @@ router.post('/generate-image', async (req, res) => {
   }
 })
 
+interface SpatialBounds {
+  x: number; y: number; width: number; height: number
+}
+
 interface SpatialBlock {
   type: 'text' | 'image'
   content?: string
-  src?: string
-  position: { x: number; y: number }
-  size: { width: number; height: number; scaleX?: number; scaleY?: number }
+  imageId?: string
+  bounds: SpatialBounds
+}
+
+interface SpatialData {
+  page: { bounds: SpatialBounds }
+  items: SpatialBlock[]
 }
 
 router.post('/generate-html', async (req, res) => {
   try {
-    const { spatialItems, userPrompt, model } = req.body as {
-      spatialItems: SpatialBlock[]
+    const { spatialData, userPrompt, model } = req.body as {
+      spatialData: SpatialData
       userPrompt: string
       model?: LLMModel
     }
@@ -169,7 +177,7 @@ router.post('/generate-html', async (req, res) => {
     const selectedModel = model || 'claude-sonnet'
 
     // Build the combined prompt with system instructions and spatial data
-    const spatialDataJson = JSON.stringify(spatialItems, null, 2)
+    const spatialDataJson = JSON.stringify(spatialData, null, 2)
     const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
     let html: string

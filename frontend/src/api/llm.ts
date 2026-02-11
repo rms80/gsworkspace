@@ -1,5 +1,5 @@
 import { LLMModel, ImageGenModel } from '../types'
-import type { SpatialBlock } from '../utils/spatialJson'
+import type { SpatialData } from '../utils/spatialJson'
 import { isOfflineMode } from './scenes'
 import { getAnthropicApiKey, getGoogleApiKey } from '../utils/apiKeyStorage'
 import { generateTextWithAnthropic, generateHtmlWithAnthropic } from './anthropicClient'
@@ -130,7 +130,7 @@ export interface GenerateHtmlResponse {
 }
 
 export async function generateHtml(
-  spatialItems: SpatialBlock[],
+  spatialData: SpatialData,
   userPrompt: string,
   model: LLMModel = 'claude-sonnet'
 ): Promise<string> {
@@ -141,12 +141,12 @@ export async function generateHtml(
       if (!getAnthropicApiKey()) {
         throw new Error('Anthropic API key not configured. Please add your API key in Edit > Settings.')
       }
-      return generateHtmlWithAnthropic(spatialItems, userPrompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
+      return generateHtmlWithAnthropic(spatialData, userPrompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
     } else if (isGeminiModel(model)) {
       if (!getGoogleApiKey()) {
         throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
       }
-      return generateHtmlWithGemini(spatialItems, userPrompt, model as 'gemini-flash' | 'gemini-pro')
+      return generateHtmlWithGemini(spatialData, userPrompt, model as 'gemini-flash' | 'gemini-pro')
     } else {
       throw new Error(`Unknown model: ${model}`)
     }
@@ -156,7 +156,7 @@ export async function generateHtml(
   const response = await fetch(`${API_BASE}/generate-html`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ spatialItems, userPrompt, model }),
+    body: JSON.stringify({ spatialData, userPrompt, model }),
   })
 
   if (!response.ok) {

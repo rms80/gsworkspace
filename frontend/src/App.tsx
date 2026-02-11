@@ -1268,7 +1268,10 @@ function App() {
         // Create an HTML view item for webpage content
         // Strip code fences that LLMs often wrap around HTML
         const htmlContent = DOMPurify.sanitize(stripCodeFences(result).trim(), {
+          WHOLE_DOCUMENT: true,
+          ADD_TAGS: ['style', 'link'],
           FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+          COMMENT: true,
         })
         // Generate title before creating item so it's saved properly
         const title = await generateHtmlTitle(htmlContent)
@@ -1449,11 +1452,11 @@ function App() {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
 
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
-    const { blocks: spatialItems, imageMap } = convertItemsToSpatialJson(selectedItems)
+    const { spatialData, imageMap } = convertItemsToSpatialJson(selectedItems)
 
     // Update debug panel with request payload
     const debugPayload = {
-      spatialItems,
+      spatialData,
       userPrompt: promptItem.text,
       model: promptItem.model,
       imageMapKeys: Array.from(imageMap.keys()),
@@ -1461,13 +1464,15 @@ function App() {
     setDebugContent(JSON.stringify(debugPayload, null, 2))
 
     try {
-      let html = await generateHtml(spatialItems, promptItem.text, promptItem.model)
+      let html = await generateHtml(spatialData, promptItem.text, promptItem.model)
 
       // Replace image placeholder IDs with actual source URLs
       html = replaceImagePlaceholders(html, imageMap)
 
       // Sanitize LLM-generated HTML
       html = DOMPurify.sanitize(html, {
+        WHOLE_DOCUMENT: true,
+        ADD_TAGS: ['style', 'link'],
         FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
       })
 
@@ -2077,6 +2082,7 @@ function App() {
         <DebugPanel
           content={debugContent}
           onClose={() => setDebugPanelOpen(false)}
+          onClear={() => setDebugContent('')}
         />
       )}
       <StatusBar
