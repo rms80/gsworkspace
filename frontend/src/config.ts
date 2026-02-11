@@ -25,6 +25,12 @@ export const config = {
      * Set VITE_FEATURE_DEBUG_MENU=true to enable.
      */
     debugMenu: import.meta.env.VITE_FEATURE_DEBUG_MENU === 'true',
+
+    /**
+     * Sanitize LLM-generated HTML with DOMPurify before rendering.
+     * Strips scripts, iframes, etc. Disable for debugging output issues.
+     */
+    sanitizeHtml: true,
   },
 
   /**

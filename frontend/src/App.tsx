@@ -22,6 +22,7 @@ import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { snapToGrid } from './utils/grid'
 import DOMPurify from 'dompurify'
+import { config } from './config'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
@@ -1267,12 +1268,14 @@ function App() {
       if (isHtmlContent(result)) {
         // Create an HTML view item for webpage content
         // Strip code fences that LLMs often wrap around HTML
-        const htmlContent = DOMPurify.sanitize(stripCodeFences(result).trim(), {
-          WHOLE_DOCUMENT: true,
-          ADD_TAGS: ['style', 'link'],
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-          COMMENT: true,
-        })
+        const strippedHtml = stripCodeFences(result).trim()
+        const htmlContent = config.features.sanitizeHtml
+          ? DOMPurify.sanitize(strippedHtml, {
+              WHOLE_DOCUMENT: true,
+              ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+              FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+            })
+          : strippedHtml
         // Generate title before creating item so it's saved properly
         const title = await generateHtmlTitle(htmlContent)
         newItem = {
@@ -1470,11 +1473,14 @@ function App() {
       html = replaceImagePlaceholders(html, imageMap)
 
       // Sanitize LLM-generated HTML
-      html = DOMPurify.sanitize(html, {
-        WHOLE_DOCUMENT: true,
-        ADD_TAGS: ['style', 'link'],
-        FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-      })
+      if (config.features.sanitizeHtml) {
+        html = DOMPurify.sanitize(html, {
+          WHOLE_DOCUMENT: true,
+          ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+          ADD_ATTR: ['charset', 'content'],
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        })
+      }
 
       // Position output to the right of the prompt, aligned with top
       // Find existing outputs to stack vertically

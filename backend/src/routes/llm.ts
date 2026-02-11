@@ -60,11 +60,11 @@ function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): stri
   return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API request failed. Check the server logs for details.`
 }
 
-// Load HTML generation system prompt
-const htmlGenSystemPrompt = readFileSync(
-  join(__dirname, '../../prompts/html-gen-system.txt'),
-  'utf-8'
-)
+const htmlGenSystemPromptPath = join(__dirname, '../../prompts/html-gen-system.txt')
+
+function loadHtmlGenSystemPrompt(): string {
+  return readFileSync(htmlGenSystemPromptPath, 'utf-8')
+}
 
 type LLMModel = ClaudeModel | GeminiModel
 
@@ -183,9 +183,9 @@ router.post('/generate-html', async (req, res) => {
     let html: string
 
     if (isGeminiModel(selectedModel)) {
-      html = await generateHtmlWithGemini(htmlGenSystemPrompt, combinedUserPrompt, selectedModel)
+      html = await generateHtmlWithGemini(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
     } else if (isClaudeModel(selectedModel)) {
-      html = await generateHtmlWithClaude(htmlGenSystemPrompt, combinedUserPrompt, selectedModel)
+      html = await generateHtmlWithClaude(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
     } else {
       return res.status(400).json({ error: `Unknown model: ${selectedModel}` })
     }
