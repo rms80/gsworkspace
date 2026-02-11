@@ -932,7 +932,7 @@ function App() {
       x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
       y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'HTML Gen',
-      text: 'Describe the webpage you want to create...',
+      text: 'create a professional-looking tutorial page for this content',
       fontSize: 14,
       width,
       height,
@@ -1276,6 +1276,11 @@ function App() {
               FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
             })
           : strippedHtml
+        // If an HTML item is among the selected inputs, match its dimensions/zoom
+        const inputHtmlItem = selectedItems.find((item) => item.type === 'html')
+        const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
+        const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
+        const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
         // Generate title before creating item so it's saved properly
         const title = await generateHtmlTitle(htmlContent)
         newItem = {
@@ -1285,9 +1290,9 @@ function App() {
           x: outputX,
           y: outputY,
           html: htmlContent,
-          width: 800,
-          height: 300,
-          zoom: 0.75,
+          width: htmlWidth,
+          height: htmlHeight,
+          zoom: htmlZoom,
         }
       } else {
         // Create a text item for regular text content

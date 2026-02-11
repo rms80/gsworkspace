@@ -1319,16 +1319,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
           const isSelected = selectedIds.includes(item.id)
+          // Allow iframe interaction when selected and not dragging
+          const iframeInteractive = isSelected && !isAnyDragActive
           return (
             <div
               key={`html-${item.id}`}
-              onWheel={isSelected ? (e) => {
-                // Forward scroll to iframe content when selected
-                const iframe = e.currentTarget.querySelector('iframe')
-                if (iframe?.contentWindow) {
-                  iframe.contentWindow.scrollBy(e.deltaX, e.deltaY)
-                }
-              } : undefined}
               style={{
                 position: 'absolute',
                 top: (y + HTML_HEADER_HEIGHT) * stageScale + stagePos.y,
@@ -1338,8 +1333,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
                 zIndex: Z_IFRAME_OVERLAY,
-                // Let clicks/wheel pass through to Konva canvas when not selected
-                pointerEvents: isSelected ? 'auto' : 'none',
+                // Let clicks/wheel pass through to Konva canvas when not selected or dragging
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
               }}
             >
               <iframe
@@ -1351,7 +1346,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   border: 'none',
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
-                  pointerEvents: 'none',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#fff',
                 }}
               />
