@@ -117,6 +117,7 @@ export interface PdfItem extends BaseItem {
   height: number
   fileSize?: number
   minimized?: boolean
+  thumbnailSrc?: string
 }
 
 export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | PdfItem

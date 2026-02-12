@@ -111,6 +111,31 @@ router.post('/upload-pdf', async (req, res) => {
   }
 })
 
+// Upload PDF thumbnail
+router.post('/upload-pdf-thumbnail', async (req, res) => {
+  try {
+    const { imageData, sceneId, itemId } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.thumb.png`
+
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+    await save(key, Buffer.from(base64Data, 'base64'), 'image/png')
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading PDF thumbnail:', error)
+    res.status(500).json({ error: 'Failed to upload PDF thumbnail' })
+  }
+})
+
 // Upload video (multipart/form-data) — transcodes non-browser-native formats to MP4
 router.post('/upload-video', upload.single('video'), async (req, res) => {
   const tempDir = os.tmpdir()

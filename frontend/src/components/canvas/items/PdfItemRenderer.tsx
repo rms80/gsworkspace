@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from 'react'
 import { Rect, Text, Group, Image as KonvaImage } from 'react-konva'
 import Konva from 'konva'
 import { PdfItem } from '../../../types'
@@ -10,17 +10,10 @@ import {
 import { snapToGrid } from '../../../utils/grid'
 import { config } from '../../../config'
 
-interface ThumbnailData {
-  dataUrl: string
-  width: number
-  height: number
-}
-
 interface PdfItemRendererProps {
   item: PdfItem
   isSelected: boolean
   editingPdfLabelId: string | null
-  thumbnailData?: ThumbnailData
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<PdfItem>) => void
   onLabelDblClick: (id: string) => void
@@ -51,7 +44,6 @@ export default function PdfItemRenderer({
   item,
   isSelected,
   editingPdfLabelId,
-  thumbnailData,
   onItemClick,
   onUpdateItem,
   onLabelDblClick,
@@ -60,13 +52,16 @@ export default function PdfItemRenderer({
   setIsViewportTransforming,
 }: PdfItemRendererProps) {
   const minimized = item.minimized ?? false
-  const thumbnailImage = useLoadedImage(minimized ? thumbnailData?.dataUrl : undefined)
+  const thumbnailImage = useLoadedImage(minimized ? item.thumbnailSrc : undefined)
+  const labelTextRef = useRef<Konva.Text>(null)
+  const [labelHeight, setLabelHeight] = useState(14) // single line default
 
   // Fit thumbnail inside the box (contain-fit, no cropping)
   const fitProps = useMemo(() => {
-    if (!thumbnailData || !thumbnailImage) return null
-    const imgW = thumbnailData.width
-    const imgH = thumbnailData.height
+    if (!thumbnailImage) return null
+    const imgW = thumbnailImage.naturalWidth
+    const imgH = thumbnailImage.naturalHeight
+    if (!imgW || !imgH) return null
     const boxW = PDF_MINIMIZED_WIDTH
     const boxH = PDF_MINIMIZED_HEIGHT
     const scale = Math.min(boxW / imgW, boxH / imgH)
@@ -76,7 +71,17 @@ export default function PdfItemRenderer({
     const x = (boxW - w) / 2
     const y = (boxH - h) / 2
     return { x, y, w, h }
-  }, [thumbnailData, thumbnailImage])
+  }, [thumbnailImage])
+
+  // Measure wrapped label text height
+  useLayoutEffect(() => {
+    if (minimized && labelTextRef.current) {
+      setLabelHeight(labelTextRef.current.height())
+    }
+  }, [minimized, item.name])
+
+  const labelPadding = 6
+  const labelBarHeight = labelHeight + labelPadding * 2
 
   if (minimized) {
     return (
@@ -160,7 +165,7 @@ export default function PdfItemRenderer({
         />
         <Text
           x={0}
-          y={3}
+          y={5}
           text="PDF"
           width={40}
           fontSize={12}
@@ -168,22 +173,23 @@ export default function PdfItemRenderer({
           fill="#fff"
           align="center"
         />
-        {/* Bottom bar with name */}
+        {/* Bottom bar with name (grows upward for wrapped text) */}
         <Rect
-          y={PDF_MINIMIZED_HEIGHT - 20}
+          y={PDF_MINIMIZED_HEIGHT - labelBarHeight}
           width={PDF_MINIMIZED_WIDTH}
-          height={20}
+          height={labelBarHeight}
           fill="rgba(0,0,0,0.5)"
           cornerRadius={[0, 0, 6, 6]}
         />
         <Text
+          ref={labelTextRef}
           x={6}
-          y={PDF_MINIMIZED_HEIGHT - 17}
+          y={PDF_MINIMIZED_HEIGHT - labelBarHeight + labelPadding}
           text={item.name || 'PDF'}
           fontSize={11}
           fill="#fff"
           width={PDF_MINIMIZED_WIDTH - 12}
-          ellipsis={true}
+          wrap="word"
         />
         {/* Border on top of everything */}
         <Rect

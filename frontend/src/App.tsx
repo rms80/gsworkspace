@@ -27,7 +27,9 @@ import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
-import { uploadPdf } from './api/pdfs'
+import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
+import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
+import { PDF_MINIMIZED_HEIGHT } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
@@ -1027,7 +1029,7 @@ function App() {
   )
 
   const addPdfAt = useCallback(
-    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => {
       const existingNames = getExistingPdfNames(items)
       const uniqueName = generateUniqueName(name || 'PDF', existingNames)
 
@@ -1041,6 +1043,7 @@ function App() {
         width,
         height,
         fileSize,
+        thumbnailSrc,
       }
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
@@ -1060,8 +1063,16 @@ function App() {
       try {
         startOperation()
         const s3Url = await uploadPdf(dataUrl, activeSceneId, itemId, file.name || 'document.pdf')
+        // Generate and upload thumbnail
+        let thumbnailSrc: string | undefined
+        try {
+          const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+          thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId, itemId)
+        } catch (thumbErr) {
+          console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+        }
         endOperation()
-        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 700, name, fileSize)
+        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 700, name, fileSize, thumbnailSrc)
       } catch (err) {
         endOperation()
         console.error('Failed to upload PDF:', err)
@@ -2018,8 +2029,15 @@ function App() {
             try {
               startOperation()
               const s3Url = await uploadPdf(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.pdf`)
+              let thumbnailSrc: string | undefined
+              try {
+                const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+                thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId!, itemId)
+              } catch (thumbErr) {
+                console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+              }
               endOperation()
-              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 700, name, fileSize)
+              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 700, name, fileSize, thumbnailSrc)
             } catch (err) {
               endOperation()
               console.error('Failed to upload PDF:', err)

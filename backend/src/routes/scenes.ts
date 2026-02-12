@@ -169,6 +169,7 @@ interface StoredPdfItem extends StoredItemBase {
   name?: string
   fileSize?: number
   minimized?: boolean
+  thumbFile?: string
 }
 
 type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredPdfItem
@@ -694,6 +695,56 @@ router.post('/:id', async (req, res) => {
         }
 
         if (pdfSaved) {
+          // Handle thumbnail
+          let thumbFile: string | undefined = undefined
+          if (item.thumbnailSrc) {
+            const thumbFileName = `${item.id}.thumb.png`
+            if (item.thumbnailSrc.startsWith('data:')) {
+              const matches = item.thumbnailSrc.match(/^data:([^;]+);base64,(.+)$/)
+              if (matches) {
+                await save(
+                  `${sceneFolder}/${thumbFileName}`,
+                  Buffer.from(matches[2], 'base64'),
+                  matches[1]
+                )
+                thumbFile = thumbFileName
+              }
+            } else {
+              // URL — check if it already points to this scene folder
+              if (item.thumbnailSrc.includes(`/${sceneFolder}/`)) {
+                thumbFile = thumbFileName
+              } else {
+                const thumbKey = `${sceneFolder}/${thumbFileName}`
+                const alreadyExists = await exists(thumbKey)
+                if (alreadyExists) {
+                  thumbFile = thumbFileName
+                } else {
+                  try {
+                    let buffer: Buffer | null = null
+                    if (item.thumbnailSrc.startsWith('/api/local-files/')) {
+                      const localKey = item.thumbnailSrc.slice('/api/local-files/'.length)
+                      buffer = await loadAsBuffer(localKey)
+                    } else {
+                      const validation = validateItemSrcUrl(item.thumbnailSrc)
+                      if (validation.valid && validation.type === 's3') {
+                        const response = await fetch(item.thumbnailSrc)
+                        if (response.ok) {
+                          buffer = Buffer.from(await response.arrayBuffer())
+                        }
+                      }
+                    }
+                    if (buffer) {
+                      await save(thumbKey, buffer, 'image/png')
+                      thumbFile = thumbFileName
+                    }
+                  } catch (err) {
+                    console.error(`Failed to save PDF thumbnail for ${item.id}:`, err)
+                  }
+                }
+              }
+            }
+          }
+
           storedItems.push({
             id: item.id,
             type: 'pdf',
@@ -705,6 +756,7 @@ router.post('/:id', async (req, res) => {
             name: item.name,
             fileSize: item.fileSize,
             minimized: item.minimized,
+            thumbFile,
           })
         } else {
           console.error(`Failed to save PDF ${item.id}, skipping from scene`)
@@ -887,6 +939,7 @@ router.get('/:id', async (req, res) => {
           }
         } else if (item.type === 'pdf') {
           const pdfUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          const thumbnailSrc = item.thumbFile ? getPublicUrl(`${sceneFolder}/${item.thumbFile}`) : undefined
           return {
             id: item.id,
             type: 'pdf' as const,
@@ -898,6 +951,7 @@ router.get('/:id', async (req, res) => {
             name: item.name,
             fileSize: item.fileSize,
             minimized: item.minimized,
+            thumbnailSrc,
           }
         } else {
           // For HTML items, load the HTML file

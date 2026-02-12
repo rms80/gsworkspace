@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
-import { uploadPdf } from '../api/pdfs'
+import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
@@ -44,7 +44,7 @@ import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -77,7 +77,7 @@ interface InfiniteCanvasProps {
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
   onBatchTransform?: (entries: TransformEntry[]) => void
-  onAddPdfAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
+  onAddPdfAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => void
   onTogglePdfMinimized?: (id: string) => void
 }
 
@@ -449,7 +449,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const [pdfItemTransforms, setPdfItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingPdfLabelId, setEditingPdfLabelId] = useState<string | null>(null)
   const pdfLabelInputRef = useRef<HTMLInputElement>(null)
-  const [pdfThumbnails, setPdfThumbnails] = useState<Map<string, { dataUrl: string; width: number; height: number }>>(new Map())
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -870,8 +869,15 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           try {
             startOperation()
             const s3Url = await uploadPdf(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.pdf`)
+            let thumbnailSrc: string | undefined
+            try {
+              const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+              thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, sceneId, itemId)
+            } catch (thumbErr) {
+              console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+            }
             endOperation()
-            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 700, name, fileSize)
+            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 700, name, fileSize, thumbnailSrc)
           } catch (err) {
             endOperation()
             console.error('Failed to upload PDF, using data URL:', err)
@@ -1062,28 +1068,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   }
   const editingPdfItem = getEditingPdfItem()
 
-  // Wrap toggle to capture thumbnail before minimizing
   const handleTogglePdfMinimized = useCallback((id: string) => {
-    const item = items.find(i => i.id === id)
-    if (!item || item.type !== 'pdf') return
-    const wasMinimized = item.minimized ?? false
-
-    // Toggle immediately
     onTogglePdfMinimized?.(id)
-
-    // If minimizing (was expanded), capture page 1 as thumbnail
-    if (!wasMinimized) {
-      renderPdfPageToDataUrl(item.src, 1, PDF_MINIMIZED_HEIGHT * 2)
-        .then(result => {
-          setPdfThumbnails(prev => {
-            const next = new Map(prev)
-            next.set(id, result)
-            return next
-          })
-        })
-        .catch(err => console.error('Failed to capture PDF thumbnail:', err))
-    }
-  }, [items, onTogglePdfMinimized])
+  }, [onTogglePdfMinimized])
 
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
@@ -1264,7 +1251,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 item={item}
                 isSelected={selectedIds.includes(item.id)}
                 editingPdfLabelId={editingPdfLabelId}
-                thumbnailData={pdfThumbnails.get(item.id)}
                 onItemClick={handleItemClick}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handlePdfLabelDblClick}

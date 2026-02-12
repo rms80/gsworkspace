@@ -30,3 +30,25 @@ export async function uploadPdf(
   const result: UploadPdfResult = await response.json()
   return result.url
 }
+
+/**
+ * Upload a PDF thumbnail (PNG data URL) to storage and return the public URL.
+ */
+export async function uploadPdfThumbnail(
+  dataUrl: string,
+  sceneId: string,
+  itemId: string,
+): Promise<string> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(itemId, 'item ID')
+  const response = await fetch(`${API_BASE}/upload-pdf-thumbnail`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageData: dataUrl, sceneId, itemId }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to upload PDF thumbnail: ${response.statusText}`)
+  }
+  const result: UploadPdfResult = await response.json()
+  return result.url
+}
