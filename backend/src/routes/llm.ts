@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
-import { LLMRequestItem, ResolvedContentItem, resolveImageData } from '../services/llmTypes.js'
+import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -82,6 +82,13 @@ async function resolveItems(workspace: string, items: LLMRequestItem[]): Promise
         resolved.push({ type: 'image', imageData })
       } else {
         throw new Error(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
+      }
+    } else if (item.type === 'pdf' && item.id && item.sceneId) {
+      const pdfData = await resolvePdfData(workspace, item.sceneId, item.id)
+      if (pdfData) {
+        resolved.push({ type: 'pdf', pdfData })
+      } else {
+        throw new Error(`Could not resolve PDF ${item.id} in scene ${item.sceneId}`)
       }
     }
   }

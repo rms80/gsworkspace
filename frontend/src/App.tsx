@@ -1311,6 +1311,13 @@ function App() {
         }
         // Online mode: send ID so backend resolves from storage
         return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
+      } else if (item.type === 'pdf') {
+        if (isOffline) {
+          // Offline mode: send src URL directly to client-side LLM
+          return { type: 'pdf' as const, src: item.src }
+        }
+        // Online mode: send ID so backend resolves from storage
+        return { type: 'pdf' as const, id: item.id, sceneId: activeSceneId! }
       } else if (item.type === 'prompt') {
         return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
       } else if (item.type === 'html') {

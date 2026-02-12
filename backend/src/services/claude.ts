@@ -37,6 +37,16 @@ export async function generateText(
           data: item.imageData.base64,
         },
       })
+    } else if (item.type === 'pdf' && item.pdfData) {
+      // The Anthropic API supports document blocks but the SDK types may not include them yet
+      contentBlocks.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: item.pdfData.base64,
+        },
+      } as unknown as Anthropic.ImageBlockParam)
     }
   }
 

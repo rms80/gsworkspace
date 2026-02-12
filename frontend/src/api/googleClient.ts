@@ -23,7 +23,7 @@ const IMAGE_GEN_MODEL_IDS: Record<ImageGenModel, string> = {
 }
 
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf'
   text?: string
   src?: string
 }
@@ -102,7 +102,7 @@ async function callGemini(modelId: string, request: GeminiRequest): Promise<Gemi
   return response.json()
 }
 
-function buildContentParts(items: ContentItem[]): GeminiPart[] {
+async function buildContentParts(items: ContentItem[]): Promise<GeminiPart[]> {
   const parts: GeminiPart[] = []
 
   for (const item of items) {
@@ -125,6 +125,20 @@ function buildContentParts(items: ContentItem[]): GeminiPart[] {
       }
       // Note: For URLs, we'd need to fetch and convert to base64
       // Skipping URL images in offline mode for simplicity
+    } else if (item.type === 'pdf' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+        parts.push({
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: base64,
+          },
+        })
+      } catch (err) {
+        console.warn('Failed to fetch PDF for LLM context:', err)
+      }
     }
   }
 
@@ -136,7 +150,7 @@ export async function generateTextWithGemini(
   prompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
-  const parts = buildContentParts(items)
+  const parts = await buildContentParts(items)
 
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })
@@ -223,7 +237,7 @@ export async function generateImageWithGemini(
   prompt: string,
   model: ImageGenModel = 'gemini-imagen'
 ): Promise<GeneratedImage[]> {
-  const parts = buildContentParts(items)
+  const parts = await buildContentParts(items)
 
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })

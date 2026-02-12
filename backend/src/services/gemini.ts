@@ -51,6 +51,13 @@ export async function generateTextWithGemini(
           data: item.imageData.base64,
         },
       })
+    } else if (item.type === 'pdf' && item.pdfData) {
+      parts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: item.pdfData.base64,
+        },
+      })
     }
   }
 
@@ -90,6 +97,13 @@ export async function generateImageWithGemini(
         inlineData: {
           mimeType: item.imageData.mimeType,
           data: item.imageData.base64,
+        },
+      })
+    } else if (item.type === 'pdf' && item.pdfData) {
+      parts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: item.pdfData.base64,
         },
       })
     }

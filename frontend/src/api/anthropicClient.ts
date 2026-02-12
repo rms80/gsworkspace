@@ -18,7 +18,7 @@ const MODEL_IDS: Record<ClaudeModel, string> = {
 }
 
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf'
   text?: string
   src?: string
 }
@@ -37,7 +37,16 @@ interface AnthropicImageBlock {
   }
 }
 
-type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock
+interface AnthropicDocumentBlock {
+  type: 'document'
+  source: {
+    type: 'base64'
+    media_type: 'application/pdf'
+    data: string
+  }
+}
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock | AnthropicDocumentBlock
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -95,7 +104,7 @@ async function callAnthropic(request: AnthropicRequest): Promise<string> {
   return textContent?.text ?? ''
 }
 
-function buildContentBlocks(items: ContentItem[]): AnthropicContentBlock[] {
+async function buildContentBlocks(items: ContentItem[]): Promise<AnthropicContentBlock[]> {
   const contentBlocks: AnthropicContentBlock[] = []
 
   for (const item of items) {
@@ -123,6 +132,22 @@ function buildContentBlocks(items: ContentItem[]): AnthropicContentBlock[] {
       }
       // Note: For URLs, we'd need to fetch and convert to base64, which is complex in the browser
       // For now, we skip URL images in offline mode (most user images will be data URLs anyway)
+    } else if (item.type === 'pdf' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+        contentBlocks.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: base64,
+          },
+        })
+      } catch (err) {
+        console.warn('Failed to fetch PDF for LLM context:', err)
+      }
     }
   }
 
@@ -134,7 +159,7 @@ export async function generateTextWithAnthropic(
   prompt: string,
   model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
-  const contentBlocks = buildContentBlocks(items)
+  const contentBlocks = await buildContentBlocks(items)
 
   // Add the user's prompt
   contentBlocks.push({

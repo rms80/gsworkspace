@@ -19,10 +19,10 @@ function isGeminiModel(model: string): boolean {
 
 /** Used by offline-mode clients (anthropicClient, googleClient) which handle data URLs directly */
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf'
   text?: string
   src?: string
-  // Online-mode fields: image items send IDs so the backend resolves them from storage
+  // Online-mode fields: image/pdf items send IDs so the backend resolves them from storage
   id?: string
   sceneId?: string
   useEdited?: boolean
@@ -30,7 +30,7 @@ export interface ContentItem {
 
 /** Shape sent to backend in online mode (only id/sceneId/useEdited, no src) */
 interface BackendItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf'
   text?: string
   id?: string
   sceneId?: string
@@ -42,6 +42,9 @@ function toBackendItems(items: ContentItem[]): BackendItem[] {
   return items.map((item) => {
     if (item.type === 'image') {
       return { type: item.type, id: item.id, sceneId: item.sceneId, useEdited: item.useEdited }
+    }
+    if (item.type === 'pdf') {
+      return { type: item.type, id: item.id, sceneId: item.sceneId }
     }
     return { type: item.type, text: item.text }
   })
