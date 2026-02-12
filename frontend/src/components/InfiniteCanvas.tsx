@@ -97,6 +97,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const imageGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
+  const pdfTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
 
   // Multi-select drag coordination ref
@@ -474,11 +475,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
       { type: 'html', ref: htmlTransformerRef },
+      { type: 'pdf', ref: pdfTransformerRef, filterItem: (item) => item.type === 'pdf' && !item.minimized },
     ],
   })
 
   // 13. Multi-select drag coordination (Layer-level handlers)
-  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef]
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef]
 
   const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     // Guard: if already tracking a drag (e.g. Transformer started drag on
@@ -1387,6 +1389,19 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         {/* Transformer for HTML views - free scaling, no rotation */}
         <Transformer
           ref={htmlTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+        {/* Transformer for PDFs - free resize, no rotation */}
+        <Transformer
+          ref={pdfTransformerRef}
           rotateEnabled={false}
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
           keepRatio={false}

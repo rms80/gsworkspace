@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Konva from 'konva'
 import { CanvasItem, SelectionRect } from '../types'
+import { PDF_MINIMIZED_WIDTH, PDF_MINIMIZED_HEIGHT } from '../constants/canvas'
 
 interface UseCanvasSelectionParams {
   items: CanvasItem[]
@@ -114,8 +115,10 @@ export function useCanvasSelection({
 
     const foundIds = items
       .filter((item) => {
-        const itemRight = item.x + item.width
-        const itemBottom = item.y + item.height
+        const w = (item.type === 'pdf' && item.minimized) ? PDF_MINIMIZED_WIDTH : item.width
+        const h = (item.type === 'pdf' && item.minimized) ? PDF_MINIMIZED_HEIGHT : item.height
+        const itemRight = item.x + w
+        const itemBottom = item.y + h
         return (
           item.x < selectionRect.x + selectionRect.width &&
           itemRight > selectionRect.x &&

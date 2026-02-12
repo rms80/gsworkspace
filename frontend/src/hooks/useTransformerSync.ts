@@ -7,6 +7,7 @@ interface TransformerConfig {
   ref: RefObject<Konva.Transformer | null>
   excludeId?: string | null
   childName?: string
+  filterItem?: (item: CanvasItem) => boolean
 }
 
 interface UseTransformerSyncParams {
@@ -25,12 +26,13 @@ export function useTransformerSync({
   useEffect(() => {
     if (!stageRef.current) return
 
-    for (const { type, ref, excludeId, childName } of transformers) {
+    for (const { type, ref, excludeId, childName, filterItem } of transformers) {
       const nodes = items
         .filter((item) =>
           selectedIds.includes(item.id) &&
           item.type === type &&
-          (excludeId == null || item.id !== excludeId)
+          (excludeId == null || item.id !== excludeId) &&
+          (filterItem == null || filterItem(item))
         )
         .map((item) => {
           const node = stageRef.current?.findOne(`#${item.id}`)
