@@ -2,9 +2,11 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
+import { uploadPdf } from '../api/pdfs'
+import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
@@ -17,11 +19,13 @@ import ImageItemRenderer from './canvas/items/ImageItemRenderer'
 import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
+import PdfItemRenderer from './canvas/items/PdfItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
+import PdfLabelEditingOverlay from './canvas/overlays/PdfLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import GifOverlay from './canvas/overlays/GifOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
@@ -40,7 +44,7 @@ import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -73,6 +77,8 @@ interface InfiniteCanvasProps {
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
   onBatchTransform?: (entries: TransformEntry[]) => void
+  onAddPdfAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => void
+  onTogglePdfMinimized?: (id: string) => void
 }
 
 export interface CanvasHandle {
@@ -80,7 +86,7 @@ export interface CanvasHandle {
   fitToView: () => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -440,6 +446,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const videoLabelInputRef = useRef<HTMLInputElement>(null)
   const [editingImageLabelId, setEditingImageLabelId] = useState<string | null>(null)
   const imageLabelInputRef = useRef<HTMLInputElement>(null)
+  const [pdfItemTransforms, setPdfItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [editingPdfLabelId, setEditingPdfLabelId] = useState<string | null>(null)
+  const pdfLabelInputRef = useRef<HTMLInputElement>(null)
+  const [pdfThumbnails, setPdfThumbnails] = useState<Map<string, { dataUrl: string; width: number; height: number }>>(new Map())
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -562,6 +572,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
           return next
         })
+      } else if (item.type === 'pdf' && !item.minimized) {
+        setPdfItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
+          return next
+        })
       }
     }
   }, [items, selectedIds, stageScale, gifIds])
@@ -612,6 +628,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       return next
     })
     setHtmlItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setPdfItemTransforms((prev) => {
       const next = new Map(prev)
       for (const { id } of otherNodes) next.delete(id)
       return next
@@ -837,6 +858,29 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         }
         offsetIndex++
       }
+      // Handle PDF files
+      else if (file.type === 'application/pdf' && onAddPdfAt) {
+        const reader = new FileReader()
+        const fileName = file.name
+        const fileSize = file.size
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result as string
+          const itemId = uuidv4()
+          const name = fileName.replace(/\.[^/.]+$/, '')
+          try {
+            startOperation()
+            const s3Url = await uploadPdf(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.pdf`)
+            endOperation()
+            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 700, name, fileSize)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload PDF, using data URL:', err)
+            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
+          }
+        }
+        reader.readAsDataURL(file)
+        offsetIndex++
+      }
     }
   }
 
@@ -985,6 +1029,61 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     return item
   }
   const editingImageItem = getEditingImageItem()
+
+  // PDF item label editing handlers
+  const handlePdfLabelDblClick = (id: string) => {
+    setEditingPdfLabelId(id)
+    setTimeout(() => {
+      pdfLabelInputRef.current?.focus()
+      pdfLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handlePdfLabelBlur = () => {
+    if (editingPdfLabelId && pdfLabelInputRef.current) {
+      onUpdateItem(editingPdfLabelId, { name: pdfLabelInputRef.current.value })
+    }
+    setEditingPdfLabelId(null)
+  }
+
+  const handlePdfLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingPdfLabelId(null)
+    } else if (e.key === 'Enter') {
+      handlePdfLabelBlur()
+    }
+  }
+
+  const getEditingPdfItem = (): PdfItem | null => {
+    if (!editingPdfLabelId) return null
+    const item = items.find((i) => i.id === editingPdfLabelId)
+    if (!item || item.type !== 'pdf') return null
+    return item
+  }
+  const editingPdfItem = getEditingPdfItem()
+
+  // Wrap toggle to capture thumbnail before minimizing
+  const handleTogglePdfMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'pdf') return
+    const wasMinimized = item.minimized ?? false
+
+    // Toggle immediately
+    onTogglePdfMinimized?.(id)
+
+    // If minimizing (was expanded), capture page 1 as thumbnail
+    if (!wasMinimized) {
+      renderPdfPageToDataUrl(item.src, 1, PDF_MINIMIZED_HEIGHT * 2)
+        .then(result => {
+          setPdfThumbnails(prev => {
+            const next = new Map(prev)
+            next.set(id, result)
+            return next
+          })
+        })
+        .catch(err => console.error('Failed to capture PDF thumbnail:', err))
+    }
+  }, [items, onTogglePdfMinimized])
 
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
@@ -1155,6 +1254,22 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleHtmlLabelDblClick}
                 setHtmlItemTransforms={setHtmlItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
+            )
+          } else if (item.type === 'pdf') {
+            return (
+              <PdfItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                editingPdfLabelId={editingPdfLabelId}
+                thumbnailData={pdfThumbnails.get(item.id)}
+                onItemClick={handleItemClick}
+                onUpdateItem={handleUpdateItem}
+                onLabelDblClick={handlePdfLabelDblClick}
+                onToggleMinimized={handleTogglePdfMinimized}
+                setPdfItemTransforms={setPdfItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
               />
             )
@@ -1346,6 +1461,47 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   border: 'none',
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          )
+        })}
+
+      {/* PDF iframe overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'pdf' && !(item as PdfItem).minimized)
+        .map((item) => {
+          if (item.type !== 'pdf') return null
+          const transform = pdfItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
+          const isSelected = selectedIds.includes(item.id)
+          const iframeInteractive = isSelected && !isAnyDragActive
+          return (
+            <div
+              key={`pdf-${item.id}`}
+              style={{
+                position: 'absolute',
+                top: (y + PDF_HEADER_HEIGHT) * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
+                overflow: 'hidden',
+                borderRadius: '0 0 4px 4px',
+                zIndex: Z_IFRAME_OVERLAY,
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
+              }}
+            >
+              <iframe
+                src={`${item.src}#navpanes=0&toolbar=1&view=FitH`}
+                style={{
+                  width: width * stageScale,
+                  height: height * stageScale,
+                  border: 'none',
                   pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#fff',
                 }}
@@ -1554,6 +1710,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           stagePos={stagePos}
           onBlur={handleImageLabelBlur}
           onKeyDown={handleImageLabelKeyDown}
+        />
+      )}
+
+      {/* PDF label editing overlay */}
+      {editingPdfItem && (
+        <PdfLabelEditingOverlay
+          item={editingPdfItem}
+          inputRef={pdfLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handlePdfLabelBlur}
+          onKeyDown={handlePdfLabelKeyDown}
         />
       )}
 

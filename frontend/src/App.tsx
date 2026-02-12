@@ -27,7 +27,8 @@ import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
-import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
+import { uploadPdf } from './api/pdfs'
+import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
@@ -1025,6 +1026,51 @@ function App() {
     [updateActiveSceneItems, pushChange, items]
   )
 
+  const addPdfAt = useCallback(
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number) => {
+      const existingNames = getExistingPdfNames(items)
+      const uniqueName = generateUniqueName(name || 'PDF', existingNames)
+
+      const newItem: CanvasItem = {
+        id,
+        type: 'pdf',
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
+        src,
+        name: uniqueName,
+        width,
+        height,
+        fileSize,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange, items]
+  )
+
+  const handleAddPdf = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    const itemId = uuidv4()
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      const name = file.name.replace(/\.[^/.]+$/, '')
+      const fileSize = file.size
+      try {
+        startOperation()
+        const s3Url = await uploadPdf(dataUrl, activeSceneId, itemId, file.name || 'document.pdf')
+        endOperation()
+        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 700, name, fileSize)
+      } catch (err) {
+        endOperation()
+        console.error('Failed to upload PDF:', err)
+        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, dataUrl, 600, 700, name, fileSize)
+      }
+    }
+    reader.readAsDataURL(file)
+  }, [activeSceneId, addPdfAt, startOperation, endOperation])
+
   // Upload a video at a specific canvas position (called by InfiniteCanvas drop handler)
   const handleUploadVideoAt = useCallback(async (file: File, x: number, y: number) => {
     try {
@@ -1082,7 +1128,7 @@ function App() {
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
         const hasModel = 'model' in changes &&
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
+        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf')
 
         if (hasText && item.type === 'text') {
           // Only record if text actually changed
@@ -1138,6 +1184,13 @@ function App() {
     },
     [updateActiveSceneItems, items, pushChange]
   )
+
+  const togglePdfMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'pdf') return
+    const minimized = !(item.minimized ?? false)
+    updateItem(id, { minimized })
+  }, [items, updateItem])
 
   const batchTransform = useCallback(
     (entries: TransformEntry[]) => {
@@ -1954,12 +2007,33 @@ function App() {
           // Delegate to handleUploadVideoAt which handles placeholders
           handleUploadVideoAt(file, centerX + offsetIndex * 20, centerY + offsetIndex * 20)
           offsetIndex++
+        } else if (file.type === 'application/pdf') {
+          const reader = new FileReader()
+          const fileName = file.name
+          const fileSize = file.size
+          reader.onload = async (event) => {
+            const dataUrl = event.target?.result as string
+            const name = fileName.replace(/\.[^/.]+$/, '')
+            const itemId = uuidv4()
+            try {
+              startOperation()
+              const s3Url = await uploadPdf(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.pdf`)
+              endOperation()
+              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 700, name, fileSize)
+            } catch (err) {
+              endOperation()
+              console.error('Failed to upload PDF:', err)
+              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
+            }
+          }
+          reader.readAsDataURL(file)
+          offsetIndex++
         }
       }
     }
 
     processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt])
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt])
 
   if (authRequired && !authenticated) {
     return <LoginScreen serverName={serverName} onSuccess={handleLoginSuccess} />
@@ -1979,6 +2053,7 @@ function App() {
         onAddText={addTextItem}
         onAddImage={handleAddImage}
         onAddVideo={handleAddVideo}
+        onAddPdf={handleAddPdf}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
@@ -2066,6 +2141,8 @@ function App() {
           onAddHtmlGenPrompt={addHtmlGenPromptItem}
           videoPlaceholders={videoPlaceholders}
           onUploadVideoAt={handleUploadVideoAt}
+          onAddPdfAt={addPdfAt}
+          onTogglePdfMinimized={togglePdfMinimized}
         />
       ) : (
         <div

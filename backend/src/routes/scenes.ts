@@ -163,7 +163,15 @@ interface StoredHtmlGenPromptItem extends StoredItemBase {
   model: string
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem
+interface StoredPdfItem extends StoredItemBase {
+  type: 'pdf'
+  file: string
+  name?: string
+  fileSize?: number
+  minimized?: boolean
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredPdfItem
 
 interface StoredScene {
   id: string
@@ -294,6 +302,7 @@ router.get('/:id/content-data', async (req, res) => {
       mov: 'video/quicktime',
       avi: 'video/x-msvideo',
       html: 'text/html',
+      pdf: 'application/pdf',
     }
 
     res.setHeader('Content-Type', mimeTypes[foundExt] || 'application/octet-stream')
@@ -628,6 +637,78 @@ router.post('/:id', async (req, res) => {
           file: htmlFile,
           zoom: item.zoom,
         })
+      } else if (item.type === 'pdf') {
+        const pdfFile = `${item.id}.pdf`
+        let pdfSaved = false
+
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await save(
+              `${sceneFolder}/${pdfFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+            pdfSaved = true
+          }
+        } else {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected PDF URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              pdfSaved = true
+            } else {
+              const pdfKey = `${sceneFolder}/${pdfFile}`
+              const alreadyExists = await exists(pdfKey)
+              if (alreadyExists) {
+                pdfSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  const contentType = 'application/pdf'
+
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      buffer = Buffer.from(arrayBuffer)
+                    }
+                  }
+
+                  if (buffer) {
+                    await save(pdfKey, buffer, contentType)
+                    pdfSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch PDF from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (pdfSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'pdf',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: pdfFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+          })
+        } else {
+          console.error(`Failed to save PDF ${item.id}, skipping from scene`)
+        }
       }
     }
 
@@ -803,6 +884,20 @@ router.get('/:id', async (req, res) => {
             label: item.label,
             text: item.text,
             model: item.model || 'claude-sonnet',
+          }
+        } else if (item.type === 'pdf') {
+          const pdfUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'pdf' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: pdfUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
           }
         } else {
           // For HTML items, load the HTML file

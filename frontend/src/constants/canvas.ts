@@ -18,6 +18,12 @@ export const ZOOM_BUTTON_WIDTH = 24
 
 export const VIDEO_HEADER_HEIGHT = 24
 
+// --- PDF item dimensions ---
+
+export const PDF_HEADER_HEIGHT = 24
+export const PDF_MINIMIZED_WIDTH = 120
+export const PDF_MINIMIZED_HEIGHT = 160
+
 // --- Image item dimensions ---
 
 export const IMAGE_HEADER_HEIGHT = 24

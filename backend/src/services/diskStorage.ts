@@ -175,6 +175,7 @@ export function getContentTypeFromKey(key: string): string {
     '.webm': 'video/webm',
     '.ogg': 'video/ogg',
     '.mov': 'video/quicktime',
+    '.pdf': 'application/pdf',
   }
   return contentTypes[ext] || 'application/octet-stream'
 }

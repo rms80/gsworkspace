@@ -5,6 +5,7 @@ interface MenuBarProps {
   onAddText: () => void
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
+  onAddPdf: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
@@ -57,6 +58,7 @@ function MenuBar({
   onAddText,
   onAddImage,
   onAddVideo,
+  onAddPdf,
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
@@ -130,6 +132,7 @@ function MenuBar({
         { label: 'Text Block', onClick: onAddText, shortcut: 'T' },
         { label: 'Image', type: 'file-input', accept: 'image/*', onFileSelect: handleImageUpload },
         ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
+        { label: 'PDF', type: 'file-input' as const, accept: '.pdf,application/pdf', onFileSelect: onAddPdf },
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },

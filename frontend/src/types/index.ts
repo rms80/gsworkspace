@@ -109,7 +109,17 @@ export interface HTMLGenPromptItem extends BaseItem {
   model: LLMModel
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem
+export interface PdfItem extends BaseItem {
+  type: 'pdf'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  minimized?: boolean
+}
+
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | PdfItem
 
 export interface SelectionRect {
   x: number
