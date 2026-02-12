@@ -1466,7 +1466,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
           const isSelected = selectedIds.includes(item.id)
-          const iframeInteractive = isSelected && !isAnyDragActive
+          const isDragging = !!transform
+          const iframeInteractive = isSelected && !isAnyDragActive && !isDragging
           return (
             <div
               key={`pdf-${item.id}`}
