@@ -12,6 +12,7 @@ export type ChangeRecordType =
   | 'update_prompt'
   | 'update_model'
   | 'update_name'
+  | 'toggle_minimized'
   | 'selection'
   | 'multi_step'
 

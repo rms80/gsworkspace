@@ -18,6 +18,7 @@ export {
   UpdatePromptChange,
   UpdateModelChange,
   UpdateNameChange,
+  ToggleMinimizedChange,
   SelectionChange,
   MultiStepChange,
   deserializeChangeRecord,

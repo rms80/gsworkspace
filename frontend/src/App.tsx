@@ -44,6 +44,7 @@ import {
   UpdatePromptChange,
   UpdateModelChange,
   UpdateNameChange,
+  ToggleMinimizedChange,
   SelectionChange,
   MultiStepChange,
   ChangeRecord,
@@ -1158,12 +1159,18 @@ function App() {
           if (item.model !== changes.model) {
             pushChange(new UpdateModelChange(id, item.model, changes.model as string))
           }
-        } else if (hasName && (item.type === 'image' || item.type === 'video')) {
+        } else if (hasName && (item.type === 'image' || item.type === 'video' || item.type === 'pdf')) {
           // Only record if name actually changed
           const oldName = item.name
           const newName = changes.name as string | undefined
           if (oldName !== newName) {
             pushChange(new UpdateNameChange(id, oldName, newName))
+          }
+        } else if ('minimized' in changes && item.type === 'pdf') {
+          const oldMinimized = item.minimized ?? false
+          const newMinimized = changes.minimized as boolean
+          if (oldMinimized !== newMinimized) {
+            pushChange(new ToggleMinimizedChange(id, oldMinimized, newMinimized))
           }
         } else if (hasTransform) {
           const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
