@@ -205,7 +205,7 @@ export default function PdfItemRenderer({
   }
 
   // Expanded state
-  const MINIMIZE_BTN_WIDTH = 24
+  const MINIMIZE_BTN_WIDTH = 18
   const fileSizeText = formatFileSize(item.fileSize)
   const fileSizeWidth = fileSizeText ? fileSizeText.length * 7 + 8 : 0
 
@@ -317,7 +317,7 @@ export default function PdfItemRenderer({
       {fileSizeText && (
         <Text
           x={item.width - MINIMIZE_BTN_WIDTH - fileSizeWidth - 8}
-          y={6}
+          y={7}
           text={fileSizeText}
           fontSize={10}
           fill="#888"
@@ -326,7 +326,7 @@ export default function PdfItemRenderer({
       {/* Minimize button */}
       <Group
         x={item.width - MINIMIZE_BTN_WIDTH - 4}
-        y={2}
+        y={4}
         onClick={(e) => {
           e.cancelBubble = true
           onToggleMinimized(item.id)
@@ -334,15 +334,15 @@ export default function PdfItemRenderer({
       >
         <Rect
           width={MINIMIZE_BTN_WIDTH}
-          height={20}
+          height={16}
           fill="#888"
           cornerRadius={3}
         />
         <Text
           text="_"
           width={MINIMIZE_BTN_WIDTH}
-          height={20}
-          fontSize={14}
+          height={16}
+          fontSize={11}
           fontStyle="bold"
           fill="#fff"
           align="center"
