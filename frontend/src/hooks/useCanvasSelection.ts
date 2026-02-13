@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import Konva from 'konva'
-import { CanvasItem, SelectionRect } from '../types'
+import { CanvasItem, SelectionRect, TextItem } from '../types'
 import { PDF_MINIMIZED_WIDTH, PDF_MINIMIZED_HEIGHT, TEXTFILE_MINIMIZED_WIDTH, TEXTFILE_MINIMIZED_HEIGHT } from '../constants/canvas'
 
 interface UseCanvasSelectionParams {
@@ -117,8 +117,19 @@ export function useCanvasSelection({
       .filter((item) => {
         const isMinimizedPdf = item.type === 'pdf' && item.minimized
         const isMinimizedTextFile = item.type === 'text-file' && item.minimized
-        const w = isMinimizedPdf ? PDF_MINIMIZED_WIDTH : isMinimizedTextFile ? TEXTFILE_MINIMIZED_WIDTH : item.width
-        const h = isMinimizedPdf ? PDF_MINIMIZED_HEIGHT : isMinimizedTextFile ? TEXTFILE_MINIMIZED_HEIGHT : item.height
+        let w = isMinimizedPdf ? PDF_MINIMIZED_WIDTH : isMinimizedTextFile ? TEXTFILE_MINIMIZED_WIDTH : item.width
+        let h = isMinimizedPdf ? PDF_MINIMIZED_HEIGHT : isMinimizedTextFile ? TEXTFILE_MINIMIZED_HEIGHT : item.height
+        // Text items: use actual visual height (text content + padding) instead of stored height
+        if (item.type === 'text') {
+          const padding = 8
+          const measured = new Konva.Text({
+            text: (item as TextItem).text,
+            fontSize: (item as TextItem).fontSize,
+            width: item.width,
+          })
+          h = measured.height() + padding * 2
+          w = item.width + padding * 2
+        }
         const itemRight = item.x + w
         const itemBottom = item.y + h
         return (
