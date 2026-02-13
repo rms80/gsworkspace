@@ -9,6 +9,7 @@ import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { uploadTextFile } from '../api/textfiles'
 import { ACTIVE_WORKSPACE } from '../api/workspace'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
+import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
@@ -1197,6 +1198,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     onUpdateItem(id, { fontSize: newSize } as Partial<CanvasItem>, true)
   }, [items, onUpdateItem])
 
+  const handleToggleTextFileViewType = useCallback((id: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    const current = item.viewType ?? (item.fileFormat === 'csv' ? 'table' : 'raw')
+    onUpdateItem(id, { viewType: current === 'table' ? 'raw' : 'table' } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
     const item = items.find((i) => i.id === editingHtmlLabelId)
@@ -1397,6 +1405,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onToggleMinimized={handleToggleTextFileMinimized}
                 onToggleMono={handleToggleTextFileMono}
                 onChangeFontSize={handleChangeTextFileFontSize}
+                onToggleViewType={handleToggleTextFileViewType}
                 setTextFileItemTransforms={setTextFileItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
               />
@@ -1681,16 +1690,29 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const fontMono = item.fontMono ?? false
           const fontSize = item.fontSize ?? 14
           const textContent = textFileContents.get(item.id) ?? ''
-          // HTML-escape the text content for safe embedding in srcdoc
-          const escapedContent = textContent
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-          const srcdoc = `<html><head><style>body{margin:8px;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;white-space:pre-wrap;word-wrap:break-word;color:#333;}</style></head><body>${escapedContent || 'Loading...'}</body></html>`
+          const effectiveViewType = item.fileFormat === 'csv' && (item.viewType ?? 'table') === 'table' ? 'table' : 'raw'
+
+          let srcdoc: string
+          if (effectiveViewType === 'table' && textContent) {
+            const rows = parseCsv(textContent)
+            const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            const headerRow = rows[0] || []
+            const bodyRows = rows.slice(1)
+            const thead = `<thead><tr>${headerRow.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>`
+            const tbody = `<tbody>${bodyRows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
+            srcdoc = `<html><head><style>body{margin:0;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;color:#333;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:4px 8px;text-align:left;white-space:nowrap;}th{background:#f0f0f0;font-weight:bold;position:sticky;top:0;}tr:hover{background:#f8f8f8;}</style></head><body><table>${thead}${tbody}</table></body></html>`
+          } else {
+            // Raw text view
+            const escapedContent = textContent
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+            srcdoc = `<html><head><style>body{margin:8px;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;white-space:pre-wrap;word-wrap:break-word;color:#333;}</style></head><body>${escapedContent || 'Loading...'}</body></html>`
+          }
           return (
             <div
-              key={`textfile-${item.id}-${fontMono}-${fontSize}`}
+              key={`textfile-${item.id}-${fontMono}-${fontSize}-${effectiveViewType}`}
               style={{
                 position: 'absolute',
                 top: (y + TEXTFILE_HEADER_HEIGHT) * stageScale + stagePos.y,

@@ -188,6 +188,7 @@ interface StoredTextFileItem extends StoredItemBase {
   fileFormat: string
   fontMono?: boolean
   fontSize?: number
+  viewType?: string
 }
 
 type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredPdfItem | StoredTextFileItem
@@ -868,6 +869,7 @@ router.post('/:id', async (req, res) => {
             fileFormat: item.fileFormat || 'txt',
             fontMono: item.fontMono,
             fontSize: item.fontSize,
+            viewType: item.viewType,
           })
         } else {
           console.error(`Failed to save text file ${item.id}, skipping from scene`)
@@ -1080,6 +1082,7 @@ router.get('/:id', async (req, res) => {
             fileFormat: item.fileFormat,
             fontMono: item.fontMono,
             fontSize: item.fontSize,
+            viewType: item.viewType,
           }
         } else {
           // For HTML items, load the HTML file

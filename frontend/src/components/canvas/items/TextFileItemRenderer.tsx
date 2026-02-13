@@ -20,6 +20,7 @@ interface TextFileItemRendererProps {
   onToggleMinimized: (id: string) => void
   onToggleMono: (id: string) => void
   onChangeFontSize: (id: string, delta: number) => void
+  onToggleViewType: (id: string) => void
   setTextFileItemTransforms: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
   setIsViewportTransforming: (v: boolean) => void
 }
@@ -41,6 +42,7 @@ export default function TextFileItemRenderer({
   onToggleMinimized,
   onToggleMono,
   onChangeFontSize,
+  onToggleViewType,
   setTextFileItemTransforms,
   setIsViewportTransforming,
 }: TextFileItemRendererProps) {
@@ -174,9 +176,32 @@ export default function TextFileItemRenderer({
   const MINIMIZE_BTN_WIDTH = 18
   const MONO_BTN_WIDTH = 36
   const FONTSIZE_BTN_WIDTH = 24
+  const RAW_TEXT_BTN_WIDTH = 50
   const fileSizeText = formatFileSize(item.fileSize)
   const fileSizeWidth = fileSizeText ? fileSizeText.length * 7 + 8 : 0
   const fontMono = item.fontMono ?? false
+  const isCsv = item.fileFormat === 'csv'
+  const isRawView = !isCsv || (item.viewType ?? 'table') === 'raw'
+
+  // Compute button positions from right to left
+  let cursor = MINIMIZE_BTN_WIDTH + 4
+  const minimizeBtnX = item.width - cursor
+
+  let rawTextBtnX = 0
+  if (isCsv) {
+    rawTextBtnX = item.width - cursor - RAW_TEXT_BTN_WIDTH - 2
+    cursor += RAW_TEXT_BTN_WIDTH + 2
+  }
+
+  const monoBtnX = item.width - cursor - MONO_BTN_WIDTH - 2
+  cursor += MONO_BTN_WIDTH + 2
+  const fontPlusBtnX = item.width - cursor - FONTSIZE_BTN_WIDTH - 2
+  cursor += FONTSIZE_BTN_WIDTH + 2
+  const fontMinusBtnX = item.width - cursor - FONTSIZE_BTN_WIDTH - 2
+  cursor += FONTSIZE_BTN_WIDTH + 2
+
+  const fileSizeX = item.width - cursor - fileSizeWidth - 4
+  const labelMaxWidth = Math.max(20, item.width - cursor - fileSizeWidth - 20)
 
   return (
     <Group
@@ -277,7 +302,7 @@ export default function TextFileItemRenderer({
         fontSize={14}
         fontStyle="bold"
         fill="#333"
-        width={item.width - MINIMIZE_BTN_WIDTH - MONO_BTN_WIDTH - FONTSIZE_BTN_WIDTH * 2 - fileSizeWidth - 40}
+        width={labelMaxWidth}
         ellipsis={true}
         onDblClick={() => onLabelDblClick(item.id)}
         visible={editingTextFileLabelId !== item.id}
@@ -285,7 +310,7 @@ export default function TextFileItemRenderer({
       {/* File size display */}
       {fileSizeText && (
         <Text
-          x={item.width - MINIMIZE_BTN_WIDTH - MONO_BTN_WIDTH - FONTSIZE_BTN_WIDTH * 2 - fileSizeWidth - 16}
+          x={fileSizeX}
           y={7}
           text={fileSizeText}
           fontSize={10}
@@ -294,7 +319,7 @@ export default function TextFileItemRenderer({
       )}
       {/* Font size - button */}
       <Group
-        x={item.width - MINIMIZE_BTN_WIDTH - MONO_BTN_WIDTH - FONTSIZE_BTN_WIDTH * 2 - 12}
+        x={fontMinusBtnX}
         y={4}
         onClick={(e) => {
           e.cancelBubble = true
@@ -320,7 +345,7 @@ export default function TextFileItemRenderer({
       </Group>
       {/* Font size + button */}
       <Group
-        x={item.width - MINIMIZE_BTN_WIDTH - MONO_BTN_WIDTH - FONTSIZE_BTN_WIDTH - 10}
+        x={fontPlusBtnX}
         y={4}
         onClick={(e) => {
           e.cancelBubble = true
@@ -346,7 +371,7 @@ export default function TextFileItemRenderer({
       </Group>
       {/* Mono toggle button */}
       <Group
-        x={item.width - MINIMIZE_BTN_WIDTH - MONO_BTN_WIDTH - 6}
+        x={monoBtnX}
         y={4}
         onClick={(e) => {
           e.cancelBubble = true
@@ -369,9 +394,36 @@ export default function TextFileItemRenderer({
           verticalAlign="middle"
         />
       </Group>
+      {/* Raw Text toggle button (CSV only) */}
+      {isCsv && (
+        <Group
+          x={rawTextBtnX}
+          y={4}
+          onClick={(e) => {
+            e.cancelBubble = true
+            onToggleViewType(item.id)
+          }}
+        >
+          <Rect
+            width={RAW_TEXT_BTN_WIDTH}
+            height={16}
+            fill={isRawView ? '#4a7c59' : '#888'}
+            cornerRadius={3}
+          />
+          <Text
+            text="Raw Text"
+            width={RAW_TEXT_BTN_WIDTH}
+            height={16}
+            fontSize={10}
+            fill="#fff"
+            align="center"
+            verticalAlign="middle"
+          />
+        </Group>
+      )}
       {/* Minimize button */}
       <Group
-        x={item.width - MINIMIZE_BTN_WIDTH - 4}
+        x={minimizeBtnX}
         y={4}
         onClick={(e) => {
           e.cancelBubble = true

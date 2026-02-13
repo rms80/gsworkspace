@@ -122,6 +122,8 @@ export interface PdfItem extends BaseItem {
 
 export type TextFileFormat = 'txt' | 'csv' | 'js' | 'ts' | 'tsx' | 'cs' | 'cpp' | 'h' | 'c' | 'json' | 'py' | 'md' | 'sh' | 'log' | 'ini'
 
+export type TextFileViewType = 'raw' | 'table'
+
 export interface TextFileItem extends BaseItem {
   type: 'text-file'
   src: string
@@ -133,6 +135,7 @@ export interface TextFileItem extends BaseItem {
   fileFormat: TextFileFormat
   fontMono?: boolean
   fontSize?: number
+  viewType?: TextFileViewType
 }
 
 export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | PdfItem | TextFileItem
