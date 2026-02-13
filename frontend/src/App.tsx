@@ -949,7 +949,7 @@ function App() {
     }
   }, [isOffline, activeSceneId, addVideoItem, startOperation, endOperation])
 
-  const addPromptItem = useCallback((x?: number, y?: number) => {
+  const addPromptItem = useCallback((x?: number, y?: number): string => {
     const width = 300
     const height = 150
     const center = canvasRef.current?.getViewportCenter()
@@ -967,9 +967,10 @@ function App() {
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
+    return newItem.id
   }, [updateActiveSceneItems, pushChange])
 
-  const addImageGenPromptItem = useCallback((x?: number, y?: number) => {
+  const addImageGenPromptItem = useCallback((x?: number, y?: number): string => {
     const width = 300
     const height = 150
     const center = canvasRef.current?.getViewportCenter()
@@ -987,6 +988,7 @@ function App() {
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
+    return newItem.id
   }, [updateActiveSceneItems, pushChange])
 
   const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
@@ -1041,7 +1043,7 @@ function App() {
         id,
         type: 'image',
         x: snapToGrid(x - width / 2),
-        y: snapToGrid(y - height / 2),
+        y: snapToGrid(y),
         src,
         name: uniqueName,
         width,
@@ -1075,7 +1077,7 @@ function App() {
         id,
         type: 'video',
         x: snapToGrid(x - w / 2),
-        y: snapToGrid(y - h / 2),
+        y: snapToGrid(y),
         src,
         name: uniqueName,
         width: w,
@@ -1101,7 +1103,7 @@ function App() {
         id,
         type: 'pdf',
         x: snapToGrid(x - width / 2),
-        y: snapToGrid(y - height / 2),
+        y: snapToGrid(y),
         src,
         name: uniqueName,
         width,
@@ -1128,7 +1130,7 @@ function App() {
         id,
         type: 'text-file',
         x: snapToGrid(x - width / 2),
-        y: snapToGrid(y - height / 2),
+        y: snapToGrid(y),
         src,
         name: uniqueName,
         width,
@@ -1216,7 +1218,7 @@ function App() {
       const placeholderW = 640
       const placeholderH = 427
       const placeholderName = file.name.replace(/\.[^/.]+$/, '')
-      setVideoPlaceholders(prev => [...prev, { id: itemId, x: x - placeholderW / 2, y: y - placeholderH / 2, width: placeholderW, height: placeholderH, name: placeholderName }])
+      setVideoPlaceholders(prev => [...prev, { id: itemId, x: x - placeholderW / 2, y, width: placeholderW, height: placeholderH, name: placeholderName }])
 
       startOperation()
       try {

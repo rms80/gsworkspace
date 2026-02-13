@@ -79,8 +79,8 @@ interface InfiniteCanvasProps {
   runningHtmlGenPromptIds: Set<string>
   isOffline: boolean
   onAddText?: (x?: number, y?: number) => void
-  onAddPrompt?: (x?: number, y?: number) => void
-  onAddImageGenPrompt?: (x?: number, y?: number) => void
+  onAddPrompt?: (x?: number, y?: number) => string
+  onAddImageGenPrompt?: (x?: number, y?: number) => string
   onAddHtmlGenPrompt?: (x?: number, y?: number) => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
@@ -449,6 +449,50 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, items, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
+
+  // 8d. 'Y' hotkey to create prompt at cursor, Shift+Y for image-gen prompt
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+      if (isEditing) return
+
+      // Shift+Y: create image-gen prompt at cursor
+      if (e.key === 'Y' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        const newId = onAddImageGenPrompt?.(canvasPos.x, canvasPos.y)
+        if (newId) {
+          setTimeout(() => {
+            onSelectItems([newId])
+            imageGenPromptEditing.handleTextDblClick(newId)
+          }, 20)
+        }
+        return
+      }
+
+      // y: create prompt at cursor
+      if (e.key === 'y' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        const newId = onAddPrompt?.(canvasPos.x, canvasPos.y)
+        if (newId) {
+          setTimeout(() => {
+            onSelectItems([newId])
+            promptEditing.handleTextDblClick(newId)
+          }, 20)
+        }
+        return
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, screenToCanvas, clipboard.mousePos, onAddPrompt, onAddImageGenPrompt, onSelectItems, promptEditing, imageGenPromptEditing])
 
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
