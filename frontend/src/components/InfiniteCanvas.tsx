@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
@@ -23,6 +23,7 @@ import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
 import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
+import { getPromptContextSummary } from '../utils/promptContextSummary'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import PdfItemRenderer from './canvas/items/PdfItemRenderer'
 import TextFileItemRenderer from './canvas/items/TextFileItemRenderer'
@@ -134,6 +135,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const handleShowTooltip = useCallback((t: { text: string; x: number; y: number } | null) => {
     setTooltip(t)
   }, [])
+
+  // Context summary for prompt Run button tooltips
+  const promptContextSummaries = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const item of items) {
+      if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+        map[item.id] = getPromptContextSummary(items, selectedIds, item.id)
+      }
+    }
+    return map
+  }, [items, selectedIds])
 
   // 1. Viewport hook
   const {
@@ -1380,6 +1392,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
                 onRun={onRunPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'image-gen-prompt') {
@@ -1398,6 +1411,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
                 onRun={onRunImageGenPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'html-gen-prompt') {
@@ -1416,6 +1430,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
                 onRun={onRunHtmlGenPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'html') {
@@ -2206,19 +2221,21 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         )
       })()}
 
-      {/* Tooltip for disabled Run button */}
+      {/* Tooltip for Run button */}
       {tooltip && (
         <div
           style={{
             position: 'fixed',
-            left: tooltip.x + 10,
-            top: tooltip.y + 10,
+            left: tooltip.x,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)',
             backgroundColor: '#333',
             color: '#fff',
             padding: '6px 10px',
             borderRadius: 4,
-            fontSize: 12,
-            whiteSpace: 'nowrap',
+            fontSize: 13,
+            fontFamily: 'sans-serif',
+            whiteSpace: 'pre-line',
             zIndex: 1000,
             pointerEvents: 'none',
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',

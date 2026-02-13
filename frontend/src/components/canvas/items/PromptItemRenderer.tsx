@@ -25,6 +25,7 @@ interface PromptItemRendererProps {
   onOpenModelMenu: (id: string, position: { x: number; y: number }) => void
   onRun: (id: string) => void
   onShowTooltip?: (tooltip: { text: string; x: number; y: number } | null) => void
+  contextSummaryLines?: string[]
 }
 
 export default function PromptItemRenderer({
@@ -40,8 +41,10 @@ export default function PromptItemRenderer({
   onOpenModelMenu,
   onRun,
   onShowTooltip,
+  contextSummaryLines,
 }: PromptItemRendererProps) {
   const groupRef = useRef<Konva.Group>(null)
+  const runButtonRef = useRef<Konva.Group>(null)
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
@@ -163,6 +166,7 @@ export default function PromptItemRenderer({
       />
       {/* Run button */}
       <Group
+        ref={runButtonRef}
         x={item.width - RUN_BUTTON_WIDTH - 8}
         y={4}
         onClick={(e) => {
@@ -171,11 +175,23 @@ export default function PromptItemRenderer({
             onRun(item.id)
           }
         }}
-        onMouseEnter={(e) => {
+        onMouseEnter={() => {
+          if (!onShowTooltip) return
           const tooltipMsg = getTooltipMessage()
-          if (tooltipMsg && onShowTooltip) {
-            onShowTooltip({ text: tooltipMsg, x: e.evt.clientX, y: e.evt.clientY })
-          }
+          const text = tooltipMsg ?? contextSummaryLines?.join('\n')
+          if (!text) return
+          // Compute screen position of the Run button's top-left
+          const node = runButtonRef.current
+          const stage = node?.getStage()
+          const container = stage?.container()
+          if (!node || !container) return
+          const absPos = node.getAbsolutePosition()
+          const containerRect = container.getBoundingClientRect()
+          onShowTooltip({
+            text,
+            x: absPos.x + containerRect.left,
+            y: absPos.y + containerRect.top,
+          })
         }}
         onMouseLeave={() => {
           if (onShowTooltip) {
