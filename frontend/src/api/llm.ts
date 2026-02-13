@@ -1,7 +1,7 @@
 import { LLMModel, ImageGenModel } from '../types'
 import type { SpatialData } from '../utils/spatialJson'
 import { isOfflineMode } from './scenes'
-import { getAnthropicApiKey, getGoogleApiKey } from '../utils/apiKeyStorage'
+import { getAnthropicApiKey, getGoogleApiKey, hasAnthropicApiKey, hasGoogleApiKey } from '../utils/apiKeyStorage'
 import { generateTextWithAnthropic, generateHtmlWithAnthropic } from './anthropicClient'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini } from './googleClient'
 
@@ -177,7 +177,42 @@ export async function generateHtml(
 }
 
 /**
- * Generate a short PascalCase title (1-3 words) for HTML content using Claude Haiku.
+ * Pick the fastest available model for offline mode: claude-haiku if Anthropic
+ * key is available, otherwise gemini-flash.
+ */
+function getFastModel(): LLMModel {
+  if (hasAnthropicApiKey()) return 'claude-haiku'
+  if (hasGoogleApiKey()) return 'gemini-flash'
+  return 'claude-haiku' // will fail with a clear error from generateFromPrompt
+}
+
+/**
+ * Quick text-only LLM query using the fastest available model.
+ * Use for lightweight tasks like generating labels, filenames, summaries, etc.
+ * In online mode, the server picks the model. In offline mode, the client picks.
+ */
+export async function quickLlmQuery(prompt: string): Promise<string> {
+  if (isOfflineMode()) {
+    return generateFromPrompt([], prompt, getFastModel())
+  }
+
+  const response = await fetch(`${API_BASE}/quick-query`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}))
+    throw new Error(errorData.error || `Quick query failed: ${response.statusText}`)
+  }
+
+  const data: GenerateResponse = await response.json()
+  return data.result
+}
+
+/**
+ * Generate a short PascalCase title (1-3 words) for HTML content.
  * This is a fire-and-forget operation - errors are caught and a default is returned.
  */
 export async function generateHtmlTitle(htmlContent: string): Promise<string> {
@@ -190,7 +225,7 @@ export async function generateHtmlTitle(htmlContent: string): Promise<string> {
 HTML:
 ${truncatedHtml}`
 
-    const result = await generateFromPrompt([], prompt, 'claude-haiku')
+    const result = await quickLlmQuery(prompt)
 
     // Clean up the result - remove any whitespace, quotes, or extra text
     const cleaned = result.trim().replace(/[^a-zA-Z0-9]/g, '')

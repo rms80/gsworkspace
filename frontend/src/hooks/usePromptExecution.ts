@@ -1,11 +1,12 @@
 import { useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { CanvasItem, TextFileItem, TextFileFormat } from '../types'
-import { generateFromPrompt, ContentItem, generateHtmlTitle } from '../api/llm'
+import { generateFromPrompt, ContentItem, generateHtmlTitle, quickLlmQuery } from '../api/llm'
 import { getCroppedImageDataUrl } from '../utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from '../utils/htmlDetection'
 import { extractCodeBlocks } from '../utils/codeBlockExtractor'
 import { uploadTextFile } from '../api/textfiles'
+import { generateUniqueName, getExistingTextFileNames } from '../utils/imageNames'
 import DOMPurify from 'dompurify'
 import { config } from '../config'
 import { TEXTFILE_HEADER_HEIGHT } from '../constants/canvas'
@@ -26,6 +27,25 @@ function estimateTextHeight(text: string, fontSize: number, width: number, maxHe
   // Add 2 extra lines of breathing room, then cap at maxHeight
   const estimatedHeight = (lineCount + 2) * fontSize + TEXT_PADDING * 2
   return Math.min(estimatedHeight, maxHeight)
+}
+
+/** Generate a descriptive filename for an extracted code block using a quick LLM query. */
+async function generateCodeFilename(content: string, format: string, _userPrompt: string): Promise<string> {
+  const fallback = `code-${Date.now()}.${format}`
+  try {
+    const truncated = content.slice(0, 5000)
+    const result = await quickLlmQuery(
+      `Based on this text content, generate a short descriptive filename in PascalCase with no spaces. The file extension should be .${format}. Just output the filename (e.g. "DataParser.${format}"), nothing else.\n\nText:\n${truncated}`
+    )
+    const cleaned = result.trim().replace(/[^a-zA-Z0-9._-]/g, '')
+    if (cleaned.length > 0 && cleaned.includes('.')) return cleaned
+    // If model returned name without extension, add it
+    if (cleaned.length > 0) return `${cleaned}.${format}`
+    return fallback
+  } catch (error) {
+    console.warn('Failed to generate code filename:', error)
+    return fallback
+  }
 }
 
 interface PromptExecutionContext {
@@ -134,6 +154,9 @@ export function usePromptExecution({
         const blockX = remainingText.trim() ? outputX + textWidth + 20 : outputX
         let blockY = outputY
 
+        // Track existing text file names for deduplication (includes names from this batch)
+        const usedNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
+
         // If an HTML item is among the selected inputs, match its dimensions/zoom for HTML blocks
         const inputHtmlItem = selectedItems.find((item) => item.type === 'html')
 
@@ -169,7 +192,11 @@ export function usePromptExecution({
             const itemId = uuidv4()
             const mimeType = format === 'json' ? 'application/json' : 'text/plain'
             const dataUrl = `data:${mimeType};base64,` + btoa(unescape(encodeURIComponent(block.content)))
-            const filename = `code-${Date.now()}.${format}`
+            const rawFilename = await generateCodeFilename(block.content, format, promptItem.text)
+            const ext = `.${format}`
+            const uniqueBase = generateUniqueName(rawFilename, usedNames)
+            const filename = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
+            usedNames.push(uniqueBase)
 
             // Upload to storage if online
             let src = dataUrl
