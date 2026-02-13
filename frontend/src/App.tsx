@@ -13,13 +13,13 @@ import StatusBar, { SaveStatus } from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
+import { usePromptExecution } from './hooks/usePromptExecution'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
-import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
+import { generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
-import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
 import { snapToGrid } from './utils/grid'
 import DOMPurify from 'dompurify'
 import { config } from './config'
@@ -1343,130 +1343,10 @@ function App() {
     [activeSceneId, selectionMap, pushChange]
   )
 
-  const handleRunPrompt = useCallback(async (promptId: string) => {
-    const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
-    if (!promptItem || promptItem.type !== 'prompt') return
-
-    // Mark prompt as running
-    setRunningPromptIds((prev) => new Set(prev).add(promptId))
-
-    // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
-
-    // Convert to ContentItem format for the API
-    const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
-      if (item.type === 'text') {
-        return { type: 'text' as const, text: item.text }
-      } else if (item.type === 'image') {
-        if (isOffline) {
-          // Offline mode: send src data URL directly to client-side LLM
-          let src = item.src
-          if (item.cropRect && activeSceneId) {
-            try {
-              src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
-            } catch (err) {
-              console.error('Failed to crop image for LLM, using original:', err)
-            }
-          }
-          return { type: 'image' as const, src }
-        }
-        // Online mode: send ID so backend resolves from storage
-        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
-      } else if (item.type === 'pdf') {
-        if (isOffline) {
-          // Offline mode: send src URL directly to client-side LLM
-          return { type: 'pdf' as const, src: item.src }
-        }
-        // Online mode: send ID so backend resolves from storage
-        return { type: 'pdf' as const, id: item.id, sceneId: activeSceneId! }
-      } else if (item.type === 'text-file') {
-        if (isOffline) {
-          // Offline mode: send src URL directly to client-side LLM
-          return { type: 'text-file' as const, src: item.src }
-        }
-        // Online mode: send ID so backend resolves from storage
-        return { type: 'text-file' as const, id: item.id, sceneId: activeSceneId!, fileFormat: item.fileFormat }
-      } else if (item.type === 'prompt') {
-        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
-      } else if (item.type === 'html') {
-        return { type: 'text' as const, text: `[HTML Content]:\n${item.html}` }
-      }
-      return { type: 'text' as const, text: '' }
-    }))).filter((item) => item.text || item.src || item.id)
-
-    try {
-      const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
-
-      // Check if the result looks like HTML content
-      // Position output to the right of the prompt, aligned with top
-      // Find existing outputs to stack vertically
-      const outputX = promptItem.x + promptItem.width + 20
-      const existingOutputsToRight = items.filter(item =>
-        item.x >= outputX - 10 &&
-        item.x <= outputX + 10 &&
-        item.y >= promptItem.y - 10
-      )
-      const outputY = existingOutputsToRight.length > 0
-        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
-        : promptItem.y
-
-      let newItem: CanvasItem
-      if (isHtmlContent(result)) {
-        // Create an HTML view item for webpage content
-        // Strip code fences that LLMs often wrap around HTML
-        const strippedHtml = stripCodeFences(result).trim()
-        const htmlContent = config.features.sanitizeHtml
-          ? DOMPurify.sanitize(strippedHtml, {
-              WHOLE_DOCUMENT: true,
-              ADD_TAGS: ['style', 'link', 'meta', '#comment'],
-              FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-            })
-          : strippedHtml
-        // If an HTML item is among the selected inputs, match its dimensions/zoom
-        const inputHtmlItem = selectedItems.find((item) => item.type === 'html')
-        const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
-        const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
-        const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
-        // Generate title before creating item so it's saved properly
-        const title = await generateHtmlTitle(htmlContent)
-        newItem = {
-          id: uuidv4(),
-          type: 'html',
-          label: title,
-          x: outputX,
-          y: outputY,
-          html: htmlContent,
-          width: htmlWidth,
-          height: htmlHeight,
-          zoom: htmlZoom,
-        }
-      } else {
-        // Create a text item for regular text content
-        newItem = {
-          id: uuidv4(),
-          type: 'text',
-          x: outputX,
-          y: outputY,
-          text: result,
-          fontSize: 14,
-          width: Math.max(promptItem.width, 300),
-          height: 200,
-        }
-      }
-      updateActiveSceneItems((prev) => [...prev, newItem])
-    } catch (error) {
-      console.error('Failed to run prompt:', error)
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to run prompt: ${message}`)
-    } finally {
-      // Mark prompt as no longer running
-      setRunningPromptIds((prev) => {
-        const next = new Set(prev)
-        next.delete(promptId)
-        return next
-      })
-    }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
+  const { handleRunPrompt } = usePromptExecution({
+    items, selectedIds, activeSceneId, isOffline,
+    updateActiveSceneItems, setRunningPromptIds,
+  })
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
