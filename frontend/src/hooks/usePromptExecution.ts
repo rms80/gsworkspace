@@ -278,6 +278,7 @@ export function usePromptExecution({
 
       playNotificationSound()
     } catch (error) {
+      playNotificationSound('failure')
       console.error('Failed to run prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
       alert(`Failed to run prompt: ${message}`)

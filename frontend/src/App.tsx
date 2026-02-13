@@ -1529,6 +1529,7 @@ function App() {
 
       playNotificationSound()
     } catch (error) {
+      playNotificationSound('failure')
       console.error('Failed to run image generation prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
       alert(`Failed to generate image: ${message}`)
@@ -1611,6 +1612,7 @@ function App() {
 
       playNotificationSound()
     } catch (error) {
+      playNotificationSound('failure')
       console.error('Failed to run HTML gen prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
       alert(`Failed to generate HTML: ${message}`)
