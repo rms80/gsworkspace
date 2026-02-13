@@ -16,6 +16,8 @@ import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
 import VideoContextMenu from './canvas/menus/VideoContextMenu'
+import PdfContextMenu from './canvas/menus/PdfContextMenu'
+import TextFileContextMenu from './canvas/menus/TextFileContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
@@ -444,6 +446,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const htmlGenModelMenu = useMenuState<string>()
   const imageContextMenuState = useMenuState<{ imageId: string }>()
   const videoContextMenuState = useMenuState<{ videoId: string }>()
+  const pdfContextMenuState = useMenuState<{ pdfId: string }>()
+  const textFileContextMenuState = useMenuState<{ textFileId: string }>()
   const exportMenu = useMenuState<string>()
 
   // 10. Remaining UI state
@@ -1385,6 +1389,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isSelected={selectedIds.includes(item.id)}
                 editingPdfLabelId={editingPdfLabelId}
                 onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
+                  pdfContextMenuState.openMenu(
+                    { pdfId: id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
+                }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handlePdfLabelDblClick}
                 onToggleMinimized={handleTogglePdfMinimized}
@@ -1400,6 +1411,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isSelected={selectedIds.includes(item.id)}
                 editingTextFileLabelId={editingTextFileLabelId}
                 onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
+                  textFileContextMenuState.openMenu(
+                    { textFileId: id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
+                }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleTextFileLabelDblClick}
                 onToggleMinimized={handleToggleTextFileMinimized}
@@ -2076,6 +2094,28 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           onDuplicate={handleDuplicateVideo}
           onConvertToGif={handleConvertVideoToGif}
           onClose={videoContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* PDF context menu */}
+      {pdfContextMenuState.menuData && pdfContextMenuState.menuPosition && (
+        <PdfContextMenu
+          position={pdfContextMenuState.menuPosition}
+          pdfItem={items.find((i) => i.id === pdfContextMenuState.menuData!.pdfId && i.type === 'pdf') as import('../types').PdfItem | undefined}
+          sceneId={sceneId}
+          isOffline={isOffline}
+          onClose={pdfContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* TextFile context menu */}
+      {textFileContextMenuState.menuData && textFileContextMenuState.menuPosition && (
+        <TextFileContextMenu
+          position={textFileContextMenuState.menuPosition}
+          textFileItem={items.find((i) => i.id === textFileContextMenuState.menuData!.textFileId && i.type === 'text-file') as import('../types').TextFileItem | undefined}
+          sceneId={sceneId}
+          isOffline={isOffline}
+          onClose={textFileContextMenuState.closeMenu}
         />
       )}
 

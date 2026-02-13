@@ -17,6 +17,7 @@ interface TextFileItemRendererProps {
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<TextFileItem>) => void
   onLabelDblClick: (id: string) => void
+  onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onToggleMinimized: (id: string) => void
   onToggleMono: (id: string) => void
   onChangeFontSize: (id: string, delta: number) => void
@@ -37,6 +38,7 @@ export default function TextFileItemRenderer({
   isSelected,
   editingTextFileLabelId,
   onItemClick,
+  onContextMenu,
   onUpdateItem,
   onLabelDblClick,
   onToggleMinimized,
@@ -73,6 +75,11 @@ export default function TextFileItemRenderer({
         draggable
         dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
         onClick={(e) => onItemClick(e, item.id)}
+        onContextMenu={(e) => {
+          e.evt.preventDefault()
+          e.cancelBubble = true
+          onContextMenu(e, item.id)
+        }}
         onDblClick={(e) => { if (e.evt.button === 0) onToggleMinimized(item.id) }}
         onDragMove={(e) => {
           const node = e.target
@@ -214,6 +221,11 @@ export default function TextFileItemRenderer({
       draggable
       dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
       onClick={(e) => onItemClick(e, item.id)}
+      onContextMenu={(e) => {
+        e.evt.preventDefault()
+        e.cancelBubble = true
+        onContextMenu(e, item.id)
+      }}
       onDragStart={() => {
         if (config.features.hideHtmlDuringTransform) {
           setIsViewportTransforming(true)

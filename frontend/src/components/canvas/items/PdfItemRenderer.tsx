@@ -17,6 +17,7 @@ interface PdfItemRendererProps {
   onItemClick: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onUpdateItem: (id: string, changes: Partial<PdfItem>) => void
   onLabelDblClick: (id: string) => void
+  onContextMenu: (e: Konva.KonvaEventObject<MouseEvent>, id: string) => void
   onToggleMinimized: (id: string) => void
   setPdfItemTransforms: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
   setIsViewportTransforming: (v: boolean) => void
@@ -45,6 +46,7 @@ export default function PdfItemRenderer({
   isSelected,
   editingPdfLabelId,
   onItemClick,
+  onContextMenu,
   onUpdateItem,
   onLabelDblClick,
   onToggleMinimized,
@@ -95,6 +97,11 @@ export default function PdfItemRenderer({
         draggable
         dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
         onClick={(e) => onItemClick(e, item.id)}
+        onContextMenu={(e) => {
+          e.evt.preventDefault()
+          e.cancelBubble = true
+          onContextMenu(e, item.id)
+        }}
         onDblClick={(e) => { if (e.evt.button === 0) onToggleMinimized(item.id) }}
         onDragMove={(e) => {
           const node = e.target
@@ -220,6 +227,11 @@ export default function PdfItemRenderer({
       draggable
       dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
       onClick={(e) => onItemClick(e, item.id)}
+      onContextMenu={(e) => {
+        e.evt.preventDefault()
+        e.cancelBubble = true
+        onContextMenu(e, item.id)
+      }}
       onDragStart={() => {
         if (config.features.hideHtmlDuringTransform) {
           setIsViewportTransforming(true)
