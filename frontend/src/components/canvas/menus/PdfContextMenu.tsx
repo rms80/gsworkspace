@@ -39,12 +39,13 @@ export default function PdfContextMenu({
   const buttonStyle: React.CSSProperties = {
     display: 'block',
     width: '100%',
-    padding: '8px 16px',
+    padding: '5px 12px',
     border: 'none',
     background: 'none',
     textAlign: 'left',
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 12,
+    color: '#ddd',
   }
 
   const filename = `${pdfItem?.name || 'document'}.pdf`
@@ -107,10 +108,10 @@ export default function PdfContextMenu({
         position: 'fixed',
         top: position.y,
         left: position.x,
-        background: 'white',
-        border: '1px solid #ccc',
+        background: '#3a3a3a',
+        border: '1px solid #555',
         borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         zIndex: Z_MENU,
         minWidth: 150,
       }}
@@ -119,7 +120,7 @@ export default function PdfContextMenu({
       <button
         onClick={handleExport}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
         Export
@@ -127,7 +128,7 @@ export default function PdfContextMenu({
       <button
         onClick={handleDownload}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
         Download

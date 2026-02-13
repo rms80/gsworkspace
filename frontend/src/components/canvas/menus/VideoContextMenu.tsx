@@ -50,12 +50,13 @@ export default function VideoContextMenu({
   const buttonStyle: React.CSSProperties = {
     display: 'block',
     width: '100%',
-    padding: '8px 16px',
+    padding: '5px 12px',
     border: 'none',
     background: 'none',
     textAlign: 'left',
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 12,
+    color: '#ddd',
   }
 
   const handleDuplicate = () => {
@@ -218,16 +219,56 @@ export default function VideoContextMenu({
     onClose()
   }
 
+  const handleDownload = async () => {
+    if (!videoItem) { onClose(); return }
+
+    try {
+      const hasEdits = !!(videoItem.cropSrc || videoItem.cropRect || videoItem.speedFactor || videoItem.removeAudio || videoItem.trim)
+      const ext = hasEdits ? 'mp4' : getVideoExtension(videoItem.src)
+      const baseName = videoItem.name || 'video'
+      const filename = `${baseName}.${ext}`
+
+      let blob: Blob
+      const exportSrc = videoItem.cropSrc ?? videoItem.src
+      if (exportSrc.startsWith('data:') || exportSrc.startsWith('blob:')) {
+        const response = await fetch(exportSrc)
+        blob = await response.blob()
+      } else {
+        blob = await getContentData(sceneId, videoItem.id, 'video', hasEdits)
+      }
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download video:', error)
+      alert('Failed to download video. Please try again.')
+    }
+
+    onClose()
+  }
+
+  const separatorStyle: React.CSSProperties = {
+    height: 1,
+    background: '#555',
+    margin: '4px 8px',
+  }
+
   return (
     <div
       style={{
         position: 'fixed',
         top: position.y,
         left: position.x,
-        background: 'white',
-        border: '1px solid #ccc',
+        background: '#3a3a3a',
+        border: '1px solid #555',
         borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         zIndex: Z_MENU,
         minWidth: 150,
       }}
@@ -241,22 +282,31 @@ export default function VideoContextMenu({
           cursor: isOffline ? 'not-allowed' : 'pointer',
         }}
         disabled={isOffline}
-        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         title={isOffline ? 'Edit unavailable in offline mode' : undefined}
       >
-        Edit
+        {(videoItem?.cropRect || videoItem?.speedFactor || videoItem?.removeAudio) ? 'Modify Edits' : 'Edit'}
       </button>
       {(videoItem?.cropRect || videoItem?.speedFactor || videoItem?.removeAudio) && (
         <button
           onClick={handleRemoveCrop}
           style={buttonStyle}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >
           Remove Edits
         </button>
       )}
+      <button
+        onClick={handleResetTransform}
+        style={buttonStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+      >
+        Reset Transform
+      </button>
+      <div style={separatorStyle} />
       <button
         onClick={handleDuplicate}
         style={{
@@ -265,7 +315,7 @@ export default function VideoContextMenu({
           cursor: isOffline ? 'not-allowed' : 'pointer',
         }}
         disabled={isOffline}
-        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
       >
@@ -279,27 +329,28 @@ export default function VideoContextMenu({
           cursor: isOffline ? 'not-allowed' : 'pointer',
         }}
         disabled={isOffline}
-        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         title={isOffline ? 'Convert unavailable in offline mode' : undefined}
       >
         Convert to GIF
       </button>
+      <div style={separatorStyle} />
       <button
         onClick={handleExport}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
         Export
       </button>
       <button
-        onClick={handleResetTransform}
+        onClick={handleDownload}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
-        Reset Transform
+        Download
       </button>
     </div>
   )

@@ -53,12 +53,13 @@ export default function ImageContextMenu({
   const buttonStyle: React.CSSProperties = {
     display: 'block',
     width: '100%',
-    padding: '8px 16px',
+    padding: '5px 12px',
     border: 'none',
     background: 'none',
     textAlign: 'left',
     cursor: 'pointer',
-    fontSize: 14,
+    fontSize: 12,
+    color: '#ddd',
   }
 
   const handleDuplicate = () => {
@@ -194,21 +195,87 @@ export default function ImageContextMenu({
     onClose()
   }
 
+  const handleDownload = async () => {
+    if (!imageItem) { onClose(); return }
+
+    try {
+      const srcToExport = imageItem.cropSrc || imageItem.src
+      const ext = getImageExtension(srcToExport)
+      const baseName = imageItem.name || 'image'
+      const filename = `${baseName}.${ext}`
+
+      let blob: Blob
+      if (srcToExport.startsWith('data:') || srcToExport.startsWith('blob:')) {
+        const response = await fetch(srcToExport)
+        blob = await response.blob()
+      } else {
+        blob = await getContentData(sceneId, imageItem.id, 'image', !!imageItem.cropSrc)
+      }
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('Failed to download image:', error)
+      alert('Failed to download image. Please try again.')
+    }
+
+    onClose()
+  }
+
+  const separatorStyle: React.CSSProperties = {
+    height: 1,
+    background: '#555',
+    margin: '4px 8px',
+  }
+
   return (
     <div
       style={{
         position: 'fixed',
         top: position.y,
         left: position.x,
-        background: 'white',
-        border: '1px solid #ccc',
+        background: '#3a3a3a',
+        border: '1px solid #555',
         borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
         zIndex: Z_MENU,
         minWidth: 150,
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      <button
+        onClick={handleCrop}
+        style={buttonStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+      >
+        {imageItem?.cropRect ? 'Edit Crop' : 'Crop'}
+      </button>
+      {imageItem?.cropRect && (
+        <button
+          onClick={handleRemoveCrop}
+          style={buttonStyle}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        >
+          Remove Crop
+        </button>
+      )}
+      <button
+        onClick={handleResetTransform}
+        style={buttonStyle}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+      >
+        Reset Transform
+      </button>
+      <div style={separatorStyle} />
       <button
         onClick={handleDuplicate}
         style={{
@@ -217,7 +284,7 @@ export default function ImageContextMenu({
           cursor: isOffline ? 'not-allowed' : 'pointer',
         }}
         disabled={isOffline}
-        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
       >
@@ -232,47 +299,30 @@ export default function ImageContextMenu({
             cursor: isOffline ? 'not-allowed' : 'pointer',
           }}
           disabled={isOffline}
-          onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#f0f0f0')}
+          onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
           title={isOffline ? 'Convert unavailable in offline mode' : undefined}
         >
           Convert to Video
         </button>
       )}
+      <div style={separatorStyle} />
       <button
         onClick={handleExport}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
         Export
       </button>
       <button
-        onClick={handleResetTransform}
+        onClick={handleDownload}
         style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
+        onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
         onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
       >
-        Reset Transform
+        Download
       </button>
-      <button
-        onClick={handleCrop}
-        style={buttonStyle}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-      >
-        Crop
-      </button>
-      {imageItem?.cropRect && (
-        <button
-          onClick={handleRemoveCrop}
-          style={buttonStyle}
-          onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
-        >
-          Remove Crop
-        </button>
-      )}
     </div>
   )
 }
