@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { config } from '../config'
+import { isMuted, setMuted } from '../utils/sound'
 
 interface MenuBarProps {
   onAddText: () => void
@@ -87,6 +88,7 @@ function MenuBar({
   workspaceName,
   sceneName,
 }: MenuBarProps) {
+  const [muted, setMutedState] = useState(() => isMuted())
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -172,6 +174,12 @@ function MenuBar({
       ],
     }] : []),
   ]
+
+  const toggleMute = () => {
+    const next = !muted
+    setMutedState(next)
+    setMuted(next)
+  }
 
   const rightMenus: MenuDef[] = [
     ...(onLogout ? [{
@@ -537,6 +545,37 @@ function MenuBar({
       </span>
       {/* Spacer to push right menus to the right */}
       <div style={{ flex: 1 }} />
+
+      {/* Mute toggle */}
+      <button
+        onClick={toggleMute}
+        title={muted ? 'Unmute sounds' : 'Mute sounds'}
+        style={{
+          padding: '4px 8px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M0 4.5H3.5L8 0.5V13.5L3.5 9.5H0V4.5Z"
+            fill={muted ? 'none' : '#aaa'}
+            stroke="#aaa"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          {!muted && (
+            <>
+              <path d="M10.5 3.5C11.5 4.5 12 5.8 12 7C12 8.2 11.5 9.5 10.5 10.5" stroke="#aaa" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M12.5 1.5C14 3.2 15 5 15 7C15 9 14 10.8 12.5 12.5" stroke="#aaa" strokeWidth="1.2" strokeLinecap="round" />
+            </>
+          )}
+        </svg>
+      </button>
 
       {rightMenus.map((menu) => (
         <div key={menu.label} style={{ position: 'relative' }}>

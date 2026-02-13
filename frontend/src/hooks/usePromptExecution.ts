@@ -8,6 +8,7 @@ import { extractCodeBlocks } from '../utils/codeBlockExtractor'
 import { uploadTextFile } from '../api/textfiles'
 import { generateUniqueName, getExistingTextFileNames } from '../utils/imageNames'
 import DOMPurify from 'dompurify'
+import { playNotificationSound } from '../utils/sound'
 import { config } from '../config'
 import { TEXTFILE_HEADER_HEIGHT } from '../constants/canvas'
 import { snapToGrid, getGridSize } from '../utils/grid'
@@ -274,6 +275,8 @@ export function usePromptExecution({
         }
         updateActiveSceneItems((prev) => [...prev, newItem])
       }
+
+      playNotificationSound()
     } catch (error) {
       console.error('Failed to run prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'

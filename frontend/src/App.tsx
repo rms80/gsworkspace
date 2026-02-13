@@ -33,6 +33,7 @@ import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
 import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
+import { playNotificationSound } from './utils/sound'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
   HistoryStack,
@@ -1525,6 +1526,8 @@ function App() {
       } else {
         alert('No images were generated. The model may not have produced any image output.')
       }
+
+      playNotificationSound()
     } catch (error) {
       console.error('Failed to run image generation prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -1605,6 +1608,8 @@ function App() {
         zoom: 0.75,
       }
       updateActiveSceneItems((prev) => [...prev, newItem])
+
+      playNotificationSound()
     } catch (error) {
       console.error('Failed to run HTML gen prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
