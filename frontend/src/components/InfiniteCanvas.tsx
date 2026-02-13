@@ -973,10 +973,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     const stage = stageRef.current
     if (!stage) return
 
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
-
-    const canvasPos = screenToCanvas(pointer.x, pointer.y)
+    const canvasPos = screenToCanvas(e.evt.clientX, e.evt.clientY)
     contextMenuState.openMenu(
       { x: e.evt.clientX, y: e.evt.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
       { x: e.evt.clientX, y: e.evt.clientY },

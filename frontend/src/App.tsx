@@ -754,8 +754,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
       text: 'Double-click to edit',
       fontSize: 14,
       width,
@@ -896,8 +896,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
@@ -915,8 +915,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
@@ -934,8 +934,8 @@ function App() {
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
       label: 'HTML Gen',
       text: 'create a professional-looking tutorial page for this content',
       fontSize: 14,
