@@ -96,7 +96,7 @@ export async function resolveTextFileData(
   itemId: string,
   fileFormat: string
 ): Promise<{ text: string } | null> {
-  const ext = fileFormat === 'csv' ? 'csv' : 'txt'
+  const ext = fileFormat || 'txt'
   const key = `${workspace}/${sceneId}/${itemId}.${ext}`
   const buffer = await loadAsBuffer(key)
   if (buffer) {

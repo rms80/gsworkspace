@@ -54,6 +54,7 @@ import {
   COLOR_SELECTED,
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
+  TEXT_FILE_EXTENSION_PATTERN, getTextFileFormat,
 } from '../constants/canvas'
 import type { TransformEntry } from '../history'
 
@@ -937,12 +938,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         reader.readAsDataURL(file)
         offsetIndex++
       }
-      // Handle text files (.txt, .csv)
-      else if (onAddTextFileAt && (file.type === 'text/plain' || file.type === 'text/csv' || /\.(txt|csv)$/i.test(file.name))) {
+      // Handle text files
+      else if (onAddTextFileAt && (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name))) {
         const reader = new FileReader()
         const fileName = file.name
         const fileSize = file.size
-        const fileFormat = /\.csv$/i.test(fileName) ? 'csv' : 'txt'
+        const fileFormat = getTextFileFormat(fileName) || 'txt'
         reader.onload = async (event) => {
           const dataUrl = event.target?.result as string
           const itemId = uuidv4()

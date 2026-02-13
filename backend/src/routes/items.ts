@@ -18,6 +18,14 @@ if (ffprobeStatic?.path) {
   ffmpeg.setFfprobePath(ffprobeStatic.path)
 }
 
+// MIME types for text file formats
+const TEXT_FILE_MIME_TYPES: Record<string, string> = {
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', cs: 'text/plain',
+  cpp: 'text/plain', h: 'text/plain', c: 'text/plain', json: 'application/json',
+  py: 'text/x-python', md: 'text/markdown', sh: 'text/x-shellscript',
+  log: 'text/plain', ini: 'text/plain',
+}
+
 // Browser-native video formats that don't need transcoding
 const BROWSER_NATIVE_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'ogv'])
 
@@ -111,7 +119,7 @@ router.post('/upload-pdf', async (req, res) => {
   }
 })
 
-// Upload text file (.txt or .csv)
+// Upload text file (.txt, .csv, .js, .json, .py, .md, etc.)
 router.post('/upload-textfile', async (req, res) => {
   try {
     const { textData, sceneId, itemId, filename, fileFormat } = req.body
@@ -122,13 +130,13 @@ router.post('/upload-textfile', async (req, res) => {
       return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
     }
 
-    const ext = fileFormat === 'csv' ? 'csv' : 'txt'
+    const ext = fileFormat || 'txt'
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const key = `${sceneFolder}/${itemId}.${ext}`
 
     // textData is base64 data URL, convert to buffer
     const base64Data = textData.replace(/^data:[^;]+;base64,/, '')
-    const contentType = ext === 'csv' ? 'text/csv' : 'text/plain'
+    const contentType = TEXT_FILE_MIME_TYPES[ext] || 'text/plain'
     await save(key, Buffer.from(base64Data, 'base64'), contentType)
 
     const url = getPublicUrl(key)

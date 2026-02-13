@@ -120,7 +120,7 @@ export interface PdfItem extends BaseItem {
   thumbnailSrc?: string
 }
 
-export type TextFileFormat = 'txt' | 'csv'
+export type TextFileFormat = 'txt' | 'csv' | 'js' | 'cs' | 'cpp' | 'h' | 'c' | 'json' | 'py' | 'md' | 'sh' | 'log' | 'ini'
 
 export interface TextFileItem extends BaseItem {
   type: 'text-file'

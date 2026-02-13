@@ -59,7 +59,7 @@ export default function TextFileItemRenderer({
   const labelBarHeight = labelHeight + labelPadding * 2
 
   if (minimized) {
-    const badgeText = item.fileFormat === 'csv' ? 'CSV' : 'TXT'
+    const badgeText = item.fileFormat.toUpperCase()
     return (
       <Group
         key={item.id}

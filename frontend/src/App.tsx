@@ -14,7 +14,7 @@ import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene } from './types'
+import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
@@ -30,7 +30,7 @@ import { uploadImage } from './api/images'
 import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
 import { uploadTextFile } from './api/textfiles'
 import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
-import { PDF_MINIMIZED_HEIGHT } from './constants/canvas'
+import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
@@ -1055,7 +1055,7 @@ function App() {
 
   const addTextFileAt = useCallback(
     (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => {
-      const ext = fileFormat === 'csv' ? '.csv' : '.txt'
+      const ext = `.${fileFormat || 'txt'}`
       // Strip extension from existing names so generateUniqueName can compare base names
       const existingNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
       const uniqueBase = generateUniqueName(name || 'TextFile', existingNames)
@@ -1072,7 +1072,7 @@ function App() {
         width,
         height,
         fileSize,
-        fileFormat: (fileFormat === 'csv' ? 'csv' : 'txt') as 'txt' | 'csv',
+        fileFormat: (fileFormat || 'txt') as TextFileFormat,
         fontMono: true,
       }
       pushChange(new AddObjectChange(newItem))
@@ -1090,7 +1090,7 @@ function App() {
       const dataUrl = event.target?.result as string
       const name = file.name
       const fileSize = file.size
-      const fileFormat = /\.csv$/i.test(file.name) ? 'csv' : 'txt'
+      const fileFormat = getTextFileFormat(file.name) || 'txt'
       try {
         startOperation()
         const s3Url = await uploadTextFile(dataUrl, activeSceneId, itemId, file.name || `document-${Date.now()}.${fileFormat}`, fileFormat)
@@ -2129,11 +2129,11 @@ function App() {
           }
           reader.readAsDataURL(file)
           offsetIndex++
-        } else if (file.type === 'text/plain' || file.type === 'text/csv' || /\.(txt|csv)$/i.test(file.name)) {
+        } else if (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name)) {
           const reader = new FileReader()
           const fileName = file.name
           const fileSize = file.size
-          const fileFormat = /\.csv$/i.test(fileName) ? 'csv' : 'txt'
+          const fileFormat = getTextFileFormat(fileName) || 'txt'
           reader.onload = async (event) => {
             const dataUrl = event.target?.result as string
             const name = fileName

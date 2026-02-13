@@ -136,7 +136,7 @@ function MenuBar({
         { label: 'Image', type: 'file-input', accept: 'image/*', onFileSelect: handleImageUpload },
         ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
         { label: 'PDF', type: 'file-input' as const, accept: '.pdf,application/pdf', onFileSelect: onAddPdf },
-        { label: 'Text File', type: 'file-input' as const, accept: '.txt,.csv,text/plain,text/csv', onFileSelect: onAddTextFile },
+        { label: 'Text File', type: 'file-input' as const, accept: '.txt,.csv,.js,.cs,.cpp,.h,.c,.json,.py,.md,.sh,.log,.ini,text/plain,text/csv', onFileSelect: onAddTextFile },
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },
@@ -633,7 +633,7 @@ function MenuBar({
       <input
         ref={textFileInputRef}
         type="file"
-        accept=".txt,.csv,text/plain,text/csv"
+        accept=".txt,.csv,.js,.cs,.cpp,.h,.c,.json,.py,.md,.sh,.log,.ini,text/plain,text/csv"
         onChange={(e) => {
           const cb = pendingFileSelectRef.current
           if (cb) handleFileChange(e, cb)

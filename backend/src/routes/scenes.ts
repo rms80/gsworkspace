@@ -15,6 +15,13 @@ const router = Router({ mergeParams: true })
 
 const SCENE_FILE_VERSION = '1'
 
+const TEXT_FILE_MIME_TYPES: Record<string, string> = {
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', cs: 'text/plain',
+  cpp: 'text/plain', h: 'text/plain', c: 'text/plain', json: 'application/json',
+  py: 'text/x-python', md: 'text/markdown', sh: 'text/x-shellscript',
+  log: 'text/plain', ini: 'text/plain',
+}
+
 // Validate :id param is a valid UUID on all routes
 router.param('id', (req, res, next, id) => {
   if (!uuidValidate(id)) {
@@ -178,7 +185,7 @@ interface StoredTextFileItem extends StoredItemBase {
   name?: string
   fileSize?: number
   minimized?: boolean
-  fileFormat: 'txt' | 'csv'
+  fileFormat: string
   fontMono?: boolean
   fontSize?: number
 }
@@ -275,7 +282,7 @@ router.get('/:id/content-data', async (req, res) => {
       video: ['mp4', 'webm', 'mov', 'avi'],
       html: ['html'],
       pdf: ['pdf'],
-      'text-file': ['txt', 'csv'],
+      'text-file': ['txt', 'csv', 'js', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'],
     }
 
     const contentTypeExts = extensions[contentType as string] || ['png']
@@ -319,6 +326,17 @@ router.get('/:id/content-data', async (req, res) => {
       pdf: 'application/pdf',
       txt: 'text/plain',
       csv: 'text/csv',
+      js: 'text/javascript',
+      cs: 'text/plain',
+      cpp: 'text/plain',
+      h: 'text/plain',
+      c: 'text/plain',
+      json: 'application/json',
+      py: 'text/x-python',
+      md: 'text/markdown',
+      sh: 'text/x-shellscript',
+      log: 'text/plain',
+      ini: 'text/plain',
     }
 
     res.setHeader('Content-Type', mimeTypes[foundExt] || 'application/octet-stream')
@@ -777,7 +795,7 @@ router.post('/:id', async (req, res) => {
           console.error(`Failed to save PDF ${item.id}, skipping from scene`)
         }
       } else if (item.type === 'text-file') {
-        const ext = item.fileFormat === 'csv' ? 'csv' : 'txt'
+        const ext = item.fileFormat || 'txt'
         const textFileFile = `${item.id}.${ext}`
         let textFileSaved = false
 
@@ -808,7 +826,7 @@ router.post('/:id', async (req, res) => {
               } else {
                 try {
                   let buffer: Buffer | null = null
-                  const contentType = ext === 'csv' ? 'text/csv' : 'text/plain'
+                  const contentType = TEXT_FILE_MIME_TYPES[ext] || 'text/plain'
 
                   if (item.src.startsWith('/api/local-files/')) {
                     const localKey = item.src.slice('/api/local-files/'.length)
