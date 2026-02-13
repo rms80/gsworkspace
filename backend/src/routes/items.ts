@@ -20,10 +20,10 @@ if (ffprobeStatic?.path) {
 
 // MIME types for text file formats
 const TEXT_FILE_MIME_TYPES: Record<string, string> = {
-  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', cs: 'text/plain',
-  cpp: 'text/plain', h: 'text/plain', c: 'text/plain', json: 'application/json',
-  py: 'text/x-python', md: 'text/markdown', sh: 'text/x-shellscript',
-  log: 'text/plain', ini: 'text/plain',
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', ts: 'text/typescript',
+  tsx: 'text/typescript', cs: 'text/plain', cpp: 'text/plain', h: 'text/plain',
+  c: 'text/plain', json: 'application/json', py: 'text/x-python',
+  md: 'text/markdown', sh: 'text/x-shellscript', log: 'text/plain', ini: 'text/plain',
 }
 
 // Browser-native video formats that don't need transcoding

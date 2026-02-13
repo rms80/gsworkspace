@@ -16,10 +16,10 @@ const router = Router({ mergeParams: true })
 const SCENE_FILE_VERSION = '1'
 
 const TEXT_FILE_MIME_TYPES: Record<string, string> = {
-  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', cs: 'text/plain',
-  cpp: 'text/plain', h: 'text/plain', c: 'text/plain', json: 'application/json',
-  py: 'text/x-python', md: 'text/markdown', sh: 'text/x-shellscript',
-  log: 'text/plain', ini: 'text/plain',
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', ts: 'text/typescript',
+  tsx: 'text/typescript', cs: 'text/plain', cpp: 'text/plain', h: 'text/plain',
+  c: 'text/plain', json: 'application/json', py: 'text/x-python',
+  md: 'text/markdown', sh: 'text/x-shellscript', log: 'text/plain', ini: 'text/plain',
 }
 
 // Validate :id param is a valid UUID on all routes
@@ -282,7 +282,7 @@ router.get('/:id/content-data', async (req, res) => {
       video: ['mp4', 'webm', 'mov', 'avi'],
       html: ['html'],
       pdf: ['pdf'],
-      'text-file': ['txt', 'csv', 'js', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'],
+      'text-file': ['txt', 'csv', 'js', 'ts', 'tsx', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'],
     }
 
     const contentTypeExts = extensions[contentType as string] || ['png']
@@ -332,6 +332,8 @@ router.get('/:id/content-data', async (req, res) => {
       h: 'text/plain',
       c: 'text/plain',
       json: 'application/json',
+      ts: 'text/typescript',
+      tsx: 'text/typescript',
       py: 'text/x-python',
       md: 'text/markdown',
       sh: 'text/x-shellscript',

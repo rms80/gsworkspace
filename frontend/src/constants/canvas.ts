@@ -31,8 +31,8 @@ export const TEXTFILE_MINIMIZED_WIDTH = 120
 export const TEXTFILE_MINIMIZED_HEIGHT = 160
 
 // Supported text file extensions
-export const TEXT_FILE_EXTENSIONS = ['txt', 'csv', 'js', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'] as const
-export const TEXT_FILE_EXTENSION_PATTERN = /\.(txt|csv|js|cs|cpp|h|c|json|py|md|sh|log|ini)$/i
+export const TEXT_FILE_EXTENSIONS = ['txt', 'csv', 'js', 'ts', 'tsx', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'] as const
+export const TEXT_FILE_EXTENSION_PATTERN = /\.(txt|csv|js|tsx?|cs|cpp|h|c|json|py|md|sh|log|ini)$/i
 
 /** Extract text file format from a filename, or null if not a supported text file */
 export function getTextFileFormat(filename: string): string | null {
