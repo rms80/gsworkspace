@@ -28,9 +28,10 @@ import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImpor
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
 import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
+import { uploadTextFile } from './api/textfiles'
 import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
 import { PDF_MINIMIZED_HEIGHT } from './constants/canvas'
-import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames } from './utils/imageNames'
+import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
@@ -1052,6 +1053,58 @@ function App() {
     [updateActiveSceneItems, pushChange, items]
   )
 
+  const addTextFileAt = useCallback(
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => {
+      const ext = fileFormat === 'csv' ? '.csv' : '.txt'
+      // Strip extension from existing names so generateUniqueName can compare base names
+      const existingNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
+      const uniqueBase = generateUniqueName(name || 'TextFile', existingNames)
+      // Re-append extension (generateUniqueName strips it, but for generic "TextFile" it won't have one)
+      const uniqueName = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
+
+      const newItem: CanvasItem = {
+        id,
+        type: 'text-file',
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
+        src,
+        name: uniqueName,
+        width,
+        height,
+        fileSize,
+        fileFormat: (fileFormat === 'csv' ? 'csv' : 'txt') as 'txt' | 'csv',
+        fontMono: true,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange, items]
+  )
+
+  const handleAddTextFile = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    const itemId = uuidv4()
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      const name = file.name
+      const fileSize = file.size
+      const fileFormat = /\.csv$/i.test(file.name) ? 'csv' : 'txt'
+      try {
+        startOperation()
+        const s3Url = await uploadTextFile(dataUrl, activeSceneId, itemId, file.name || `document-${Date.now()}.${fileFormat}`, fileFormat)
+        endOperation()
+        addTextFileAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 500, name, fileSize, fileFormat)
+      } catch (err) {
+        endOperation()
+        console.error('Failed to upload text file:', err)
+        addTextFileAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, dataUrl, 600, 500, name, fileSize, fileFormat)
+      }
+    }
+    reader.readAsDataURL(file)
+  }, [activeSceneId, addTextFileAt, startOperation, endOperation])
+
   const handleAddPdf = useCallback(async (file: File) => {
     if (!activeSceneId) return
 
@@ -1064,10 +1117,11 @@ function App() {
       try {
         startOperation()
         const s3Url = await uploadPdf(dataUrl, activeSceneId, itemId, file.name || 'document.pdf')
-        // Generate and upload thumbnail
+        // Generate and upload thumbnail via content-data proxy (avoids CORS with S3)
         let thumbnailSrc: string | undefined
         try {
-          const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+          const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/content-data?contentId=${itemId}&contentType=pdf`
+          const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
           thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId, itemId)
         } catch (thumbErr) {
           console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
@@ -1140,7 +1194,7 @@ function App() {
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
         const hasModel = 'model' in changes &&
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf')
+        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file')
 
         if (hasText && item.type === 'text') {
           // Only record if text actually changed
@@ -1159,14 +1213,14 @@ function App() {
           if (item.model !== changes.model) {
             pushChange(new UpdateModelChange(id, item.model, changes.model as string))
           }
-        } else if (hasName && (item.type === 'image' || item.type === 'video' || item.type === 'pdf')) {
+        } else if (hasName && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file')) {
           // Only record if name actually changed
           const oldName = item.name
           const newName = changes.name as string | undefined
           if (oldName !== newName) {
             pushChange(new UpdateNameChange(id, oldName, newName))
           }
-        } else if ('minimized' in changes && item.type === 'pdf') {
+        } else if ('minimized' in changes && (item.type === 'pdf' || item.type === 'text-file')) {
           const oldMinimized = item.minimized ?? false
           const newMinimized = changes.minimized as boolean
           if (oldMinimized !== newMinimized) {
@@ -1206,6 +1260,13 @@ function App() {
   const togglePdfMinimized = useCallback((id: string) => {
     const item = items.find(i => i.id === id)
     if (!item || item.type !== 'pdf') return
+    const minimized = !(item.minimized ?? false)
+    updateItem(id, { minimized })
+  }, [items, updateItem])
+
+  const toggleTextFileMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'text-file') return
     const minimized = !(item.minimized ?? false)
     updateItem(id, { minimized })
   }, [items, updateItem])
@@ -1318,6 +1379,13 @@ function App() {
         }
         // Online mode: send ID so backend resolves from storage
         return { type: 'pdf' as const, id: item.id, sceneId: activeSceneId! }
+      } else if (item.type === 'text-file') {
+        if (isOffline) {
+          // Offline mode: send src URL directly to client-side LLM
+          return { type: 'text-file' as const, src: item.src }
+        }
+        // Online mode: send ID so backend resolves from storage
+        return { type: 'text-file' as const, id: item.id, sceneId: activeSceneId!, fileFormat: item.fileFormat }
       } else if (item.type === 'prompt') {
         return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
       } else if (item.type === 'html') {
@@ -2045,7 +2113,8 @@ function App() {
               const s3Url = await uploadPdf(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.pdf`)
               let thumbnailSrc: string | undefined
               try {
-                const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+                const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/content-data?contentId=${itemId}&contentType=pdf`
+                const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
                 thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId!, itemId)
               } catch (thumbErr) {
                 console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
@@ -2060,12 +2129,34 @@ function App() {
           }
           reader.readAsDataURL(file)
           offsetIndex++
+        } else if (file.type === 'text/plain' || file.type === 'text/csv' || /\.(txt|csv)$/i.test(file.name)) {
+          const reader = new FileReader()
+          const fileName = file.name
+          const fileSize = file.size
+          const fileFormat = /\.csv$/i.test(fileName) ? 'csv' : 'txt'
+          reader.onload = async (event) => {
+            const dataUrl = event.target?.result as string
+            const name = fileName
+            const itemId = uuidv4()
+            try {
+              startOperation()
+              const s3Url = await uploadTextFile(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.${fileFormat}`, fileFormat)
+              endOperation()
+              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 500, name, fileSize, fileFormat)
+            } catch (err) {
+              endOperation()
+              console.error('Failed to upload text file:', err)
+              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 500, name, fileSize, fileFormat)
+            }
+          }
+          reader.readAsDataURL(file)
+          offsetIndex++
         }
       }
     }
 
     processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt])
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt])
 
   if (authRequired && !authenticated) {
     return <LoginScreen serverName={serverName} onSuccess={handleLoginSuccess} />
@@ -2086,6 +2177,7 @@ function App() {
         onAddImage={handleAddImage}
         onAddVideo={handleAddVideo}
         onAddPdf={handleAddPdf}
+        onAddTextFile={handleAddTextFile}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
@@ -2175,6 +2267,8 @@ function App() {
           onUploadVideoAt={handleUploadVideoAt}
           onAddPdfAt={addPdfAt}
           onTogglePdfMinimized={togglePdfMinimized}
+          onAddTextFileAt={addTextFileAt}
+          onToggleTextFileMinimized={toggleTextFileMinimized}
         />
       ) : (
         <div

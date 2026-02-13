@@ -17,7 +17,7 @@ export function generateUniqueName(baseName: string, existingNames: string[]): s
   const nameWithoutExt = baseName.replace(/\.[^/.]+$/, '')
 
   // Check if this is a generic base name (for pasted content)
-  const isGenericBase = nameWithoutExt === 'Image' || nameWithoutExt === 'Video' || nameWithoutExt === 'PDF'
+  const isGenericBase = nameWithoutExt === 'Image' || nameWithoutExt === 'Video' || nameWithoutExt === 'PDF' || nameWithoutExt === 'TextFile'
 
   if (isGenericBase) {
     // For generic bases, always use numbered format: Image1, Image2, Video1, Video2, etc.
@@ -72,5 +72,14 @@ export function getExistingVideoNames(items: Array<{ type: string; name?: string
 export function getExistingPdfNames(items: Array<{ type: string; name?: string }>): string[] {
   return items
     .filter((item) => item.type === 'pdf' && item.name)
+    .map((item) => item.name as string)
+}
+
+/**
+ * Get all existing text file names from a list of canvas items.
+ */
+export function getExistingTextFileNames(items: Array<{ type: string; name?: string }>): string[] {
+  return items
+    .filter((item) => item.type === 'text-file' && item.name)
     .map((item) => item.name as string)
 }

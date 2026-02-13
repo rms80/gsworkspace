@@ -23,7 +23,7 @@ const IMAGE_GEN_MODEL_IDS: Record<ImageGenModel, string> = {
 }
 
 export interface ContentItem {
-  type: 'text' | 'image' | 'pdf'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   src?: string
 }
@@ -138,6 +138,14 @@ async function buildContentParts(items: ContentItem[]): Promise<GeminiPart[]> {
         })
       } catch (err) {
         console.warn('Failed to fetch PDF for LLM context:', err)
+      }
+    } else if (item.type === 'text-file' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const text = await response.text()
+        parts.push({ text: `[Text file content]:\n${text}` })
+      } catch (err) {
+        console.warn('Failed to fetch text file for LLM context:', err)
       }
     }
   }

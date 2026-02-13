@@ -111,6 +111,34 @@ router.post('/upload-pdf', async (req, res) => {
   }
 })
 
+// Upload text file (.txt or .csv)
+router.post('/upload-textfile', async (req, res) => {
+  try {
+    const { textData, sceneId, itemId, filename, fileFormat } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const ext = fileFormat === 'csv' ? 'csv' : 'txt'
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.${ext}`
+
+    // textData is base64 data URL, convert to buffer
+    const base64Data = textData.replace(/^data:[^;]+;base64,/, '')
+    const contentType = ext === 'csv' ? 'text/csv' : 'text/plain'
+    await save(key, Buffer.from(base64Data, 'base64'), contentType)
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading text file:', error)
+    res.status(500).json({ error: 'Failed to upload text file' })
+  }
+})
+
 // Upload PDF thumbnail
 router.post('/upload-pdf-thumbnail', async (req, res) => {
   try {

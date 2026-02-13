@@ -172,7 +172,18 @@ interface StoredPdfItem extends StoredItemBase {
   thumbFile?: string
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredPdfItem
+interface StoredTextFileItem extends StoredItemBase {
+  type: 'text-file'
+  file: string
+  name?: string
+  fileSize?: number
+  minimized?: boolean
+  fileFormat: 'txt' | 'csv'
+  fontMono?: boolean
+  fontSize?: number
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredPdfItem | StoredTextFileItem
 
 interface StoredScene {
   id: string
@@ -263,6 +274,8 @@ router.get('/:id/content-data', async (req, res) => {
       image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
       video: ['mp4', 'webm', 'mov', 'avi'],
       html: ['html'],
+      pdf: ['pdf'],
+      'text-file': ['txt', 'csv'],
     }
 
     const contentTypeExts = extensions[contentType as string] || ['png']
@@ -304,6 +317,8 @@ router.get('/:id/content-data', async (req, res) => {
       avi: 'video/x-msvideo',
       html: 'text/html',
       pdf: 'application/pdf',
+      txt: 'text/plain',
+      csv: 'text/csv',
     }
 
     res.setHeader('Content-Type', mimeTypes[foundExt] || 'application/octet-stream')
@@ -761,6 +776,82 @@ router.post('/:id', async (req, res) => {
         } else {
           console.error(`Failed to save PDF ${item.id}, skipping from scene`)
         }
+      } else if (item.type === 'text-file') {
+        const ext = item.fileFormat === 'csv' ? 'csv' : 'txt'
+        const textFileFile = `${item.id}.${ext}`
+        let textFileSaved = false
+
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await save(
+              `${sceneFolder}/${textFileFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+            textFileSaved = true
+          }
+        } else {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected text file URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              textFileSaved = true
+            } else {
+              const textFileKey = `${sceneFolder}/${textFileFile}`
+              const alreadyExists = await exists(textFileKey)
+              if (alreadyExists) {
+                textFileSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  const contentType = ext === 'csv' ? 'text/csv' : 'text/plain'
+
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      buffer = Buffer.from(arrayBuffer)
+                    }
+                  }
+
+                  if (buffer) {
+                    await save(textFileKey, buffer, contentType)
+                    textFileSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch text file from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (textFileSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'text-file',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: textFileFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            fileFormat: item.fileFormat || 'txt',
+            fontMono: item.fontMono,
+            fontSize: item.fontSize,
+          })
+        } else {
+          console.error(`Failed to save text file ${item.id}, skipping from scene`)
+        }
       }
     }
 
@@ -952,6 +1043,23 @@ router.get('/:id', async (req, res) => {
             fileSize: item.fileSize,
             minimized: item.minimized,
             thumbnailSrc,
+          }
+        } else if (item.type === 'text-file') {
+          const textFileUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'text-file' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: textFileUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            fileFormat: item.fileFormat,
+            fontMono: item.fontMono,
+            fontSize: item.fontSize,
           }
         } else {
           // For HTML items, load the HTML file

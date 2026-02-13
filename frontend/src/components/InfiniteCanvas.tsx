@@ -2,10 +2,12 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
+import { uploadTextFile } from '../api/textfiles'
+import { ACTIVE_WORKSPACE } from '../api/workspace'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
@@ -20,12 +22,14 @@ import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import PdfItemRenderer from './canvas/items/PdfItemRenderer'
+import TextFileItemRenderer from './canvas/items/TextFileItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
 import PdfLabelEditingOverlay from './canvas/overlays/PdfLabelEditingOverlay'
+import TextFileLabelEditingOverlay from './canvas/overlays/TextFileLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import GifOverlay from './canvas/overlays/GifOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
@@ -44,7 +48,7 @@ import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -79,6 +83,8 @@ interface InfiniteCanvasProps {
   onBatchTransform?: (entries: TransformEntry[]) => void
   onAddPdfAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => void
   onTogglePdfMinimized?: (id: string) => void
+  onAddTextFileAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => void
+  onToggleTextFileMinimized?: (id: string) => void
 }
 
 export interface CanvasHandle {
@@ -86,7 +92,7 @@ export interface CanvasHandle {
   fitToView: () => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -98,6 +104,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
   const pdfTransformerRef = useRef<Konva.Transformer>(null)
+  const textFileTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
 
   // Multi-select drag coordination ref
@@ -450,6 +457,45 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const [pdfItemTransforms, setPdfItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingPdfLabelId, setEditingPdfLabelId] = useState<string | null>(null)
   const pdfLabelInputRef = useRef<HTMLInputElement>(null)
+  const [textFileItemTransforms, setTextFileItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [editingTextFileLabelId, setEditingTextFileLabelId] = useState<string | null>(null)
+  const textFileLabelInputRef = useRef<HTMLInputElement>(null)
+  // Cache fetched text file content (keyed by item src URL)
+  const [textFileContents, setTextFileContents] = useState<Map<string, string>>(new Map())
+
+  // Fetch text file content from React side (avoids CORS issues with srcdoc iframe)
+  useEffect(() => {
+    const textFileItems = items.filter((item) => item.type === 'text-file' && !(item as TextFileItem).minimized) as TextFileItem[]
+    for (const item of textFileItems) {
+      if (!textFileContents.has(item.id)) {
+        // Mark as loading to avoid duplicate fetches
+        setTextFileContents((prev) => {
+          if (prev.has(item.id)) return prev
+          const next = new Map(prev)
+          next.set(item.id, '')
+          return next
+        })
+        // Use content-data endpoint to proxy through backend (avoids S3 CORS)
+        const fetchUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${sceneId}/content-data?contentId=${item.id}&contentType=text-file`
+        fetch(fetchUrl)
+          .then((r) => r.text())
+          .then((text) => {
+            setTextFileContents((prev) => {
+              const next = new Map(prev)
+              next.set(item.id, text)
+              return next
+            })
+          })
+          .catch(() => {
+            setTextFileContents((prev) => {
+              const next = new Map(prev)
+              next.set(item.id, 'Failed to load file.')
+              return next
+            })
+          })
+      }
+    }
+  }, [items, textFileContents, sceneId])
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -476,11 +522,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
       { type: 'html', ref: htmlTransformerRef },
       { type: 'pdf', ref: pdfTransformerRef, filterItem: (item) => item.type === 'pdf' && !item.minimized },
+      { type: 'text-file', ref: textFileTransformerRef, filterItem: (item) => item.type === 'text-file' && !item.minimized },
     ],
   })
 
   // 13. Multi-select drag coordination (Layer-level handlers)
-  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef]
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef]
 
   const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     // Guard: if already tracking a drag (e.g. Transformer started drag on
@@ -873,7 +920,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             const s3Url = await uploadPdf(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.pdf`)
             let thumbnailSrc: string | undefined
             try {
-              const thumb = await renderPdfPageToDataUrl(s3Url, 1, PDF_MINIMIZED_HEIGHT * 4)
+              const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${sceneId}/content-data?contentId=${itemId}&contentType=pdf`
+              const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
               thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, sceneId, itemId)
             } catch (thumbErr) {
               console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
@@ -884,6 +932,30 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             endOperation()
             console.error('Failed to upload PDF, using data URL:', err)
             onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
+          }
+        }
+        reader.readAsDataURL(file)
+        offsetIndex++
+      }
+      // Handle text files (.txt, .csv)
+      else if (onAddTextFileAt && (file.type === 'text/plain' || file.type === 'text/csv' || /\.(txt|csv)$/i.test(file.name))) {
+        const reader = new FileReader()
+        const fileName = file.name
+        const fileSize = file.size
+        const fileFormat = /\.csv$/i.test(fileName) ? 'csv' : 'txt'
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result as string
+          const itemId = uuidv4()
+          const name = fileName
+          try {
+            startOperation()
+            const s3Url = await uploadTextFile(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.${fileFormat}`, fileFormat)
+            endOperation()
+            onAddTextFileAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 500, name, fileSize, fileFormat)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload text file, using data URL:', err)
+            onAddTextFileAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, 600, 500, name, fileSize, fileFormat)
           }
         }
         reader.readAsDataURL(file)
@@ -1074,6 +1146,56 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     onTogglePdfMinimized?.(id)
   }, [onTogglePdfMinimized])
 
+  // Text file item label editing handlers
+  const handleTextFileLabelDblClick = (id: string) => {
+    setEditingTextFileLabelId(id)
+    setTimeout(() => {
+      textFileLabelInputRef.current?.focus()
+      textFileLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleTextFileLabelBlur = () => {
+    if (editingTextFileLabelId && textFileLabelInputRef.current) {
+      onUpdateItem(editingTextFileLabelId, { name: textFileLabelInputRef.current.value })
+    }
+    setEditingTextFileLabelId(null)
+  }
+
+  const handleTextFileLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingTextFileLabelId(null)
+    } else if (e.key === 'Enter') {
+      handleTextFileLabelBlur()
+    }
+  }
+
+  const getEditingTextFileItem = (): TextFileItem | null => {
+    if (!editingTextFileLabelId) return null
+    const item = items.find((i) => i.id === editingTextFileLabelId)
+    if (!item || item.type !== 'text-file') return null
+    return item
+  }
+  const editingTextFileItem = getEditingTextFileItem()
+
+  const handleToggleTextFileMinimized = useCallback((id: string) => {
+    onToggleTextFileMinimized?.(id)
+  }, [onToggleTextFileMinimized])
+
+  const handleToggleTextFileMono = useCallback((id: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    onUpdateItem(id, { fontMono: !(item.fontMono ?? false) } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
+  const handleChangeTextFileFontSize = useCallback((id: string, delta: number) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    const currentSize = item.fontSize ?? 14
+    const newSize = Math.max(8, Math.min(48, currentSize + delta))
+    onUpdateItem(id, { fontSize: newSize } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
     const item = items.find((i) => i.id === editingHtmlLabelId)
@@ -1261,6 +1383,23 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 setIsViewportTransforming={setIsViewportTransforming}
               />
             )
+          } else if (item.type === 'text-file') {
+            return (
+              <TextFileItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                editingTextFileLabelId={editingTextFileLabelId}
+                onItemClick={handleItemClick}
+                onUpdateItem={handleUpdateItem}
+                onLabelDblClick={handleTextFileLabelDblClick}
+                onToggleMinimized={handleToggleTextFileMinimized}
+                onToggleMono={handleToggleTextFileMono}
+                onChangeFontSize={handleChangeTextFileFontSize}
+                setTextFileItemTransforms={setTextFileItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
+            )
           }
           return null
         })}
@@ -1412,6 +1551,19 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             return newBox
           }}
         />
+        {/* Transformer for text files - free resize, no rotation */}
+        <Transformer
+          ref={textFileTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
         {/* Transformer for videos - corner handles only, keep aspect ratio */}
         <Transformer
           ref={videoTransformerRef}
@@ -1500,6 +1652,58 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             >
               <iframe
                 src={`${item.src}#navpanes=0&toolbar=1&view=FitH`}
+                style={{
+                  width: width * stageScale,
+                  height: height * stageScale,
+                  border: 'none',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          )
+        })}
+
+      {/* Text file iframe overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'text-file' && !(item as TextFileItem).minimized)
+        .map((item) => {
+          if (item.type !== 'text-file') return null
+          const transform = textFileItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
+          const isItemSelected = selectedIds.includes(item.id)
+          const isDragging = !!transform
+          const iframeInteractive = isItemSelected && !isAnyDragActive && !isDragging
+          const fontMono = item.fontMono ?? false
+          const fontSize = item.fontSize ?? 14
+          const textContent = textFileContents.get(item.id) ?? ''
+          // HTML-escape the text content for safe embedding in srcdoc
+          const escapedContent = textContent
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+          const srcdoc = `<html><head><style>body{margin:8px;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;white-space:pre-wrap;word-wrap:break-word;color:#333;}</style></head><body>${escapedContent || 'Loading...'}</body></html>`
+          return (
+            <div
+              key={`textfile-${item.id}-${fontMono}-${fontSize}`}
+              style={{
+                position: 'absolute',
+                top: (y + TEXTFILE_HEADER_HEIGHT) * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
+                overflow: 'hidden',
+                borderRadius: '0 0 4px 4px',
+                zIndex: Z_IFRAME_OVERLAY,
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
+              }}
+            >
+              <iframe
+                srcDoc={srcdoc}
                 style={{
                   width: width * stageScale,
                   height: height * stageScale,
@@ -1724,6 +1928,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           stagePos={stagePos}
           onBlur={handlePdfLabelBlur}
           onKeyDown={handlePdfLabelKeyDown}
+        />
+      )}
+
+      {/* Text file label editing overlay */}
+      {editingTextFileItem && (
+        <TextFileLabelEditingOverlay
+          item={editingTextFileItem}
+          inputRef={textFileLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleTextFileLabelBlur}
+          onKeyDown={handleTextFileLabelKeyDown}
         />
       )}
 

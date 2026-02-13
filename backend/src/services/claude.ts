@@ -47,6 +47,11 @@ export async function generateText(
           data: item.pdfData.base64,
         },
       } as unknown as Anthropic.ImageBlockParam)
+    } else if (item.type === 'text-file' && item.textFileData) {
+      contentBlocks.push({
+        type: 'text',
+        text: `[Text file content]:\n${item.textFileData.text}`,
+      })
     }
   }
 

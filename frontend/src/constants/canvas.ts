@@ -24,6 +24,12 @@ export const PDF_HEADER_HEIGHT = 24
 export const PDF_MINIMIZED_WIDTH = 120
 export const PDF_MINIMIZED_HEIGHT = 160
 
+// --- Text file item dimensions ---
+
+export const TEXTFILE_HEADER_HEIGHT = 24
+export const TEXTFILE_MINIMIZED_WIDTH = 120
+export const TEXTFILE_MINIMIZED_HEIGHT = 160
+
 // --- Image item dimensions ---
 
 export const IMAGE_HEADER_HEIGHT = 24

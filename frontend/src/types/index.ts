@@ -120,7 +120,22 @@ export interface PdfItem extends BaseItem {
   thumbnailSrc?: string
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | PdfItem
+export type TextFileFormat = 'txt' | 'csv'
+
+export interface TextFileItem extends BaseItem {
+  type: 'text-file'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  minimized?: boolean
+  fileFormat: TextFileFormat
+  fontMono?: boolean
+  fontSize?: number
+}
+
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | PdfItem | TextFileItem
 
 export interface SelectionRect {
   x: number

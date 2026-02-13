@@ -6,6 +6,7 @@ interface MenuBarProps {
   onAddImage: (file: File) => void
   onAddVideo: (file: File) => void
   onAddPdf: (file: File) => void
+  onAddTextFile: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
@@ -59,6 +60,7 @@ function MenuBar({
   onAddImage,
   onAddVideo,
   onAddPdf,
+  onAddTextFile,
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
@@ -102,6 +104,7 @@ function MenuBar({
   const videoInputRef = useRef<HTMLInputElement>(null)
   const zipInputRef = useRef<HTMLInputElement>(null)
   const folderInputRef = useRef<HTMLInputElement>(null)
+  const textFileInputRef = useRef<HTMLInputElement>(null)
 
   const handleImageUpload = (file: File) => {
     onAddImage(file)
@@ -133,6 +136,7 @@ function MenuBar({
         { label: 'Image', type: 'file-input', accept: 'image/*', onFileSelect: handleImageUpload },
         ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
         { label: 'PDF', type: 'file-input' as const, accept: '.pdf,application/pdf', onFileSelect: onAddPdf },
+        { label: 'Text File', type: 'file-input' as const, accept: '.txt,.csv,text/plain,text/csv', onFileSelect: onAddTextFile },
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },
@@ -289,6 +293,9 @@ function MenuBar({
     }
   }
 
+  // Track pending file select callback for dynamic accept
+  const pendingFileSelectRef = useRef<((file: File) => void) | null>(null)
+
   const handleItemClick = (item: MenuItemDef) => {
     if (item.disabled) return
     if (item.type === 'file-input') {
@@ -297,8 +304,17 @@ function MenuBar({
         zipInputRef.current?.click()
       } else if (item.accept === 'video/*') {
         videoInputRef.current?.click()
+      } else if (item.accept?.includes('.txt') || item.accept?.includes('text/plain')) {
+        pendingFileSelectRef.current = item.onFileSelect || null
+        if (textFileInputRef.current) {
+          textFileInputRef.current.click()
+        }
       } else {
-        fileInputRef.current?.click()
+        pendingFileSelectRef.current = item.onFileSelect || null
+        if (fileInputRef.current) {
+          fileInputRef.current.accept = item.accept || 'image/*'
+          fileInputRef.current.click()
+        }
       }
       return
     }
@@ -600,12 +616,29 @@ function MenuBar({
         </div>
       ))}
 
-      {/* Hidden file input for image upload */}
+      {/* Hidden file input for image/pdf upload */}
       <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        onChange={(e) => handleFileChange(e, handleImageUpload)}
+        onChange={(e) => {
+          const cb = pendingFileSelectRef.current || handleImageUpload
+          handleFileChange(e, cb)
+          pendingFileSelectRef.current = null
+        }}
+        style={{ display: 'none' }}
+      />
+
+      {/* Hidden file input for text file upload */}
+      <input
+        ref={textFileInputRef}
+        type="file"
+        accept=".txt,.csv,text/plain,text/csv"
+        onChange={(e) => {
+          const cb = pendingFileSelectRef.current
+          if (cb) handleFileChange(e, cb)
+          pendingFileSelectRef.current = null
+        }}
         style={{ display: 'none' }}
       />
 

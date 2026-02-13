@@ -457,7 +457,7 @@ export class UpdateNameChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'image' && item.type !== 'video' && item.type !== 'pdf') return item
+        if (item.type !== 'image' && item.type !== 'video' && item.type !== 'pdf' && item.type !== 'text-file') return item
         return { ...item, name: this.newName } as CanvasItem
       }),
     }
@@ -468,7 +468,7 @@ export class UpdateNameChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'image' && item.type !== 'video' && item.type !== 'pdf') return item
+        if (item.type !== 'image' && item.type !== 'video' && item.type !== 'pdf' && item.type !== 'text-file') return item
         return { ...item, name: this.oldName } as CanvasItem
       }),
     }
@@ -517,7 +517,7 @@ export class ToggleMinimizedChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'pdf') return item
+        if (item.type !== 'pdf' && item.type !== 'text-file') return item
         return { ...item, minimized: this.newMinimized } as CanvasItem
       }),
     }
@@ -528,7 +528,7 @@ export class ToggleMinimizedChange extends BaseChangeRecord {
       ...state,
       items: state.items.map((item) => {
         if (item.id !== this.objectId) return item
-        if (item.type !== 'pdf') return item
+        if (item.type !== 'pdf' && item.type !== 'text-file') return item
         return { ...item, minimized: this.oldMinimized } as CanvasItem
       }),
     }
