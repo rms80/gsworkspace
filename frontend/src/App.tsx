@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas, { CanvasHandle } from './components/InfiniteCanvas'
 import MenuBar from './components/MenuBar'
@@ -32,7 +32,7 @@ import { uploadTextFile } from './api/textfiles'
 import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
 import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
-import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
+import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
   HistoryStack,
@@ -99,6 +99,8 @@ function App() {
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
   const persistedSceneIdsRef = useRef<Set<string>>(new Set()) // Tracks scenes that have been saved to server
   const isHiddenWorkspaceRef = useRef(false) // Whether the current workspace is hidden (don't save as lastWorkspace)
+  const viewportMapRef = useRef<Map<string, ViewportState>>(new Map())
+  const prevActiveSceneIdRef = useRef<string | null>(null)
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -225,13 +227,21 @@ function App() {
         setHistoryMap(newHistoryMap)
         setSelectionMap(newSelectionMap)
 
+        // Restore per-scene viewports from settings
+        const savedViewports = loadViewports(mode)
+        viewportMapRef.current.clear()
+        for (const [id, vp] of Object.entries(savedViewports)) {
+          viewportMapRef.current.set(id, vp)
+        }
+
         // Restore active scene from settings if it's in the loaded scenes
         const loadedIds = scenesWithHistory.map(({ scene }) => scene.id)
-        if (modeSettings.activeSceneId && loadedIds.includes(modeSettings.activeSceneId)) {
-          setActiveSceneId(modeSettings.activeSceneId)
-        } else {
-          setActiveSceneId(scenesWithHistory[0]?.scene.id ?? null)
-        }
+        const restoredActiveId = modeSettings.activeSceneId && loadedIds.includes(modeSettings.activeSceneId)
+          ? modeSettings.activeSceneId
+          : (scenesWithHistory[0]?.scene.id ?? null)
+        setActiveSceneId(restoredActiveId)
+        // Don't set prevActiveSceneIdRef here — the useLayoutEffect will detect
+        // the new activeSceneId, restore the viewport before paint, and set prevRef.
       }
     } catch (error) {
       console.error('Failed to load scenes:', error)
@@ -431,6 +441,7 @@ function App() {
     setAuthenticated(false)
     setOpenScenes([])
     setActiveSceneId(null)
+    viewportMapRef.current.clear()
   }, [])
 
   // Auto-save when active scene changes (debounced)
@@ -541,6 +552,51 @@ function App() {
     const openIds = openScenes.map((s) => s.id)
     saveOpenScenesToSettings(openIds, activeSceneId, storageMode)
   }, [openScenes, activeSceneId, isLoading, storageMode])
+
+  // Save/restore viewport on tab switch (useLayoutEffect runs before paint, avoiding flicker)
+  useLayoutEffect(() => {
+    if (isLoading) return
+    const prevId = prevActiveSceneIdRef.current
+
+    // Save previous scene's viewport
+    if (prevId && prevId !== activeSceneId && canvasRef.current) {
+      const vp = canvasRef.current.getViewport()
+      viewportMapRef.current.set(prevId, vp)
+    }
+
+    // Restore new scene's viewport
+    if (activeSceneId && activeSceneId !== prevId) {
+      const saved = viewportMapRef.current.get(activeSceneId)
+      if (saved && canvasRef.current) {
+        canvasRef.current.setViewport({ x: saved.x, y: saved.y }, saved.scale)
+      }
+    }
+
+    prevActiveSceneIdRef.current = activeSceneId
+  }, [activeSceneId, isLoading])
+
+  // Periodic viewport save to localStorage (every 5s) + beforeunload
+  useEffect(() => {
+    const saveCurrentViewport = () => {
+      if (activeSceneId && canvasRef.current) {
+        viewportMapRef.current.set(activeSceneId, canvasRef.current.getViewport())
+      }
+      // Convert map to record for persistence
+      const record: Record<string, ViewportState> = {}
+      viewportMapRef.current.forEach((vp, id) => {
+        record[id] = vp
+      })
+      saveViewports(record, storageMode)
+    }
+
+    const interval = setInterval(saveCurrentViewport, 5000)
+    window.addEventListener('beforeunload', saveCurrentViewport)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('beforeunload', saveCurrentViewport)
+    }
+  }, [activeSceneId, storageMode])
 
   // Undo handler
   const handleUndo = useCallback(() => {
@@ -713,6 +769,7 @@ function App() {
   }, [])
 
   const closeScene = useCallback((id: string) => {
+    viewportMapRef.current.delete(id)
     setOpenScenes((prev) => {
       const newScenes = prev.filter((s) => s.id !== id)
       // If closing the active scene, switch to another one
@@ -730,6 +787,7 @@ function App() {
       await deleteScene(id)
       // Clean up the saved state tracking
       lastSavedRef.current.delete(id)
+      viewportMapRef.current.delete(id)
       // Remove from open scenes
       setOpenScenes((prev) => {
         const newScenes = prev.filter((s) => s.id !== id)

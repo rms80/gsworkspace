@@ -95,6 +95,8 @@ export interface CanvasHandle {
   resetZoom: () => void
   fitToView: () => void
   getViewportCenter: () => { x: number; y: number }
+  getViewport: () => { x: number; y: number; scale: number }
+  setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
 const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
@@ -187,6 +189,15 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         x: stageSize.width / 2 - centerX * scale,
         y: stageSize.height / 2 - centerY * scale,
       })
+    },
+    getViewport: () => ({
+      x: stagePos.x,
+      y: stagePos.y,
+      scale: stageScale,
+    }),
+    setViewport: (pos: { x: number; y: number }, scale: number) => {
+      setStagePos(pos)
+      _setStageScale(scale)
     },
   }), [items, stageSize, stagePos, stageScale])
 
