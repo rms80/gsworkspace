@@ -751,11 +751,12 @@ function App() {
   const addTextItem = useCallback((x?: number, y?: number) => {
     const width = 200
     const height = 100
+    const center = canvasRef.current?.getViewportCenter()
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
+      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
       text: 'Double-click to edit',
       fontSize: 14,
       width,
@@ -893,11 +894,12 @@ function App() {
   const addPromptItem = useCallback((x?: number, y?: number) => {
     const width = 300
     const height = 150
+    const center = canvasRef.current?.getViewportCenter()
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
+      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
@@ -912,11 +914,12 @@ function App() {
   const addImageGenPromptItem = useCallback((x?: number, y?: number) => {
     const width = 300
     const height = 150
+    const center = canvasRef.current?.getViewportCenter()
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
+      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
@@ -931,11 +934,12 @@ function App() {
   const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
     const width = 300
     const height = 150
+    const center = canvasRef.current?.getViewportCenter()
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: snapToGrid(x != null ? x : 100 + Math.random() * 200),
-      y: snapToGrid(y != null ? y : 100 + Math.random() * 200),
+      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
+      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
       label: 'HTML Gen',
       text: 'create a professional-looking tutorial page for this content',
       fontSize: 14,

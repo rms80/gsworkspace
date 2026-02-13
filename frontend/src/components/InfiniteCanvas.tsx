@@ -94,6 +94,7 @@ interface InfiniteCanvasProps {
 export interface CanvasHandle {
   resetZoom: () => void
   fitToView: () => void
+  getViewportCenter: () => { x: number; y: number }
 }
 
 const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
@@ -152,6 +153,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
   // Expose viewport controls to parent via ref
   useImperativeHandle(ref, () => ({
+    getViewportCenter: () => ({
+      x: (stageSize.width / 2 - stagePos.x) / stageScale,
+      y: (stageSize.height / 2 - stagePos.y) / stageScale,
+    }),
     resetZoom: () => {
       _setStageScale(1)
       setStagePos({ x: 0, y: 0 })
@@ -183,7 +188,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         y: stageSize.height / 2 - centerY * scale,
       })
     },
-  }), [items, stageSize])
+  }), [items, stageSize, stagePos, stageScale])
 
   // 2. Image loader hook
   const { loadedImages } = useImageLoader(items)
