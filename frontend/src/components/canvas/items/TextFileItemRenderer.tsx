@@ -7,7 +7,7 @@ import {
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT,
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 import { config } from '../../../config'
 
 interface TextFileItemRendererProps {
@@ -49,6 +49,7 @@ export default function TextFileItemRenderer({
   setIsViewportTransforming,
 }: TextFileItemRendererProps) {
   const minimized = item.minimized ?? false
+  const groupRef = useRef<Konva.Group>(null)
   const labelTextRef = useRef<Konva.Text>(null)
   const [labelHeight, setLabelHeight] = useState(14)
 
@@ -66,6 +67,7 @@ export default function TextFileItemRenderer({
     const badgeText = item.fileFormat.toUpperCase()
     return (
       <Group
+        ref={groupRef}
         key={item.id}
         id={item.id}
         x={item.x}
@@ -73,7 +75,10 @@ export default function TextFileItemRenderer({
         width={TEXTFILE_MINIMIZED_WIDTH}
         height={TEXTFILE_MINIMIZED_HEIGHT}
         draggable
-        dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+        dragBoundFunc={(pos) => {
+          const stage = groupRef.current?.getStage()
+          return stage ? snapDragPos(pos, stage) : pos
+        }}
         onClick={(e) => onItemClick(e, item.id)}
         onContextMenu={(e) => {
           e.evt.preventDefault()
@@ -212,6 +217,7 @@ export default function TextFileItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -219,7 +225,10 @@ export default function TextFileItemRenderer({
       width={item.width}
       height={item.height + TEXTFILE_HEADER_HEIGHT}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { HtmlItem } from '../../../types'
@@ -9,7 +10,7 @@ import {
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
 import { MenuState } from '../../../hooks/useMenuState'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 
 interface HtmlItemRendererProps {
   item: HtmlItem
@@ -35,9 +36,11 @@ export default function HtmlItemRenderer({
   setIsViewportTransforming,
 }: HtmlItemRendererProps) {
   const zoom = item.zoom ?? 1
+  const groupRef = useRef<Konva.Group>(null)
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -45,7 +48,10 @@ export default function HtmlItemRenderer({
       width={item.width}
       height={item.height + HTML_HEADER_HEIGHT}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onDragStart={() => {
         if (config.features.hideHtmlDuringTransform) {

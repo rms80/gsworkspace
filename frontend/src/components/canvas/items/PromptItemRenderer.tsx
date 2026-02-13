@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { CanvasItem } from '../../../types'
@@ -9,7 +10,7 @@ import {
 } from '../../../constants/canvas'
 import { PromptEditing } from '../../../hooks/usePromptEditing'
 import { hasAnthropicApiKey, hasGoogleApiKey } from '../../../utils/apiKeyStorage'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 
 interface PromptItemRendererProps {
   item: CanvasItem & { label: string; text: string; fontSize: number; width: number; height: number; model: string }
@@ -40,6 +41,7 @@ export default function PromptItemRenderer({
   onRun,
   onShowTooltip,
 }: PromptItemRendererProps) {
+  const groupRef = useRef<Konva.Group>(null)
   const isEditingThis = editing.editingId === item.id
   const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
@@ -74,6 +76,7 @@ export default function PromptItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -81,10 +84,13 @@ export default function PromptItemRenderer({
       width={item.width}
       height={item.height}
       draggable={!isRunning}
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onDragEnd={(e) => {
-        onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+        onUpdateItem(item.id, { x: snapToGrid(e.target.x()), y: snapToGrid(e.target.y()) })
       }}
       onTransformEnd={(e) => {
         const node = e.target

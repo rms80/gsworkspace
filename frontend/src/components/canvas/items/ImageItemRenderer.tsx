@@ -1,8 +1,9 @@
+import { useRef } from 'react'
 import { Image as KonvaImage, Group, Rect, Text } from 'react-konva'
 import Konva from 'konva'
 import { ImageItem } from '../../../types'
 import { IMAGE_HEADER_HEIGHT, COLOR_SELECTED } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 
 interface ImageItemRendererProps {
   item: ImageItem
@@ -41,6 +42,7 @@ export default function ImageItemRenderer({
   setGifItemTransforms,
   stageScale,
 }: ImageItemRendererProps) {
+  const groupRef = useRef<Konva.Group>(null)
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
   const displayWidth = item.width * scaleX
@@ -70,12 +72,16 @@ export default function ImageItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
       y={item.y - headerHeight}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y + headerHeight) - headerHeight })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage, headerHeight) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()

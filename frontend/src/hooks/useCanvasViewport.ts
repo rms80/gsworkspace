@@ -134,9 +134,12 @@ export function useCanvasViewport(
   }, [isMiddleMousePanning, stagePos.x, stagePos.y])
 
   const screenToCanvas = (screenX: number, screenY: number) => {
+    const rect = containerRef.current?.getBoundingClientRect()
+    const offsetX = rect?.left ?? 0
+    const offsetY = rect?.top ?? 0
     return {
-      x: (screenX - stagePos.x) / stageScale,
-      y: (screenY - stagePos.y) / stageScale,
+      x: (screenX - offsetX - stagePos.x) / stageScale,
+      y: (screenY - offsetY - stagePos.y) / stageScale,
     }
   }
 

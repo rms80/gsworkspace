@@ -948,15 +948,15 @@ function App() {
   }, [updateActiveSceneItems, pushChange])
 
   const addTextAt = useCallback(
-    (x: number, y: number, text: string, optWidth?: number): string => {
+    (x: number, y: number, text: string, optWidth?: number, topLeft?: boolean): string => {
       const width = optWidth ?? 400
       const height = 100
       const id = uuidv4()
       const newItem: CanvasItem = {
         id,
         type: 'text',
-        x: snapToGrid(x - width / 2),
-        y: snapToGrid(y - height / 2),
+        x: topLeft ? snapToGrid(x) : snapToGrid(x - width / 2),
+        y: topLeft ? snapToGrid(y) : snapToGrid(y - height / 2),
         text,
         fontSize: 14,
         width,

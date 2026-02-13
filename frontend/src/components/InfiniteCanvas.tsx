@@ -67,7 +67,7 @@ interface InfiniteCanvasProps {
   sceneId: string
   onUpdateItem: (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => void
   onSelectItems: (ids: string[]) => void
-  onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
+  onAddTextAt: (x: number, y: number, text: string, optWidth?: number, topLeft?: boolean) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   onDeleteSelected: () => void
@@ -299,14 +299,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               width: selectedItem.width,
             })
             const visualHeight = measuredText.height() + padding * 2
-            // addTextAt centers the item, so compute center of desired position
             const desiredX = selectedItem.x
             const desiredY = selectedItem.y + visualHeight + 2
-            const itemWidth = selectedItem.width
-            const itemHeight = 100 // addTextAt's default height
-            const centerX = desiredX + itemWidth / 2
-            const centerY = desiredY + itemHeight / 2
-            const newId = onAddTextAt(centerX, centerY, '', itemWidth)
+            const newId = onAddTextAt(desiredX, desiredY, '', selectedItem.width, true)
             onSelectItems([newId])
             setEditingTextId(newId)
             setTimeout(() => {
@@ -340,7 +335,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         // Create new text block at cursor (for 't' when nothing selected, or Shift+T fallthrough)
         if (isShiftT || selectedIds.length === 0) {
           const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
-          const newId = onAddTextAt(canvasPos.x, canvasPos.y, '')
+          const newId = onAddTextAt(canvasPos.x, canvasPos.y, '', undefined, true)
           // Select the new text block and start editing after it's rendered
           setTimeout(() => {
             onSelectItems([newId])
