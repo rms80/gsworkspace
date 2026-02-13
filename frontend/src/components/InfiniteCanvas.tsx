@@ -1491,6 +1491,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onToggleMono={handleToggleTextFileMono}
                 onChangeFontSize={handleChangeTextFileFontSize}
                 onToggleViewType={handleToggleTextFileViewType}
+                onCopyContent={(id) => {
+                  const content = textFileContents.get(id)
+                  if (content) {
+                    navigator.clipboard.writeText(content)
+                  }
+                }}
                 setTextFileItemTransforms={setTextFileItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
               />
