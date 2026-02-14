@@ -14,10 +14,16 @@ export interface ClaudeCodeResult {
   sessionId: string | null
 }
 
+export interface ActivityEvent {
+  type: 'tool_use' | 'assistant_text' | 'status' | 'error'
+  content: string
+}
+
 export async function generateWithClaudeCode(
   items: ResolvedContentItem[],
   prompt: string,
-  sessionId?: string | null
+  sessionId?: string | null,
+  onActivity?: (event: ActivityEvent) => void
 ): Promise<ClaudeCodeResult> {
   // Build a text prompt with content blocks described inline
   const parts: string[] = []
@@ -90,6 +96,7 @@ export async function generateWithClaudeCode(
         // For max_turns, there may still be useful partial output in the last assistant message
         if (message.subtype === 'error_max_turns') {
           console.log('[ClaudeCode] Hit max turns — returning whatever result text we have')
+          onActivity?.({ type: 'status', content: 'Hit max turns limit' })
           // resultText may have been set by an earlier assistant message; if so use it
           if (resultText) break
           throw new Error('Claude Code hit the maximum turn limit before completing. Try a simpler prompt.')
@@ -102,6 +109,24 @@ export async function generateWithClaudeCode(
       const textBlocks = message.message.content.filter((b: { type: string }) => b.type === 'text')
       if (textBlocks.length > 0) {
         resultText = textBlocks.map((b: { type: 'text'; text: string }) => b.text).join('\n')
+        onActivity?.({ type: 'assistant_text', content: resultText })
+      }
+      // Emit tool_use summaries from content blocks
+      for (const block of message.message.content) {
+        if (block.type === 'tool_use') {
+          const toolBlock = block as { type: 'tool_use'; name?: string; input?: unknown }
+          const name = toolBlock.name || 'tool'
+          const inputStr = typeof toolBlock.input === 'string' ? toolBlock.input : JSON.stringify(toolBlock.input ?? '')
+          const summary = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr
+          onActivity?.({ type: 'tool_use', content: `${name}: ${summary}` })
+        }
+      }
+    } else if (message.type === 'system' && 'subtype' in message) {
+      const subtype = (message as Record<string, unknown>).subtype as string
+      if (subtype === 'init') {
+        onActivity?.({ type: 'status', content: 'Session initialized' })
+      } else {
+        onActivity?.({ type: 'status', content: subtype })
       }
     }
   }

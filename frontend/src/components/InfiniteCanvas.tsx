@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImper
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, ActivityMessage } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
@@ -76,6 +76,7 @@ interface InfiniteCanvasProps {
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   onDeleteSelected: () => void
+  onCombineTextItems?: () => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
   onRunImageGenPrompt: (promptId: string) => void
@@ -84,6 +85,7 @@ interface InfiniteCanvasProps {
   runningHtmlGenPromptIds: Set<string>
   onSendCodingRobotMessage: (itemId: string, message: string) => void
   runningCodingRobotIds: Set<string>
+  codingRobotActivity: Map<string, ActivityMessage[]>
   isOffline: boolean
   onAddText?: (x?: number, y?: number) => void
   onAddPrompt?: (x?: number, y?: number) => string
@@ -107,7 +109,7 @@ export interface CanvasHandle {
   setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, runningCodingRobotIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, runningCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -1992,6 +1994,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isAnyDragActive={isAnyDragActive}
                 transform={transform}
                 selectedTextContent={selectedTextContent}
+                activityMessages={codingRobotActivity.get(item.id) || []}
                 onSendMessage={onSendCodingRobotMessage}
                 onUpdateItem={onUpdateItem}
               />
@@ -2370,6 +2373,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           selectedIds={selectedIds}
           sceneId={sceneId}
           onClose={multiSelectContextMenuState.closeMenu}
+          onCombineTextItems={onCombineTextItems}
         />
       )}
 

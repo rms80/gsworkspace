@@ -15,7 +15,7 @@ import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { usePromptExecution } from './hooks/usePromptExecution'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, ChatMessage, TextFileFormat } from './types'
+import { CanvasItem, Scene, ChatMessage, ActivityMessage, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
@@ -79,6 +79,7 @@ function App() {
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
   const [runningCodingRobotIds, setRunningCodingRobotIds] = useState<Set<string>>(new Set())
+  const [codingRobotActivity, setCodingRobotActivity] = useState<Map<string, ActivityMessage[]>>(new Map())
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
@@ -1416,6 +1417,60 @@ function App() {
     updateActiveSceneItems((prev) => prev.filter((item) => !currentSelectedIds.includes(item.id)))
   }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap, isOffline])
 
+  const combineTextItems = useCallback(() => {
+    if (!activeSceneId) return
+    const currentSelectedIds = selectionMap.get(activeSceneId) ?? []
+    const selectedItems = items.filter((item) => currentSelectedIds.includes(item.id) && item.type === 'text')
+
+    if (selectedItems.length < 2) return
+
+    // Sort items by Y position, then by X position (top to bottom, left to right)
+    const sortedItems = selectedItems.sort((a, b) => {
+      const yDiff = a.y - b.y
+      return yDiff !== 0 ? yDiff : a.x - b.x
+    })
+
+    // Combine text from all items, separated by two newlines (blank line between)
+    const combinedText = sortedItems.map(item => (item as any).text).join('\n\n')
+
+    // Calculate position for the new combined item (use position of first item)
+    const firstItem = sortedItems[0]
+    const newWidth = Math.max(...sortedItems.map(item => item.width || 200))
+    const newHeight = Math.max(100, sortedItems.length * 40) // Estimate height based on number of items
+
+    // Create new combined text item
+    const newItem: CanvasItem = {
+      id: uuidv4(),
+      type: 'text',
+      x: firstItem.x,
+      y: firstItem.y,
+      text: combinedText,
+      fontSize: (firstItem as any).fontSize || 14,
+      width: newWidth,
+      height: newHeight,
+    }
+
+    // Create a multi-step change that deletes old items and adds new one
+    const changes: ChangeRecord[] = [
+      ...sortedItems.map(item => new DeleteObjectChange(item)),
+      new AddObjectChange(newItem),
+    ]
+    pushChange(new MultiStepChange(changes))
+
+    // Update items: remove old ones, add new one
+    updateActiveSceneItems((prev) => [
+      ...prev.filter((item) => !currentSelectedIds.includes(item.id)),
+      newItem,
+    ])
+
+    // Clear selection
+    setSelectionMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(activeSceneId, [])
+      return newMap
+    })
+  }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
+
   const selectItems = useCallback(
     (ids: string[]) => {
       if (!activeSceneId) return
@@ -1667,8 +1722,9 @@ function App() {
       item.id === itemId ? { ...item, text: '', chatHistory: updatedHistory } : item
     ))
 
-    // Mark as running
+    // Mark as running and clear previous activity
     setRunningCodingRobotIds((prev) => new Set(prev).add(itemId))
+    setCodingRobotActivity((prev) => { const next = new Map(prev); next.set(itemId, []); return next })
 
     // Gather selected items (excluding the robot itself) as context
     const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== itemId)
@@ -1684,7 +1740,25 @@ function App() {
     }).filter((item) => item.text || item.src || item.id)
 
     try {
-      const { result, sessionId: newSessionId } = await generateWithClaudeCode(contentItems, message, robotItem.sessionId)
+      const { result, sessionId: newSessionId } = await generateWithClaudeCode(
+        contentItems,
+        message,
+        robotItem.sessionId,
+        (event) => {
+          const activityMsg: ActivityMessage = {
+            id: event.id,
+            type: event.type,
+            content: event.content,
+            timestamp: event.timestamp,
+          }
+          setCodingRobotActivity((prev) => {
+            const next = new Map(prev)
+            const existing = next.get(itemId) || []
+            next.set(itemId, [...existing, activityMsg])
+            return next
+          })
+        }
+      )
 
       // Append assistant response
       const assistantMessage: ChatMessage = { role: 'assistant', content: result, timestamp: new Date().toISOString() }
@@ -2291,6 +2365,7 @@ function App() {
           onAddImageAt={addImageAt}
           onAddVideoAt={addVideoAt}
           onDeleteSelected={deleteSelected}
+          onCombineTextItems={combineTextItems}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
           onRunImageGenPrompt={handleRunImageGenPrompt}
@@ -2299,6 +2374,7 @@ function App() {
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
           onSendCodingRobotMessage={handleSendCodingRobotMessage}
           runningCodingRobotIds={runningCodingRobotIds}
+          codingRobotActivity={codingRobotActivity}
           isOffline={isOffline}
           onAddText={addTextItem}
           onAddPrompt={addPromptItem}

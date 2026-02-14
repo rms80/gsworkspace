@@ -222,13 +222,49 @@ router.post('/generate-claude-code', async (req, res) => {
     }
 
     const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
-    const { result, sessionId: newSessionId } = await generateWithClaudeCode(resolved, prompt, sessionId)
 
-    res.json({ result, sessionId: newSessionId })
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders()
+
+    let activityCounter = 0
+
+    const { result, sessionId: newSessionId } = await generateWithClaudeCode(
+      resolved,
+      prompt,
+      sessionId,
+      (event) => {
+        activityCounter++
+        const sseData = JSON.stringify({
+          event: 'activity',
+          id: `act-${activityCounter}`,
+          type: event.type,
+          content: event.content,
+          timestamp: new Date().toISOString(),
+        })
+        res.write(`data: ${sseData}\n\n`)
+      }
+    )
+
+    // Send the final result
+    const resultData = JSON.stringify({ event: 'result', result, sessionId: newSessionId })
+    res.write(`data: ${resultData}\n\n`)
+    res.end()
   } catch (error) {
     console.error('Error generating with Claude Code:', error)
     const message = error instanceof Error ? error.message : 'Claude Code request failed.'
-    res.status(500).json({ error: message })
+
+    // If headers already sent (SSE started), send error as SSE event
+    if (res.headersSent) {
+      const errorData = JSON.stringify({ event: 'error', error: message })
+      res.write(`data: ${errorData}\n\n`)
+      res.end()
+    } else {
+      res.status(500).json({ error: message })
+    }
   }
 })
 

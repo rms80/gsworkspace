@@ -181,10 +181,18 @@ export interface ClaudeCodeResponse {
   sessionId: string | null
 }
 
+export interface ClaudeCodeActivityEvent {
+  id: string
+  type: 'tool_use' | 'assistant_text' | 'status' | 'error'
+  content: string
+  timestamp: string
+}
+
 export async function generateWithClaudeCode(
   items: ContentItem[],
   prompt: string,
-  sessionId?: string | null
+  sessionId?: string | null,
+  onActivity?: (event: ClaudeCodeActivityEvent) => void
 ): Promise<ClaudeCodeResponse> {
   // Always goes through backend (no offline mode for Claude Code)
   const response = await fetch(`${API_BASE}/generate-claude-code`, {
@@ -198,8 +206,66 @@ export async function generateWithClaudeCode(
     throw new Error(errorData.error || `Failed to generate with Claude Code: ${response.statusText}`)
   }
 
-  const data = await response.json() as { result: string; sessionId: string | null }
-  return { result: data.result, sessionId: data.sessionId }
+  const contentType = response.headers.get('Content-Type') || ''
+
+  // Backward compat: if not SSE, parse as JSON
+  if (!contentType.includes('text/event-stream')) {
+    const data = await response.json() as { result: string; sessionId: string | null }
+    return { result: data.result, sessionId: data.sessionId }
+  }
+
+  // Parse SSE stream
+  const reader = response.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult: ClaudeCodeResponse | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+
+    // Process complete SSE messages (terminated by double newline)
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop()! // keep incomplete part
+
+    for (const part of parts) {
+      const trimmed = part.trim()
+      if (!trimmed) continue
+
+      // Extract data from "data: {...}" lines
+      for (const line of trimmed.split('\n')) {
+        if (line.startsWith('data: ')) {
+          try {
+            const parsed = JSON.parse(line.slice(6))
+            if (parsed.event === 'activity') {
+              onActivity?.({
+                id: parsed.id,
+                type: parsed.type,
+                content: parsed.content,
+                timestamp: parsed.timestamp,
+              })
+            } else if (parsed.event === 'result') {
+              finalResult = { result: parsed.result, sessionId: parsed.sessionId }
+            } else if (parsed.event === 'error') {
+              throw new Error(parsed.error)
+            }
+          } catch (e) {
+            if (e instanceof Error && e.message !== 'Unexpected end of JSON input') {
+              throw e
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error('Stream ended without a result')
+  }
+
+  return finalResult
 }
 
 /**

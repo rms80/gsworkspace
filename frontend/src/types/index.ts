@@ -115,6 +115,13 @@ export interface ChatMessage {
   timestamp?: string
 }
 
+export interface ActivityMessage {
+  id: string
+  type: 'tool_use' | 'assistant_text' | 'status' | 'error'
+  content: string
+  timestamp: string
+}
+
 export interface CodingRobotItem extends BaseItem {
   type: 'coding-robot'
   label: string
