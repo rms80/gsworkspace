@@ -47,6 +47,7 @@ export default function CodingRobotOverlay({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activityEndRef = useRef<HTMLDivElement>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
+  const [inputText, setInputText] = useState(item.text)
   const [viewStepIndex, setViewStepIndex] = useState(0)
   const prevStepCountRef = useRef(0)
   const [liveWidthPx, setLiveWidthPx] = useState<number | null>(null) // transient during drag
@@ -80,6 +81,13 @@ export default function CodingRobotOverlay({
     prevStepCountRef.current = totalSteps
   }, [totalSteps])
 
+  // Sync local input when item.text is cleared externally (after send)
+  useEffect(() => {
+    if (item.text === '' && inputText !== '') {
+      setInputText('')
+    }
+  }, [item.text]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -92,13 +100,14 @@ export default function CodingRobotOverlay({
     }
   }, [currentMessages.length, viewStepIndex, totalSteps])
 
-  const canSend = !isRunning && (!!item.text.trim() || !!selectedTextContent)
+  const canSend = !isRunning && (!!inputText.trim() || !!selectedTextContent)
 
   const handleSend = () => {
     if (!canSend) return
-    const message = selectedTextContent || item.text.trim()
+    const message = selectedTextContent || inputText.trim()
     if (!message) return
     onSendMessage(item.id, message)
+    setInputText('')
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -109,7 +118,7 @@ export default function CodingRobotOverlay({
   }
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onUpdateItem(item.id, { text: e.target.value })
+    setInputText(e.target.value)
   }
 
   const handleCopySessionId = () => {
@@ -326,7 +335,7 @@ export default function CodingRobotOverlay({
         >
           <textarea
             ref={textareaRef}
-            value={item.text}
+            value={inputText}
             onChange={handleTextChange}
             onKeyDown={handleKeyDown}
             placeholder="Type a message..."
