@@ -30,6 +30,7 @@ import { uploadImage } from './api/images'
 import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
 import { uploadTextFile } from './api/textfiles'
 import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
+import { saveActivitySteps, saveActiveStep, clearActiveStep, loadActivity } from './utils/activityStorage'
 import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
@@ -120,6 +121,38 @@ function App() {
     const scenePart = activeScene?.name ? ` / ${activeScene.name}` : ''
     document.title = `${ACTIVE_WORKSPACE}${scenePart}`
   }, [activeScene?.name])
+
+  // Restore activity from IndexedDB for coding robot items in the active scene
+  useEffect(() => {
+    if (!activeScene) return
+    const robotItems = activeScene.items.filter((item) => item.type === 'coding-robot')
+    if (robotItems.length === 0) return
+
+    let cancelled = false
+    Promise.all(
+      robotItems.map(async (item) => {
+        const steps = await loadActivity(item.id)
+        return steps ? { itemId: item.id, steps } : null
+      })
+    ).then((results) => {
+      if (cancelled) return
+      const toRestore = results.filter((r): r is { itemId: string; steps: ActivityMessage[][] } => r !== null)
+      if (toRestore.length === 0) return
+      setCodingRobotActivity((prev) => {
+        // Only restore if we don't already have data for this item (avoid overwriting live data)
+        let changed = false
+        const next = new Map(prev)
+        for (const { itemId, steps } of toRestore) {
+          if (!next.has(itemId) || next.get(itemId)!.length === 0) {
+            next.set(itemId, steps)
+            changed = true
+          }
+        }
+        return changed ? next : prev
+      })
+    })
+    return () => { cancelled = true }
+  }, [activeSceneId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Selection for active scene (stored separately from items)
   const selectedIds = activeSceneId ? (selectionMap.get(activeSceneId) ?? []) : []
@@ -1762,6 +1795,8 @@ function App() {
             const updated = [...steps]
             updated[updated.length - 1] = [...updated[updated.length - 1], activityMsg]
             next.set(itemId, updated)
+            // Persist active step to IndexedDB for HMR survival
+            saveActiveStep(itemId, updated[updated.length - 1])
             return next
           })
         }
@@ -1790,6 +1825,15 @@ function App() {
         const next = new Set(prev)
         next.delete(itemId)
         return next
+      })
+      // Persist completed steps to IndexedDB and clear active marker
+      setCodingRobotActivity((prev) => {
+        const steps = prev.get(itemId)
+        if (steps) {
+          saveActivitySteps(itemId, steps)
+          clearActiveStep(itemId)
+        }
+        return prev
       })
     }
   }, [items, selectedIds, activeSceneId, updateActiveSceneItems])
