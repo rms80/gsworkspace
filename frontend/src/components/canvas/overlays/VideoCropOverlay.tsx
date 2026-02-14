@@ -602,6 +602,22 @@ export default function VideoCropOverlay({
     setShowAspectMenu(false)
   }
 
+  // 's' hotkey to apply 1:1 (square) aspect ratio preset
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (e.key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+        e.preventDefault()
+        applyAspectRatioPreset(1)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [cropRect, origW, origH, lockAspectRatio])
+
   const handleCopyCrop = () => {
     setCopiedCropRect({ ...cropRect })
     setShowAspectMenu(false)

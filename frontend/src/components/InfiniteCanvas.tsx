@@ -381,6 +381,72 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems, onUpdateItem])
 
+  // 8b2. 'E' hotkey to enter edit/crop mode on selected image, video, or text
+  //       Also applies/confirms edits when already in crop mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (e.key !== 'e' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+
+      // If already in crop mode, apply and exit
+      if (croppingImageId) {
+        e.preventDefault()
+        applyCrop()
+        return
+      }
+      if (croppingVideoId) {
+        e.preventDefault()
+        applyOrCancelVideoCrop()
+        return
+      }
+
+      if (isEditing) return
+      if (selectedIds.length !== 1) return
+
+      const selectedItem = items.find(item => item.id === selectedIds[0])
+      if (!selectedItem) return
+
+      if (selectedItem.type === 'image') {
+        e.preventDefault()
+        const img = loadedImages.get((selectedItem as ImageItem).src)
+        if (!img) return
+        const natW = img.naturalWidth
+        const natH = img.naturalHeight
+        const initialCrop = (selectedItem as ImageItem).cropRect
+          ? { ...(selectedItem as ImageItem).cropRect! }
+          : { x: 0, y: 0, width: natW, height: natH }
+        setCroppingImageId(selectedItem.id)
+        setPendingCropRect(initialCrop)
+      } else if (selectedItem.type === 'video') {
+        e.preventDefault()
+        const videoItem = selectedItem as VideoItem
+        const origW = videoItem.originalWidth ?? videoItem.width
+        const origH = videoItem.originalHeight ?? videoItem.height
+        const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
+        startVideoCrop(
+          videoItem.id, initialCrop,
+          videoItem.speedFactor ?? 1,
+          videoItem.removeAudio ?? false,
+          videoItem.trim ?? false,
+          videoItem.trimStart ?? 0,
+          videoItem.trimEnd ?? 0,
+        )
+      } else if (selectedItem.type === 'text') {
+        e.preventDefault()
+        setEditingTextId(selectedItem.id)
+        setTimeout(() => {
+          textareaRef.current?.focus()
+          textareaRef.current?.select()
+        }, 0)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, selectedIds, items, loadedImages, setCroppingImageId, setPendingCropRect, startVideoCrop, croppingImageId, croppingVideoId, applyCrop, applyOrCancelVideoCrop])
+
   // 8c. Viewport hotkeys: Shift+V = fit-to-view, C = center at cursor, Shift+C = fit-to-view at 100%
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
