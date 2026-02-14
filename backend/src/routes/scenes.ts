@@ -179,6 +179,7 @@ interface StoredCodingRobotItem extends StoredItemBase {
   chatHistoryFile?: string
   showActivity?: boolean
   activityPanelWidth?: number
+  activeRequestId?: string
 }
 
 interface StoredPdfItem extends StoredItemBase {
@@ -691,6 +692,7 @@ router.post('/:id', async (req, res) => {
           chatHistoryFile: (item.chatHistory && item.chatHistory.length > 0) ? chatHistoryFile : undefined,
           showActivity: item.showActivity || undefined,
           activityPanelWidth: item.activityPanelWidth || undefined,
+          activeRequestId: item.activeRequestId || undefined,
         })
       } else if (item.type === 'html') {
         const htmlFile = `${item.id}.html`
@@ -1109,6 +1111,7 @@ router.get('/:id', async (req, res) => {
             sessionId: item.sessionId ?? null,
             showActivity: item.showActivity,
             activityPanelWidth: item.activityPanelWidth,
+            activeRequestId: item.activeRequestId,
           }
         } else if (item.type === 'pdf') {
           const pdfUrl = getPublicUrl(`${sceneFolder}/${item.file}`)

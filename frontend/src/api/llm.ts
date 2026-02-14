@@ -192,13 +192,14 @@ export async function generateWithClaudeCode(
   items: ContentItem[],
   prompt: string,
   sessionId?: string | null,
-  onActivity?: (event: ClaudeCodeActivityEvent) => void
+  onActivity?: (event: ClaudeCodeActivityEvent) => void,
+  requestId?: string
 ): Promise<ClaudeCodeResponse> {
   // Always goes through backend (no offline mode for Claude Code)
   const response = await fetch(`${API_BASE}/generate-claude-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: toBackendItems(items), prompt, sessionId }),
+    body: JSON.stringify({ items: toBackendItems(items), prompt, sessionId, requestId }),
   })
 
   if (!response.ok) {
@@ -301,6 +302,37 @@ export async function quickLlmQuery(prompt: string): Promise<string> {
 
   const data: GenerateResponse = await response.json()
   return data.result
+}
+
+export interface ClaudeCodePollResponse {
+  status: 'running' | 'completed' | 'error'
+  events: ClaudeCodeActivityEvent[]
+  result?: { result: string; sessionId: string | null }
+  error?: string
+}
+
+/**
+ * Poll for buffered request state after SSE reconnection (e.g., after HMR).
+ * Returns events starting from index `after` (0-based).
+ * Returns null if request not found (404).
+ */
+export async function pollClaudeCodeRequest(
+  requestId: string,
+  after: number = 0
+): Promise<ClaudeCodePollResponse | null> {
+  const response = await fetch(
+    `${API_BASE}/generate-claude-code/poll/${encodeURIComponent(requestId)}?after=${after}`
+  )
+
+  if (response.status === 404) {
+    return null
+  }
+
+  if (!response.ok) {
+    throw new Error(`Poll failed: ${response.statusText}`)
+  }
+
+  return response.json()
 }
 
 /**

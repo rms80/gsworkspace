@@ -133,6 +133,7 @@ export interface CodingRobotItem extends BaseItem {
   sessionId: string | null
   showActivity?: boolean
   activityPanelWidth?: number  // canvas units (unscaled)
+  activeRequestId?: string     // backend requestId for SSE reconnection after HMR
 }
 
 export interface PdfItem extends BaseItem {

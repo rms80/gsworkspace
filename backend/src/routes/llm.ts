@@ -12,6 +12,35 @@ const __dirname = dirname(__filename)
 
 const router = Router({ mergeParams: true })
 
+// ── In-memory request buffer for SSE reconnection after HMR ──
+
+interface BufferedEvent {
+  event: string
+  [key: string]: unknown
+}
+
+interface RequestState {
+  events: BufferedEvent[]
+  result?: { result: string; sessionId: string | null }
+  error?: string
+  status: 'running' | 'completed' | 'error'
+  createdAt: number
+}
+
+const activeRequests = new Map<string, RequestState>()
+
+const REQUEST_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
+/** Remove entries older than REQUEST_TTL_MS */
+function cleanupOldRequests() {
+  const now = Date.now()
+  for (const [id, state] of activeRequests) {
+    if (now - state.createdAt > REQUEST_TTL_MS) {
+      activeRequests.delete(id)
+    }
+  }
+}
+
 /**
  * Extract a user-friendly error message from various error types
  */
@@ -215,10 +244,22 @@ router.post('/generate-html', async (req, res) => {
 
 router.post('/generate-claude-code', async (req, res) => {
   try {
-    const { items, prompt, sessionId } = req.body as { items: LLMRequestItem[]; prompt: string; sessionId?: string | null }
+    const { items, prompt, sessionId, requestId } = req.body as {
+      items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string
+    }
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
+    }
+
+    // Lazy cleanup of old requests
+    cleanupOldRequests()
+
+    // Initialize request buffer if requestId provided
+    let reqState: RequestState | undefined
+    if (requestId) {
+      reqState = { events: [], status: 'running', createdAt: Date.now() }
+      activeRequests.set(requestId, reqState)
     }
 
     const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
@@ -231,6 +272,11 @@ router.post('/generate-claude-code', async (req, res) => {
     res.flushHeaders()
 
     let activityCounter = 0
+    let clientDisconnected = false
+
+    res.on('close', () => {
+      clientDisconnected = true
+    })
 
     const { result, sessionId: newSessionId } = await generateWithClaudeCode(
       resolved,
@@ -238,34 +284,85 @@ router.post('/generate-claude-code', async (req, res) => {
       sessionId,
       (event) => {
         activityCounter++
-        const sseData = JSON.stringify({
+        const eventData = {
           event: 'activity',
           id: `act-${activityCounter}`,
           type: event.type,
           content: event.content,
           timestamp: new Date().toISOString(),
-        })
-        res.write(`data: ${sseData}\n\n`)
+        }
+
+        // Always buffer if requestId was provided
+        if (reqState) {
+          reqState.events.push(eventData)
+        }
+
+        // Write to SSE stream if client is still connected
+        if (!clientDisconnected) {
+          try {
+            res.write(`data: ${JSON.stringify(eventData)}\n\n`)
+          } catch {
+            clientDisconnected = true
+          }
+        }
       }
     )
 
-    // Send the final result
-    const resultData = JSON.stringify({ event: 'result', result, sessionId: newSessionId })
-    res.write(`data: ${resultData}\n\n`)
-    res.end()
+    // Store result in buffer
+    if (reqState) {
+      reqState.result = { result, sessionId: newSessionId }
+      reqState.status = 'completed'
+    }
+
+    // Send the final result if client is still connected
+    if (!clientDisconnected) {
+      const resultData = JSON.stringify({ event: 'result', result, sessionId: newSessionId })
+      res.write(`data: ${resultData}\n\n`)
+      res.end()
+    }
   } catch (error) {
     console.error('Error generating with Claude Code:', error)
     const message = error instanceof Error ? error.message : 'Claude Code request failed.'
 
+    // Update buffer state on error
+    const requestId = req.body?.requestId
+    if (requestId) {
+      const reqState = activeRequests.get(requestId)
+      if (reqState) {
+        reqState.error = message
+        reqState.status = 'error'
+      }
+    }
+
     // If headers already sent (SSE started), send error as SSE event
     if (res.headersSent) {
       const errorData = JSON.stringify({ event: 'error', error: message })
-      res.write(`data: ${errorData}\n\n`)
-      res.end()
+      try { res.write(`data: ${errorData}\n\n`) } catch { /* client gone */ }
+      try { res.end() } catch { /* client gone */ }
     } else {
       res.status(500).json({ error: message })
     }
   }
+})
+
+// Poll for buffered request state (used after HMR reconnection)
+router.get('/generate-claude-code/poll/:requestId', (req, res) => {
+  const { requestId } = req.params
+  const after = parseInt(req.query.after as string) || 0
+
+  const state = activeRequests.get(requestId)
+  if (!state) {
+    return res.status(404).json({ error: 'Request not found or expired' })
+  }
+
+  const events = state.events.slice(after)
+
+  res.json({
+    status: state.status,
+    events,
+    result: state.result,
+    error: state.error,
+  })
 })
 
 /**

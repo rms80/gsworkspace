@@ -9,6 +9,7 @@ const store = localforage.createInstance({
 
 const KEY_PREFIX = 'activity:'
 const ACTIVE_SUFFIX = ':active'
+const REQUEST_SUFFIX = ':requestId'
 
 function stepsKey(itemId: string): string {
   return `${KEY_PREFIX}${itemId}`
@@ -60,8 +61,24 @@ export async function loadActivity(itemId: string): Promise<ActivityMessage[][] 
   return result.length > 0 ? result : null
 }
 
+/** Save the activeRequestId for HMR survival. */
+export async function saveActiveRequestId(itemId: string, requestId: string): Promise<void> {
+  await store.setItem(`${KEY_PREFIX}${itemId}${REQUEST_SUFFIX}`, requestId)
+}
+
+/** Load the activeRequestId (returns null if not set). */
+export async function loadActiveRequestId(itemId: string): Promise<string | null> {
+  return store.getItem<string>(`${KEY_PREFIX}${itemId}${REQUEST_SUFFIX}`)
+}
+
+/** Clear the activeRequestId. */
+export async function clearActiveRequestId(itemId: string): Promise<void> {
+  await store.removeItem(`${KEY_PREFIX}${itemId}${REQUEST_SUFFIX}`)
+}
+
 /** Remove all activity data for an item. */
 export async function deleteActivity(itemId: string): Promise<void> {
   await store.removeItem(stepsKey(itemId))
   await store.removeItem(activeKey(itemId))
+  await store.removeItem(`${KEY_PREFIX}${itemId}${REQUEST_SUFFIX}`)
 }

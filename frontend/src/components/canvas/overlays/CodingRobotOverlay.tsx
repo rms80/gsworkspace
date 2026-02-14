@@ -23,6 +23,7 @@ interface CodingRobotOverlayProps {
   stageScale: number
   stagePos: { x: number; y: number }
   isRunning: boolean
+  isReconnecting?: boolean
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
   selectedTextContent: string
@@ -36,6 +37,7 @@ export default function CodingRobotOverlay({
   stageScale,
   stagePos,
   isRunning,
+  isReconnecting,
   isAnyDragActive,
   transform,
   selectedTextContent,
@@ -426,6 +428,11 @@ export default function CodingRobotOverlay({
               </div>
             ) : (
               <span>Activity</span>
+            )}
+            {isReconnecting && (
+              <span style={{ color: '#f59e0b', fontStyle: 'italic', fontSize: `${9 * stageScale}px` }}>
+                reconnecting...
+              </span>
             )}
             <button
               onClick={() => setShowActivity(false)}
