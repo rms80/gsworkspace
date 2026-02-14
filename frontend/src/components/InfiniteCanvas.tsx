@@ -8,6 +8,7 @@ import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { uploadTextFile } from '../api/textfiles'
 import { ACTIVE_WORKSPACE } from '../api/workspace'
+import { downloadSelectedItems } from '../utils/downloadItem'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
@@ -446,6 +447,25 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, loadedImages, setCroppingImageId, setPendingCropRect, startVideoCrop, croppingImageId, croppingVideoId, applyCrop, applyOrCancelVideoCrop])
+
+  // 8b3. Ctrl+D hotkey to download selected items (image, video, text-file, pdf)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (!(e.key === 'd' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey)) return
+      e.preventDefault()
+      if (selectedIds.length === 0) return
+
+      downloadSelectedItems(items, selectedIds, sceneId).catch(error => {
+        console.error('Failed to download items:', error)
+      })
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedIds, items, sceneId])
 
   // 8c. Viewport hotkeys: Shift+V = fit-to-view, C = center at cursor, Shift+C = fit-to-view at 100%
   useEffect(() => {
