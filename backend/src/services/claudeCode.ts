@@ -1,6 +1,6 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
-import { join, dirname, resolve } from 'path'
+import { join, dirname, resolve, relative } from 'path'
 import { fileURLToPath } from 'url'
 import { tmpdir } from 'os'
 import { ResolvedContentItem } from './llmTypes.js'
@@ -112,13 +112,48 @@ export async function generateWithClaudeCode(
         onActivity?.({ type: 'assistant_text', content: resultText })
       }
       // Emit tool_use summaries from content blocks
-      for (const block of message.message.content) {
-        if (block.type === 'tool_use') {
-          const toolBlock = block as { type: 'tool_use'; name?: string; input?: unknown }
-          const name = toolBlock.name || 'tool'
-          const inputStr = typeof toolBlock.input === 'string' ? toolBlock.input : JSON.stringify(toolBlock.input ?? '')
-          const summary = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr
-          onActivity?.({ type: 'tool_use', content: `${name}: ${summary}` })
+      if (onActivity) {
+        type ToolBlock = { type: 'tool_use'; name?: string; input?: Record<string, unknown> }
+        const toolBlocks: ToolBlock[] = message.message.content
+          .filter((b: { type: string }) => b.type === 'tool_use')
+          .map((b: unknown) => b as ToolBlock)
+
+        // Group consecutive Read calls into a single activity
+        const readBlocks = toolBlocks.filter((b: ToolBlock) => b.name === 'Read')
+        const otherBlocks = toolBlocks.filter((b: ToolBlock) => b.name !== 'Read')
+
+        if (readBlocks.length > 0) {
+          const lines = readBlocks.map((b: ToolBlock) => {
+            const input = b.input || {}
+            const filePath = String(input.file_path || '')
+            const relPath = '/' + relative(CLAUDE_CODE_CWD, filePath).replace(/\\/g, '/')
+            const limit = input.limit ? ` [${input.limit}]` : ''
+            return relPath + limit
+          })
+          if (lines.length === 1) {
+            onActivity({ type: 'tool_use', content: `Read: ${lines[0]}` })
+          } else {
+            onActivity({ type: 'tool_use', content: `Read:\n${lines.map((l: string) => `  ${l}`).join('\n')}` })
+          }
+        }
+
+        for (const block of otherBlocks) {
+          const name = block.name || 'tool'
+          const input = block.input || {}
+
+          if (name === 'Edit') {
+            const filePath = String(input.file_path || '')
+            const relPath = '/' + relative(CLAUDE_CODE_CWD, filePath).replace(/\\/g, '/')
+            const oldStr = String(input.old_string || '')
+            const newStr = String(input.new_string || '')
+            const removed = oldStr ? oldStr.split('\n').length : 0
+            const added = newStr ? newStr.split('\n').length : 0
+            onActivity({ type: 'tool_use', content: `Edit: ${relPath} [-${removed}/+${added}]` })
+          } else {
+            const inputStr = JSON.stringify(input)
+            const summary = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr
+            onActivity({ type: 'tool_use', content: `${name}: ${summary}` })
+          }
         }
       }
     } else if (message.type === 'system' && 'subtype' in message) {
