@@ -7,7 +7,7 @@ import {
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT,
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 import { config } from '../../../config'
 
 interface PdfItemRendererProps {
@@ -55,6 +55,7 @@ export default function PdfItemRenderer({
 }: PdfItemRendererProps) {
   const minimized = item.minimized ?? false
   const thumbnailImage = useLoadedImage(minimized ? item.thumbnailSrc : undefined)
+  const groupRef = useRef<Konva.Group>(null)
   const labelTextRef = useRef<Konva.Text>(null)
   const [labelHeight, setLabelHeight] = useState(14) // single line default
 
@@ -88,6 +89,7 @@ export default function PdfItemRenderer({
   if (minimized) {
     return (
       <Group
+        ref={groupRef}
         key={item.id}
         id={item.id}
         x={item.x}
@@ -95,7 +97,10 @@ export default function PdfItemRenderer({
         width={PDF_MINIMIZED_WIDTH}
         height={PDF_MINIMIZED_HEIGHT}
         draggable
-        dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+        dragBoundFunc={(pos) => {
+          const stage = groupRef.current?.getStage()
+          return stage ? snapDragPos(pos, stage) : pos
+        }}
         onClick={(e) => onItemClick(e, item.id)}
         onContextMenu={(e) => {
           e.evt.preventDefault()
@@ -218,6 +223,7 @@ export default function PdfItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -225,7 +231,10 @@ export default function PdfItemRenderer({
       width={item.width}
       height={item.height + PDF_HEADER_HEIGHT}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()

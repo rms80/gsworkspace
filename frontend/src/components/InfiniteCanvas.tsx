@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
@@ -8,6 +8,7 @@ import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { uploadTextFile } from '../api/textfiles'
 import { ACTIVE_WORKSPACE } from '../api/workspace'
+import { downloadSelectedItems } from '../utils/downloadItem'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
@@ -19,10 +20,12 @@ import VideoContextMenu from './canvas/menus/VideoContextMenu'
 import PdfContextMenu from './canvas/menus/PdfContextMenu'
 import TextFileContextMenu from './canvas/menus/TextFileContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
+import MultiSelectContextMenu from './canvas/menus/MultiSelectContextMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
 import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
+import { getPromptContextSummary } from '../utils/promptContextSummary'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import CodingRobotItemRenderer from './canvas/items/CodingRobotItemRenderer'
 import PdfItemRenderer from './canvas/items/PdfItemRenderer'
@@ -69,7 +72,7 @@ interface InfiniteCanvasProps {
   sceneId: string
   onUpdateItem: (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => void
   onSelectItems: (ids: string[]) => void
-  onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
+  onAddTextAt: (x: number, y: number, text: string, optWidth?: number, topLeft?: boolean) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   onDeleteSelected: () => void
@@ -83,8 +86,8 @@ interface InfiniteCanvasProps {
   runningCodingRobotIds: Set<string>
   isOffline: boolean
   onAddText?: (x?: number, y?: number) => void
-  onAddPrompt?: (x?: number, y?: number) => void
-  onAddImageGenPrompt?: (x?: number, y?: number) => void
+  onAddPrompt?: (x?: number, y?: number) => string
+  onAddImageGenPrompt?: (x?: number, y?: number) => string
   onAddHtmlGenPrompt?: (x?: number, y?: number) => void
   onAddCodingRobot?: (x?: number, y?: number) => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
@@ -99,6 +102,9 @@ interface InfiniteCanvasProps {
 export interface CanvasHandle {
   resetZoom: () => void
   fitToView: () => void
+  getViewportCenter: () => { x: number; y: number }
+  getViewport: () => { x: number; y: number; scale: number }
+  setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
 const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, runningCodingRobotIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
@@ -138,6 +144,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     setTooltip(t)
   }, [])
 
+  // Context summary for prompt Run button tooltips
+  const promptContextSummaries = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    for (const item of items) {
+      if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+        map[item.id] = getPromptContextSummary(items, selectedIds, item.id)
+      }
+    }
+    return map
+  }, [items, selectedIds])
+
   // 1. Viewport hook
   const {
     stageSize,
@@ -158,6 +175,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
   // Expose viewport controls to parent via ref
   useImperativeHandle(ref, () => ({
+    getViewportCenter: () => ({
+      x: (stageSize.width / 2 - stagePos.x) / stageScale,
+      y: (stageSize.height / 2 - stagePos.y) / stageScale,
+    }),
     resetZoom: () => {
       _setStageScale(1)
       setStagePos({ x: 0, y: 0 })
@@ -189,7 +210,16 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         y: stageSize.height / 2 - centerY * scale,
       })
     },
-  }), [items, stageSize])
+    getViewport: () => ({
+      x: stagePos.x,
+      y: stagePos.y,
+      scale: stageScale,
+    }),
+    setViewport: (pos: { x: number; y: number }, scale: number) => {
+      setStagePos(pos)
+      _setStageScale(scale)
+    },
+  }), [items, stageSize, stagePos, stageScale])
 
   // 2. Image loader hook
   const { loadedImages } = useImageLoader(items)
@@ -304,14 +334,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               width: selectedItem.width,
             })
             const visualHeight = measuredText.height() + padding * 2
-            // addTextAt centers the item, so compute center of desired position
             const desiredX = selectedItem.x
             const desiredY = selectedItem.y + visualHeight + 2
-            const itemWidth = selectedItem.width
-            const itemHeight = 100 // addTextAt's default height
-            const centerX = desiredX + itemWidth / 2
-            const centerY = desiredY + itemHeight / 2
-            const newId = onAddTextAt(centerX, centerY, '', itemWidth)
+            const newId = onAddTextAt(desiredX, desiredY, '', selectedItem.width, true)
             onSelectItems([newId])
             setEditingTextId(newId)
             setTimeout(() => {
@@ -345,7 +370,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         // Create new text block at cursor (for 't' when nothing selected, or Shift+T fallthrough)
         if (isShiftT || selectedIds.length === 0) {
           const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
-          const newId = onAddTextAt(canvasPos.x, canvasPos.y, '')
+          const newId = onAddTextAt(canvasPos.x, canvasPos.y, '', undefined, true)
           // Select the new text block and start editing after it's rendered
           setTimeout(() => {
             onSelectItems([newId])
@@ -362,6 +387,91 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems, onUpdateItem])
+
+  // 8b2. 'E' hotkey to enter edit/crop mode on selected image, video, or text
+  //       Also applies/confirms edits when already in crop mode
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (e.key !== 'e' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+
+      // If already in crop mode, apply and exit
+      if (croppingImageId) {
+        e.preventDefault()
+        applyCrop()
+        return
+      }
+      if (croppingVideoId) {
+        e.preventDefault()
+        applyOrCancelVideoCrop()
+        return
+      }
+
+      if (isEditing) return
+      if (selectedIds.length !== 1) return
+
+      const selectedItem = items.find(item => item.id === selectedIds[0])
+      if (!selectedItem) return
+
+      if (selectedItem.type === 'image') {
+        e.preventDefault()
+        const img = loadedImages.get((selectedItem as ImageItem).src)
+        if (!img) return
+        const natW = img.naturalWidth
+        const natH = img.naturalHeight
+        const initialCrop = (selectedItem as ImageItem).cropRect
+          ? { ...(selectedItem as ImageItem).cropRect! }
+          : { x: 0, y: 0, width: natW, height: natH }
+        setCroppingImageId(selectedItem.id)
+        setPendingCropRect(initialCrop)
+      } else if (selectedItem.type === 'video') {
+        e.preventDefault()
+        const videoItem = selectedItem as VideoItem
+        const origW = videoItem.originalWidth ?? videoItem.width
+        const origH = videoItem.originalHeight ?? videoItem.height
+        const initialCrop = videoItem.cropRect ?? { x: 0, y: 0, width: origW, height: origH }
+        startVideoCrop(
+          videoItem.id, initialCrop,
+          videoItem.speedFactor ?? 1,
+          videoItem.removeAudio ?? false,
+          videoItem.trim ?? false,
+          videoItem.trimStart ?? 0,
+          videoItem.trimEnd ?? 0,
+        )
+      } else if (selectedItem.type === 'text') {
+        e.preventDefault()
+        setEditingTextId(selectedItem.id)
+        setTimeout(() => {
+          textareaRef.current?.focus()
+          textareaRef.current?.select()
+        }, 0)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, selectedIds, items, loadedImages, setCroppingImageId, setPendingCropRect, startVideoCrop, croppingImageId, croppingVideoId, applyCrop, applyOrCancelVideoCrop])
+
+  // 8b3. Ctrl+D hotkey to download selected items (image, video, text-file, pdf)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (!(e.key === 'd' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey)) return
+      e.preventDefault()
+      if (selectedIds.length === 0) return
+
+      downloadSelectedItems(items, selectedIds, sceneId).catch(error => {
+        console.error('Failed to download items:', error)
+      })
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selectedIds, items, sceneId])
 
   // 8c. Viewport hotkeys: Shift+V = fit-to-view, C = center at cursor, Shift+C = fit-to-view at 100%
   useEffect(() => {
@@ -444,6 +554,50 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, items, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
 
+  // 8d. 'Y' hotkey to create prompt at cursor, Shift+Y for image-gen prompt
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+      if (isEditing) return
+
+      // Shift+Y: create image-gen prompt at cursor
+      if (e.key === 'Y' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        const newId = onAddImageGenPrompt?.(canvasPos.x, canvasPos.y)
+        if (newId) {
+          setTimeout(() => {
+            onSelectItems([newId])
+            imageGenPromptEditing.handleTextDblClick(newId)
+          }, 20)
+        }
+        return
+      }
+
+      // y: create prompt at cursor
+      if (e.key === 'y' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        const newId = onAddPrompt?.(canvasPos.x, canvasPos.y)
+        if (newId) {
+          setTimeout(() => {
+            onSelectItems([newId])
+            promptEditing.handleTextDblClick(newId)
+          }, 20)
+        }
+        return
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, screenToCanvas, clipboard.mousePos, onAddPrompt, onAddImageGenPrompt, onSelectItems, promptEditing, imageGenPromptEditing])
+
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
   const modelMenu = useMenuState<string>()
@@ -454,6 +608,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const pdfContextMenuState = useMenuState<{ pdfId: string }>()
   const textFileContextMenuState = useMenuState<{ textFileId: string }>()
   const exportMenu = useMenuState<string>()
+  const multiSelectContextMenuState = useMenuState<{}>()
 
   // 10. Remaining UI state
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
@@ -986,13 +1141,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     const stage = stageRef.current
     if (!stage) return
 
-    const pointer = stage.getPointerPosition()
-    if (!pointer) return
+    const pos = { x: e.evt.clientX, y: e.evt.clientY }
 
-    const canvasPos = screenToCanvas(pointer.x, pointer.y)
+    // If multiple items are selected, show the multi-select context menu
+    if (selectedIds.length > 1) {
+      multiSelectContextMenuState.openMenu({}, pos)
+      return
+    }
+
+    const canvasPos = screenToCanvas(e.evt.clientX, e.evt.clientY)
     contextMenuState.openMenu(
       { x: e.evt.clientX, y: e.evt.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
-      { x: e.evt.clientX, y: e.evt.clientY },
+      pos,
     )
   }
 
@@ -1286,10 +1446,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  imageContextMenuState.openMenu(
-                    { imageId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    imageContextMenuState.openMenu({ imageId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
@@ -1309,10 +1471,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  videoContextMenuState.openMenu(
-                    { videoId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    videoContextMenuState.openMenu({ videoId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleVideoLabelDblClick}
@@ -1336,6 +1500,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
                 onRun={onRunPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'image-gen-prompt') {
@@ -1354,6 +1519,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
                 onRun={onRunImageGenPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'html-gen-prompt') {
@@ -1372,6 +1538,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
                 onRun={onRunHtmlGenPrompt}
                 onShowTooltip={handleShowTooltip}
+                contextSummaryLines={promptContextSummaries[item.id]}
               />
             )
           } else if (item.type === 'coding-robot') {
@@ -1412,10 +1579,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  pdfContextMenuState.openMenu(
-                    { pdfId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    pdfContextMenuState.openMenu({ pdfId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handlePdfLabelDblClick}
@@ -1434,10 +1603,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  textFileContextMenuState.openMenu(
-                    { textFileId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    textFileContextMenuState.openMenu({ textFileId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleTextFileLabelDblClick}
@@ -1445,6 +1616,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onToggleMono={handleToggleTextFileMono}
                 onChangeFontSize={handleChangeTextFileFontSize}
                 onToggleViewType={handleToggleTextFileViewType}
+                onCopyContent={(id) => {
+                  const content = textFileContents.get(id)
+                  if (content) {
+                    navigator.clipboard.writeText(content)
+                  }
+                }}
                 setTextFileItemTransforms={setTextFileItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
               />
@@ -2185,6 +2362,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         />
       )}
 
+      {/* Multi-select context menu */}
+      {multiSelectContextMenuState.menuData && multiSelectContextMenuState.menuPosition && (
+        <MultiSelectContextMenu
+          position={multiSelectContextMenuState.menuPosition}
+          items={items}
+          selectedIds={selectedIds}
+          sceneId={sceneId}
+          onClose={multiSelectContextMenuState.closeMenu}
+        />
+      )}
+
       {/* Export menu */}
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
@@ -2220,19 +2408,21 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         )
       })()}
 
-      {/* Tooltip for disabled Run button */}
+      {/* Tooltip for Run button */}
       {tooltip && (
         <div
           style={{
             position: 'fixed',
-            left: tooltip.x + 10,
-            top: tooltip.y + 10,
+            left: tooltip.x,
+            top: tooltip.y - 10,
+            transform: 'translateY(-100%)',
             backgroundColor: '#333',
             color: '#fff',
             padding: '6px 10px',
             borderRadius: 4,
-            fontSize: 12,
-            whiteSpace: 'nowrap',
+            fontSize: 13,
+            fontFamily: 'sans-serif',
+            whiteSpace: 'pre-line',
             zIndex: 1000,
             pointerEvents: 'none',
             boxShadow: '0 2px 8px rgba(0,0,0,0.3)',

@@ -3,7 +3,7 @@ import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { TextItem } from '../../../types'
 import { MIN_TEXT_WIDTH, COLOR_SELECTED } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 
 interface TextItemRendererProps {
   item: TextItem
@@ -23,6 +23,7 @@ export default function TextItemRenderer({
   onUpdateItem,
 }: TextItemRendererProps) {
   const padding = 8
+  const groupRef = useRef<Konva.Group>(null)
   const realRectRef = useRef<Konva.Rect>(null)
   const realTextRef = useRef<Konva.Text>(null)
   const previewGroupRef = useRef<Konva.Group | null>(null)
@@ -36,16 +37,20 @@ export default function TextItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
       y={item.y}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onDblClick={() => onDblClick(item.id)}
       onDragEnd={(e) => {
-        onUpdateItem(item.id, { x: e.target.x(), y: e.target.y() })
+        onUpdateItem(item.id, { x: snapToGrid(e.target.x()), y: snapToGrid(e.target.y()) })
       }}
       onTransform={(e) => {
         const group = e.target

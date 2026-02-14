@@ -21,19 +21,21 @@ export function useMenuState<T>(): MenuState<T> {
     setMenuPosition(null)
   }
 
-  // Close on click elsewhere
+  // Close on click or right-click elsewhere
   useEffect(() => {
     if (menuData === null) return
 
-    const handleClick = () => closeMenu()
+    const handleDismiss = () => closeMenu()
 
     const timeoutId = setTimeout(() => {
-      document.addEventListener('click', handleClick)
+      document.addEventListener('click', handleDismiss)
+      document.addEventListener('contextmenu', handleDismiss)
     }, 0)
 
     return () => {
       clearTimeout(timeoutId)
-      document.removeEventListener('click', handleClick)
+      document.removeEventListener('click', handleDismiss)
+      document.removeEventListener('contextmenu', handleDismiss)
     }
   }, [menuData])
 

@@ -1,3 +1,4 @@
+import { useRef } from 'react'
 import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { VideoItem } from '../../../types'
@@ -5,7 +6,7 @@ import {
   VIDEO_HEADER_HEIGHT,
   COLOR_SELECTED,
 } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 
 interface VideoItemRendererProps {
   item: VideoItem
@@ -45,6 +46,7 @@ export default function VideoItemRenderer({
   onLabelDblClick,
   setVideoItemTransforms,
 }: VideoItemRendererProps) {
+  const groupRef = useRef<Konva.Group>(null)
   const scaleX = item.scaleX ?? 1
   const scaleY = item.scaleY ?? 1
   const displayWidth = item.width * scaleX
@@ -75,6 +77,7 @@ export default function VideoItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -82,7 +85,10 @@ export default function VideoItemRenderer({
       width={displayWidth}
       height={totalHeight}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y + headerHeight) - headerHeight })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage, headerHeight) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()

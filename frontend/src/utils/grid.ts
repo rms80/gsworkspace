@@ -53,3 +53,23 @@ export function snapToGrid(value: number): number {
   const gs = settings.gridSize
   return Math.round(value / gs) * gs
 }
+
+/** Snap an absolute stage position to the canvas grid, accounting for pan/zoom.
+ *  Use this in Konva dragBoundFunc where pos is in absolute (screen) coordinates.
+ *  yOffset handles items where the group is positioned above the item's logical y
+ *  (e.g. headerHeight for images/videos). */
+export function snapDragPos(
+  pos: { x: number; y: number },
+  stage: { x: () => number; y: () => number; scaleX: () => number },
+  yOffset = 0,
+): { x: number; y: number } {
+  const scale = stage.scaleX()
+  const sx = stage.x()
+  const sy = stage.y()
+  const canvasX = (pos.x - sx) / scale
+  const canvasY = (pos.y - sy) / scale + yOffset
+  return {
+    x: snapToGrid(canvasX) * scale + sx,
+    y: (snapToGrid(canvasY) - yOffset) * scale + sy,
+  }
+}

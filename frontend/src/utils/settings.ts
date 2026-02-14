@@ -7,6 +7,12 @@ import { StorageMode } from '../api/storage'
 
 const SETTINGS_KEY = 'gsworkspace-settings'
 
+export interface ViewportState {
+  x: number
+  y: number
+  scale: number
+}
+
 export interface ModeSettings {
   /** IDs of scenes that should be open on reload */
   openSceneIds: string[]
@@ -14,6 +20,8 @@ export interface ModeSettings {
   activeSceneId: string | null
   /** Last-used workspace name (for auto-redirect on next visit) */
   lastWorkspace?: string
+  /** Per-scene viewport positions */
+  viewports?: Record<string, ViewportState>
 }
 
 export interface Settings {
@@ -139,4 +147,19 @@ export function getLastWorkspace(mode: StorageMode): string | null {
  */
 export function setLastWorkspace(workspace: string, mode: StorageMode): void {
   updateModeSettings(mode, { lastWorkspace: workspace })
+}
+
+/**
+ * Load per-scene viewport states for a specific storage mode
+ */
+export function loadViewports(mode: StorageMode): Record<string, ViewportState> {
+  const settings = loadModeSettings(mode)
+  return settings.viewports ?? {}
+}
+
+/**
+ * Save per-scene viewport states for a specific storage mode
+ */
+export function saveViewports(viewports: Record<string, ViewportState>, mode: StorageMode): void {
+  updateModeSettings(mode, { viewports })
 }

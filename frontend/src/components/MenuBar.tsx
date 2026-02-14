@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { config } from '../config'
+import { isMuted, setMuted } from '../utils/sound'
 
 interface MenuBarProps {
   onAddText: () => void
@@ -89,6 +90,7 @@ function MenuBar({
   workspaceName,
   sceneName,
 }: MenuBarProps) {
+  const [muted, setMutedState] = useState(() => isMuted())
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null)
   const [hotkeyDialogOpen, setHotkeyDialogOpen] = useState(false)
@@ -175,6 +177,12 @@ function MenuBar({
       ],
     }] : []),
   ]
+
+  const toggleMute = () => {
+    const next = !muted
+    setMutedState(next)
+    setMuted(next)
+  }
 
   const rightMenus: MenuDef[] = [
     ...(onLogout ? [{
@@ -541,6 +549,37 @@ function MenuBar({
       {/* Spacer to push right menus to the right */}
       <div style={{ flex: 1 }} />
 
+      {/* Mute toggle */}
+      <button
+        onClick={toggleMute}
+        title={muted ? 'Unmute sounds' : 'Mute sounds'}
+        style={{
+          padding: '4px 8px',
+          backgroundColor: 'transparent',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+        }}
+      >
+        <svg width="16" height="14" viewBox="0 0 16 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M0 4.5H3.5L8 0.5V13.5L3.5 9.5H0V4.5Z"
+            fill={muted ? 'none' : '#aaa'}
+            stroke="#aaa"
+            strokeWidth="1.2"
+            strokeLinejoin="round"
+          />
+          {!muted && (
+            <>
+              <path d="M10.5 3.5C11.5 4.5 12 5.8 12 7C12 8.2 11.5 9.5 10.5 10.5" stroke="#aaa" strokeWidth="1.2" strokeLinecap="round" />
+              <path d="M12.5 1.5C14 3.2 15 5 15 7C15 9 14 10.8 12.5 12.5" stroke="#aaa" strokeWidth="1.2" strokeLinecap="round" />
+            </>
+          )}
+        </svg>
+      </button>
+
       {rightMenus.map((menu) => (
         <div key={menu.label} style={{ position: 'relative' }}>
           <button
@@ -692,17 +731,21 @@ function MenuBar({
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: '#4a4a4a',
+              border: '1px solid #666',
               borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
               padding: '24px',
               minWidth: '400px',
               maxWidth: '500px',
+              maxHeight: '80vh',
+              overflow: 'auto',
+              color: '#ddd',
             }}
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px' }}>Hotkey Reference</h2>
+              <h2 style={{ margin: 0, fontSize: '18px', color: '#fff' }}>Hotkey Reference</h2>
               <button
                 onClick={() => setHotkeyDialogOpen(false)}
                 style={{
@@ -710,7 +753,7 @@ function MenuBar({
                   background: 'none',
                   fontSize: '20px',
                   cursor: 'pointer',
-                  color: '#666',
+                  color: '#999',
                   padding: '4px 8px',
                 }}
               >
@@ -719,32 +762,46 @@ function MenuBar({
             </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '2px solid #ddd' }}>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600 }}>Shortcut</th>
-                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600 }}>Action</th>
+                <tr style={{ borderBottom: '2px solid #666' }}>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#fff' }}>Shortcut</th>
+                  <th style={{ textAlign: 'left', padding: '8px 12px', fontWeight: 600, color: '#fff' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {[
                   { shortcut: 'Ctrl+Z', action: 'Undo' },
-                  { shortcut: 'Ctrl+Y', action: 'Redo' },
-                  { shortcut: 'Ctrl+Shift+Z', action: 'Redo' },
+                  { shortcut: 'Ctrl+Y / Ctrl+Shift+Z', action: 'Redo' },
+                  { shortcut: 'Ctrl+C', action: 'Copy selected item' },
+                  { shortcut: 'Ctrl+V', action: 'Paste at cursor' },
+                  { shortcut: 'Delete / Backspace', action: 'Delete selected items' },
+                  { shortcut: 'Escape', action: 'Deselect all / Cancel crop' },
+                  { shortcut: '', action: '' },
+                  { shortcut: 'T', action: 'New text block / Edit selected text' },
+                  { shortcut: 'Shift+T', action: 'New text block below selected' },
+                  { shortcut: 'E', action: 'Edit/crop selected item (image, video, text)' },
+                  { shortcut: 'S (in crop)', action: 'Set 1:1 square aspect ratio' },
+                  { shortcut: 'Y', action: 'New LLM prompt at cursor' },
+                  { shortcut: 'Shift+Y', action: 'New ImageGen prompt at cursor' },
+                  { shortcut: 'Ctrl+D', action: 'Download selected items' },
+                  { shortcut: '', action: '' },
+                  { shortcut: 'C', action: 'Center viewport at cursor' },
+                  { shortcut: 'Shift+C', action: 'Center viewport on content (100%)' },
+                  { shortcut: 'Shift+V', action: 'Fit all content to view' },
+                  { shortcut: '', action: '' },
                   { shortcut: 'Ctrl+O', action: 'Open Scene' },
                   { shortcut: 'Ctrl+Shift+O', action: 'Switch Workspace' },
                   { shortcut: 'Ctrl+Shift+E', action: 'Export Scene' },
                   { shortcut: 'Ctrl+,', action: 'Open Settings' },
-                  { shortcut: 'Ctrl+C', action: 'Copy selected item' },
-                  { shortcut: 'Ctrl+V', action: 'Paste at cursor' },
-                  { shortcut: 'T', action: 'New text block at cursor (when nothing selected)' },
-                  { shortcut: 'Shift+T', action: 'New text block below selected text block' },
-                  { shortcut: 'Delete / Backspace', action: 'Delete selected items' },
-                  { shortcut: 'Escape', action: 'Deselect all / Cancel crop' },
-                ].map((row, index) => (
-                  <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '13px' }}>{row.shortcut}</td>
-                    <td style={{ padding: '8px 12px' }}>{row.action}</td>
-                  </tr>
-                ))}
+                ].map((row, index) =>
+                  row.shortcut === '' ? (
+                    <tr key={index}><td colSpan={2} style={{ padding: '4px 0' }}><hr style={{ border: 'none', borderTop: '1px solid #555', margin: 0 }} /></td></tr>
+                  ) : (
+                    <tr key={index} style={{ borderBottom: '1px solid #555' }}>
+                      <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontSize: '13px', color: '#fff', fontWeight: 600 }}>{row.shortcut}</td>
+                      <td style={{ padding: '8px 12px' }}>{row.action}</td>
+                    </tr>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -770,18 +827,26 @@ function MenuBar({
         >
           <div
             style={{
-              backgroundColor: '#fff',
+              backgroundColor: '#4a4a4a',
+              border: '1px solid #666',
               borderRadius: '8px',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.25)',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
               padding: '24px',
               minWidth: '400px',
               maxWidth: '600px',
               maxHeight: '80vh',
               overflow: 'auto',
+              color: '#ddd',
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div dangerouslySetInnerHTML={{ __html: aboutContent }} />
+            <style>{`
+              .about-content a { color: #6cb4ff; }
+              .about-content a:hover { color: #9dd0ff; }
+              .about-content h1 { color: #fff; }
+              .about-content em { color: #aaa; }
+            `}</style>
+            <div className="about-content" dangerouslySetInnerHTML={{ __html: aboutContent }} />
           </div>
         </div>
       )}

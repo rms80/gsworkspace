@@ -7,7 +7,7 @@ import {
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT,
   COLOR_SELECTED, COLOR_BORDER_DEFAULT,
 } from '../../../constants/canvas'
-import { snapToGrid } from '../../../utils/grid'
+import { snapToGrid, snapDragPos } from '../../../utils/grid'
 import { config } from '../../../config'
 
 interface TextFileItemRendererProps {
@@ -22,6 +22,7 @@ interface TextFileItemRendererProps {
   onToggleMono: (id: string) => void
   onChangeFontSize: (id: string, delta: number) => void
   onToggleViewType: (id: string) => void
+  onCopyContent: (id: string) => void
   setTextFileItemTransforms: React.Dispatch<React.SetStateAction<Map<string, { x: number; y: number; width: number; height: number }>>>
   setIsViewportTransforming: (v: boolean) => void
 }
@@ -45,10 +46,13 @@ export default function TextFileItemRenderer({
   onToggleMono,
   onChangeFontSize,
   onToggleViewType,
+  onCopyContent,
   setTextFileItemTransforms,
   setIsViewportTransforming,
 }: TextFileItemRendererProps) {
   const minimized = item.minimized ?? false
+  const groupRef = useRef<Konva.Group>(null)
+  const [pressedBtn, setPressedBtn] = useState<string | null>(null)
   const labelTextRef = useRef<Konva.Text>(null)
   const [labelHeight, setLabelHeight] = useState(14)
 
@@ -66,6 +70,7 @@ export default function TextFileItemRenderer({
     const badgeText = item.fileFormat.toUpperCase()
     return (
       <Group
+        ref={groupRef}
         key={item.id}
         id={item.id}
         x={item.x}
@@ -73,7 +78,10 @@ export default function TextFileItemRenderer({
         width={TEXTFILE_MINIMIZED_WIDTH}
         height={TEXTFILE_MINIMIZED_HEIGHT}
         draggable
-        dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+        dragBoundFunc={(pos) => {
+          const stage = groupRef.current?.getStage()
+          return stage ? snapDragPos(pos, stage) : pos
+        }}
         onClick={(e) => onItemClick(e, item.id)}
         onContextMenu={(e) => {
           e.evt.preventDefault()
@@ -180,9 +188,10 @@ export default function TextFileItemRenderer({
   }
 
   // Expanded state
+  const COPY_BTN_WIDTH = 18
   const MINIMIZE_BTN_WIDTH = 18
   const MONO_BTN_WIDTH = 36
-  const FONTSIZE_BTN_WIDTH = 24
+  const FONTSIZE_BTN_WIDTH = 18
   const RAW_TEXT_BTN_WIDTH = 50
   const fileSizeText = formatFileSize(item.fileSize)
   const fileSizeWidth = fileSizeText ? fileSizeText.length * 7 + 8 : 0
@@ -194,14 +203,17 @@ export default function TextFileItemRenderer({
   let cursor = MINIMIZE_BTN_WIDTH + 4
   const minimizeBtnX = item.width - cursor
 
+  const copyBtnX = item.width - cursor - COPY_BTN_WIDTH - 8
+  cursor += COPY_BTN_WIDTH + 8
+
   let rawTextBtnX = 0
   if (isCsv) {
-    rawTextBtnX = item.width - cursor - RAW_TEXT_BTN_WIDTH - 2
-    cursor += RAW_TEXT_BTN_WIDTH + 2
+    rawTextBtnX = item.width - cursor - RAW_TEXT_BTN_WIDTH - 8
+    cursor += RAW_TEXT_BTN_WIDTH + 8
   }
 
-  const monoBtnX = item.width - cursor - MONO_BTN_WIDTH - 2
-  cursor += MONO_BTN_WIDTH + 2
+  const monoBtnX = item.width - cursor - MONO_BTN_WIDTH - 8
+  cursor += MONO_BTN_WIDTH + 8
   const fontPlusBtnX = item.width - cursor - FONTSIZE_BTN_WIDTH - 2
   cursor += FONTSIZE_BTN_WIDTH + 2
   const fontMinusBtnX = item.width - cursor - FONTSIZE_BTN_WIDTH - 2
@@ -212,6 +224,7 @@ export default function TextFileItemRenderer({
 
   return (
     <Group
+      ref={groupRef}
       key={item.id}
       id={item.id}
       x={item.x}
@@ -219,7 +232,10 @@ export default function TextFileItemRenderer({
       width={item.width}
       height={item.height + TEXTFILE_HEADER_HEIGHT}
       draggable
-      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
+      dragBoundFunc={(pos) => {
+        const stage = groupRef.current?.getStage()
+        return stage ? snapDragPos(pos, stage) : pos
+      }}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()
@@ -333,6 +349,9 @@ export default function TextFileItemRenderer({
       <Group
         x={fontMinusBtnX}
         y={4}
+        onMouseDown={(e) => { e.cancelBubble = true; setPressedBtn('font-') }}
+        onMouseUp={() => setPressedBtn(null)}
+        onMouseLeave={() => setPressedBtn(null)}
         onClick={(e) => {
           e.cancelBubble = true
           onChangeFontSize(item.id, -2)
@@ -341,7 +360,7 @@ export default function TextFileItemRenderer({
         <Rect
           width={FONTSIZE_BTN_WIDTH}
           height={16}
-          fill="#888"
+          fill={pressedBtn === 'font-' ? '#555' : '#888'}
           cornerRadius={3}
         />
         <Text
@@ -359,6 +378,9 @@ export default function TextFileItemRenderer({
       <Group
         x={fontPlusBtnX}
         y={4}
+        onMouseDown={(e) => { e.cancelBubble = true; setPressedBtn('font+') }}
+        onMouseUp={() => setPressedBtn(null)}
+        onMouseLeave={() => setPressedBtn(null)}
         onClick={(e) => {
           e.cancelBubble = true
           onChangeFontSize(item.id, 2)
@@ -367,11 +389,12 @@ export default function TextFileItemRenderer({
         <Rect
           width={FONTSIZE_BTN_WIDTH}
           height={16}
-          fill="#888"
+          fill={pressedBtn === 'font+' ? '#555' : '#888'}
           cornerRadius={3}
         />
         <Text
           text="+"
+          y={1}
           width={FONTSIZE_BTN_WIDTH}
           height={16}
           fontSize={12}
@@ -433,10 +456,43 @@ export default function TextFileItemRenderer({
           />
         </Group>
       )}
+      {/* Copy content button */}
+      <Group
+        x={copyBtnX}
+        y={4}
+        onMouseDown={(e) => { e.cancelBubble = true; setPressedBtn('copy') }}
+        onMouseUp={() => setPressedBtn(null)}
+        onMouseLeave={() => setPressedBtn(null)}
+        onClick={(e) => {
+          e.cancelBubble = true
+          onCopyContent(item.id)
+        }}
+      >
+        <Rect
+          width={COPY_BTN_WIDTH}
+          height={16}
+          fill={pressedBtn === 'copy' ? '#555' : '#888'}
+          cornerRadius={3}
+        />
+        {/* Two overlapping squares icon for clipboard copy */}
+        <Text
+          text="⧉"
+          y={2}
+          width={COPY_BTN_WIDTH}
+          height={16}
+          fontSize={12}
+          fill="#fff"
+          align="center"
+          verticalAlign="middle"
+        />
+      </Group>
       {/* Minimize button */}
       <Group
         x={minimizeBtnX}
         y={4}
+        onMouseDown={(e) => { e.cancelBubble = true; setPressedBtn('min') }}
+        onMouseUp={() => setPressedBtn(null)}
+        onMouseLeave={() => setPressedBtn(null)}
         onClick={(e) => {
           e.cancelBubble = true
           onToggleMinimized(item.id)
@@ -445,7 +501,7 @@ export default function TextFileItemRenderer({
         <Rect
           width={MINIMIZE_BTN_WIDTH}
           height={16}
-          fill="#888"
+          fill={pressedBtn === 'min' ? '#555' : '#888'}
           cornerRadius={3}
         />
         <Text

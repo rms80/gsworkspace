@@ -1,13 +1,53 @@
 import { useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, TextFileItem } from '../types'
-import { generateFromPrompt, ContentItem, generateHtmlTitle } from '../api/llm'
+import { CanvasItem, TextFileItem, TextFileFormat } from '../types'
+import { generateFromPrompt, ContentItem, generateHtmlTitle, quickLlmQuery } from '../api/llm'
 import { getCroppedImageDataUrl } from '../utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from '../utils/htmlDetection'
-import { extractCsvBlocks } from '../utils/csvExtractor'
+import { extractCodeBlocks } from '../utils/codeBlockExtractor'
 import { uploadTextFile } from '../api/textfiles'
+import { generateUniqueName, getExistingTextFileNames } from '../utils/imageNames'
 import DOMPurify from 'dompurify'
+import { playNotificationSound } from '../utils/sound'
 import { config } from '../config'
+import { TEXTFILE_HEADER_HEIGHT } from '../constants/canvas'
+import { snapToGrid, getGridSize } from '../utils/grid'
+
+const TEXT_PADDING = 8
+
+/** Estimate item height from text content, capped at maxHeight. */
+function estimateTextHeight(text: string, fontSize: number, width: number, maxHeight: number): number {
+  // Approximate characters per line based on width and font size
+  // Average character width is roughly 0.6 * fontSize for proportional fonts
+  const charsPerLine = Math.max(1, Math.floor(width / (fontSize * 0.6)))
+  let lineCount = 0
+  for (const line of text.split('\n')) {
+    // Each explicit line takes at least 1 visual line, plus wrapping
+    lineCount += Math.max(1, Math.ceil(line.length / charsPerLine))
+  }
+  // Add 2 extra lines of breathing room, then cap at maxHeight
+  const estimatedHeight = (lineCount + 2) * fontSize + TEXT_PADDING * 2
+  return Math.min(estimatedHeight, maxHeight)
+}
+
+/** Generate a descriptive filename for an extracted code block using a quick LLM query. */
+async function generateCodeFilename(content: string, format: string, _userPrompt: string): Promise<string> {
+  const fallback = `code-${Date.now()}.${format}`
+  try {
+    const truncated = content.slice(0, 5000)
+    const result = await quickLlmQuery(
+      `Based on this text content, generate a short descriptive filename in PascalCase with no spaces. The file extension should be .${format}. Just output the filename (e.g. "DataParser.${format}"), nothing else.\n\nText:\n${truncated}`
+    )
+    const cleaned = result.trim().replace(/[^a-zA-Z0-9._-]/g, '')
+    if (cleaned.length > 0 && cleaned.includes('.')) return cleaned
+    // If model returned name without extension, add it
+    if (cleaned.length > 0) return `${cleaned}.${format}`
+    return fallback
+  } catch (error) {
+    console.warn('Failed to generate code filename:', error)
+    return fallback
+  }
+}
 
 interface PromptExecutionContext {
   items: CanvasItem[]
@@ -89,11 +129,11 @@ export function usePromptExecution({
         ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
         : promptItem.y
 
-      // Check for CSV code fence blocks in the result
-      const { text: remainingText, csvBlocks } = extractCsvBlocks(result)
+      // Extract recognized code fence blocks from the result
+      const { text: remainingText, codeBlocks } = extractCodeBlocks(result)
 
-      if (csvBlocks.length > 0) {
-        // CSV blocks found — create TextItem for surrounding text + TextFileItems for CSVs
+      if (codeBlocks.length > 0) {
+        // Code blocks found — create items for each extracted block + TextItem for surrounding text
         const newItems: CanvasItem[] = []
         const textWidth = Math.max(promptItem.width, 300)
 
@@ -111,46 +151,91 @@ export function usePromptExecution({
           })
         }
 
-        // Position CSV items to the right of the text, or at outputX if no text
-        const csvX = remainingText.trim() ? outputX + textWidth + 20 : outputX
-        let csvY = outputY
+        // Position extracted items to the right of the text, or at outputX if no text
+        const blockX = remainingText.trim() ? outputX + textWidth + 20 : outputX
+        let blockY = outputY
 
-        for (const csvData of csvBlocks) {
-          const itemId = uuidv4()
-          const csvDataUrl = 'data:text/csv;base64,' + btoa(unescape(encodeURIComponent(csvData)))
-          const filename = `data-${Date.now()}.csv`
+        // Track existing text file names for deduplication (includes names from this batch)
+        const usedNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
 
-          // Upload to storage if online
-          let src = csvDataUrl
-          if (!isOffline && activeSceneId) {
-            try {
-              src = await uploadTextFile(csvDataUrl, activeSceneId, itemId, filename, 'csv')
-            } catch (err) {
-              console.error('Failed to upload CSV file, using data URL:', err)
+        // If an HTML item is among the selected inputs, match its dimensions/zoom for HTML blocks
+        const inputHtmlItem = selectedItems.find((item) => item.type === 'html')
+
+        for (const block of codeBlocks) {
+          if (block.format === 'html') {
+            // Create HtmlItem for HTML code blocks
+            const htmlContent = config.features.sanitizeHtml
+              ? DOMPurify.sanitize(block.content, {
+                  WHOLE_DOCUMENT: true,
+                  ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+                  FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+                })
+              : block.content
+            const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
+            const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
+            const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
+            const title = await generateHtmlTitle(htmlContent)
+            newItems.push({
+              id: uuidv4(),
+              type: 'html',
+              label: title,
+              x: blockX,
+              y: blockY,
+              html: htmlContent,
+              width: htmlWidth,
+              height: htmlHeight,
+              zoom: htmlZoom,
+            })
+            blockY += htmlHeight + 20
+          } else {
+            // Create TextFileItem for all other code blocks
+            const format = block.format as TextFileFormat
+            const itemId = uuidv4()
+            const mimeType = format === 'json' ? 'application/json' : 'text/plain'
+            const dataUrl = `data:${mimeType};base64,` + btoa(unescape(encodeURIComponent(block.content)))
+            const rawFilename = await generateCodeFilename(block.content, format, promptItem.text)
+            const ext = `.${format}`
+            const uniqueBase = generateUniqueName(rawFilename, usedNames)
+            const filename = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
+            usedNames.push(uniqueBase)
+
+            // Upload to storage if online
+            let src = dataUrl
+            if (!isOffline && activeSceneId) {
+              try {
+                src = await uploadTextFile(dataUrl, activeSceneId, itemId, filename, format)
+              } catch (err) {
+                console.error(`Failed to upload ${format} file, using data URL:`, err)
+              }
             }
-          }
 
-          const csvItem: TextFileItem = {
-            id: itemId,
-            type: 'text-file',
-            x: csvX,
-            y: csvY,
-            src,
-            name: filename,
-            width: 600,
-            height: 400,
-            fileSize: new Blob([csvData]).size,
-            fileFormat: 'csv',
-            fontMono: true,
+            const fileHeight = estimateTextHeight(block.content, 14, 600, 400)
+            const fileItem: TextFileItem = {
+              id: itemId,
+              type: 'text-file',
+              x: blockX,
+              y: blockY,
+              src,
+              name: filename,
+              width: 600,
+              height: fileHeight,
+              fileSize: new Blob([block.content]).size,
+              fileFormat: format,
+              fontMono: true,
+            }
+            newItems.push(fileItem)
+            // Advance past full visual height (header + content + gap), snap to grid
+            const itemBottom = blockY + fileHeight + TEXTFILE_HEADER_HEIGHT + 5
+            let nextY = snapToGrid(itemBottom)
+            // If snapping rounded down into the item, bump up one grid step
+            if (nextY < itemBottom) nextY += getGridSize()
+            blockY = nextY
           }
-          newItems.push(csvItem)
-          csvY += 400 + 20 // stack vertically with 20px gap
         }
 
         updateActiveSceneItems((prev) => [...prev, ...newItems])
       } else if (isHtmlContent(result)) {
-        // Create an HTML view item for webpage content
-        // Strip code fences that LLMs often wrap around HTML
+        // Full-response HTML fallback (no code fences, but content is HTML)
         const strippedHtml = stripCodeFences(result).trim()
         const htmlContent = config.features.sanitizeHtml
           ? DOMPurify.sanitize(strippedHtml, {
@@ -159,12 +244,10 @@ export function usePromptExecution({
               FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
             })
           : strippedHtml
-        // If an HTML item is among the selected inputs, match its dimensions/zoom
         const inputHtmlItem = selectedItems.find((item) => item.type === 'html')
         const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
         const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
         const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
-        // Generate title before creating item so it's saved properly
         const title = await generateHtmlTitle(htmlContent)
         const newItem: CanvasItem = {
           id: uuidv4(),
@@ -179,7 +262,7 @@ export function usePromptExecution({
         }
         updateActiveSceneItems((prev) => [...prev, newItem])
       } else {
-        // Create a text item for regular text content
+        // Plain text response — create a TextItem
         const newItem: CanvasItem = {
           id: uuidv4(),
           type: 'text',
@@ -192,7 +275,10 @@ export function usePromptExecution({
         }
         updateActiveSceneItems((prev) => [...prev, newItem])
       }
+
+      playNotificationSound()
     } catch (error) {
+      playNotificationSound('failure')
       console.error('Failed to run prompt:', error)
       const message = error instanceof Error ? error.message : 'Unknown error'
       alert(`Failed to run prompt: ${message}`)
