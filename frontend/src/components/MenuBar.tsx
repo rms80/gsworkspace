@@ -735,6 +735,8 @@ function MenuBar({
               padding: '24px',
               minWidth: '400px',
               maxWidth: '500px',
+              maxHeight: '80vh',
+              overflow: 'auto',
               color: '#ddd',
             }}
             onClick={(e) => e.stopPropagation()}
