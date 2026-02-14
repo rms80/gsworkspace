@@ -20,6 +20,7 @@ import VideoContextMenu from './canvas/menus/VideoContextMenu'
 import PdfContextMenu from './canvas/menus/PdfContextMenu'
 import TextFileContextMenu from './canvas/menus/TextFileContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
+import MultiSelectContextMenu from './canvas/menus/MultiSelectContextMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
 import VideoItemRenderer from './canvas/items/VideoItemRenderer'
@@ -602,6 +603,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const pdfContextMenuState = useMenuState<{ pdfId: string }>()
   const textFileContextMenuState = useMenuState<{ textFileId: string }>()
   const exportMenu = useMenuState<string>()
+  const multiSelectContextMenuState = useMenuState<{}>()
 
   // 10. Remaining UI state
   const [htmlItemTransforms, setHtmlItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
@@ -1131,10 +1133,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     const stage = stageRef.current
     if (!stage) return
 
+    const pos = { x: e.evt.clientX, y: e.evt.clientY }
+
+    // If multiple items are selected, show the multi-select context menu
+    if (selectedIds.length > 1) {
+      multiSelectContextMenuState.openMenu({}, pos)
+      return
+    }
+
     const canvasPos = screenToCanvas(e.evt.clientX, e.evt.clientY)
     contextMenuState.openMenu(
       { x: e.evt.clientX, y: e.evt.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
-      { x: e.evt.clientX, y: e.evt.clientY },
+      pos,
     )
   }
 
@@ -1428,10 +1438,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  imageContextMenuState.openMenu(
-                    { imageId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    imageContextMenuState.openMenu({ imageId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
@@ -1451,10 +1463,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  videoContextMenuState.openMenu(
-                    { videoId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    videoContextMenuState.openMenu({ videoId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleVideoLabelDblClick}
@@ -1544,10 +1558,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  pdfContextMenuState.openMenu(
-                    { pdfId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    pdfContextMenuState.openMenu({ pdfId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handlePdfLabelDblClick}
@@ -1566,10 +1582,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
-                  textFileContextMenuState.openMenu(
-                    { textFileId: id },
-                    { x: e.evt.clientX, y: e.evt.clientY },
-                  )
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    textFileContextMenuState.openMenu({ textFileId: id }, pos)
+                  }
                 }}
                 onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleTextFileLabelDblClick}
@@ -2275,6 +2293,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           sceneId={sceneId}
           isOffline={isOffline}
           onClose={textFileContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* Multi-select context menu */}
+      {multiSelectContextMenuState.menuData && multiSelectContextMenuState.menuPosition && (
+        <MultiSelectContextMenu
+          position={multiSelectContextMenuState.menuPosition}
+          items={items}
+          selectedIds={selectedIds}
+          sceneId={sceneId}
+          onClose={multiSelectContextMenuState.closeMenu}
         />
       )}
 

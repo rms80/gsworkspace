@@ -24,20 +24,51 @@ export default function CanvasContextMenu({
 }: CanvasContextMenuProps) {
   const [newSubmenuOpen, setNewSubmenuOpen] = useState(false)
 
+  const buttonStyle: React.CSSProperties = {
+    display: 'block',
+    width: '100%',
+    padding: '5px 12px',
+    border: 'none',
+    background: 'none',
+    textAlign: 'left',
+    cursor: 'pointer',
+    fontSize: 12,
+    color: '#ddd',
+  }
+
+  const menuStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: position.y,
+    left: position.x,
+    background: '#3a3a3a',
+    border: '1px solid #555',
+    borderRadius: 4,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    zIndex: Z_MENU,
+    minWidth: 150,
+  }
+
+  const submenuStyle: React.CSSProperties = {
+    position: 'absolute',
+    left: '100%',
+    top: 0,
+    background: '#3a3a3a',
+    border: '1px solid #555',
+    borderRadius: 4,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    minWidth: 150,
+    zIndex: Z_MENU + 1,
+  }
+
+  const hoverOn = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = '#4a4a4a'
+  }
+  const hoverOff = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.background = 'none'
+  }
+
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: position.y,
-        left: position.x,
-        background: 'white',
-        border: '1px solid #ccc',
-        borderRadius: 4,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-        zIndex: Z_MENU,
-        minWidth: 120,
-      }}
-    >
+    <div style={menuStyle} onClick={(e) => e.stopPropagation()}>
       {/* New submenu */}
       <div
         style={{ position: 'relative' }}
@@ -46,97 +77,43 @@ export default function CanvasContextMenu({
       >
         <button
           style={{
-            display: 'block',
-            width: '100%',
-            padding: '8px 16px',
-            border: 'none',
-            background: newSubmenuOpen ? '#f0f0f0' : 'none',
-            textAlign: 'left',
-            cursor: 'pointer',
-            fontSize: 14,
+            ...buttonStyle,
+            background: newSubmenuOpen ? '#4a4a4a' : 'none',
           }}
         >
           New...
         </button>
         {newSubmenuOpen && (
-          <div
-            style={{
-              position: 'absolute',
-              left: '100%',
-              top: 0,
-              background: 'white',
-              border: '1px solid #ccc',
-              borderRadius: 4,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              minWidth: 140,
-              zIndex: Z_MENU + 1,
-            }}
-          >
+          <div style={submenuStyle}>
             <button
               onClick={() => { onAddText?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              style={buttonStyle}
+              onMouseEnter={hoverOn}
+              onMouseLeave={hoverOff}
             >
               Text Block
             </button>
             <button
               onClick={() => { onAddPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              style={buttonStyle}
+              onMouseEnter={hoverOn}
+              onMouseLeave={hoverOff}
             >
               LLM Prompt
             </button>
             <button
               onClick={() => { onAddImageGenPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              style={buttonStyle}
+              onMouseEnter={hoverOn}
+              onMouseLeave={hoverOff}
             >
               ImageGen Prompt
             </button>
             <button
               onClick={() => { onAddHtmlGenPrompt?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              style={buttonStyle}
+              onMouseEnter={hoverOn}
+              onMouseLeave={hoverOff}
             >
               HTMLGen Prompt
             </button>
@@ -145,18 +122,9 @@ export default function CanvasContextMenu({
       </div>
       <button
         onClick={onPaste}
-        style={{
-          display: 'block',
-          width: '100%',
-          padding: '8px 16px',
-          border: 'none',
-          background: 'none',
-          textAlign: 'left',
-          cursor: 'pointer',
-          fontSize: 14,
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-        onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        style={buttonStyle}
+        onMouseEnter={hoverOn}
+        onMouseLeave={hoverOff}
       >
         Paste
       </button>

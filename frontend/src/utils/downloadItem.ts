@@ -1,3 +1,4 @@
+import JSZip from 'jszip'
 import { CanvasItem, ImageItem, VideoItem, TextFileItem, PdfItem } from '../types'
 import { getContentData } from '../api/scenes'
 
@@ -168,6 +169,97 @@ export async function downloadSelectedItems(items: CanvasItem[], selectedIds: st
     .filter((item): item is CanvasItem => !!item && ['image', 'video', 'text-file', 'pdf'].includes(item.type))
   for (const item of selected) {
     await downloadCanvasItem(item, sceneId)
+  }
+}
+
+async function collectSelectedItemBlobs(items: CanvasItem[], selectedIds: string[], sceneId: string): Promise<{ filename: string; blob: Blob }[]> {
+  const selected = selectedIds
+    .map(id => items.find(item => item.id === id))
+    .filter((item): item is CanvasItem => !!item && ['image', 'video', 'text-file', 'pdf'].includes(item.type))
+
+  const results: { filename: string; blob: Blob }[] = []
+  const usedNames = new Map<string, number>()
+
+  for (const item of selected) {
+    let info: { filename: string; blobPromise: Promise<Blob> } | null = null
+    switch (item.type) {
+      case 'image': info = getImageBlobInfo(item as ImageItem, sceneId); break
+      case 'video': info = getVideoBlobInfo(item as VideoItem, sceneId); break
+      case 'text-file': info = getTextFileBlobInfo(item as TextFileItem, sceneId); break
+      case 'pdf': info = getPdfBlobInfo(item as PdfItem, sceneId); break
+    }
+    if (!info) continue
+
+    // Deduplicate filenames
+    let filename = info.filename
+    const count = usedNames.get(filename) || 0
+    if (count > 0) {
+      const dotIdx = filename.lastIndexOf('.')
+      const base = dotIdx > 0 ? filename.slice(0, dotIdx) : filename
+      const ext = dotIdx > 0 ? filename.slice(dotIdx) : ''
+      filename = `${base} (${count})${ext}`
+    }
+    usedNames.set(info.filename, count + 1)
+
+    try {
+      const blob = await info.blobPromise
+      results.push({ filename, blob })
+    } catch (error) {
+      console.error(`Failed to fetch ${filename}:`, error)
+    }
+  }
+
+  return results
+}
+
+/**
+ * Download all downloadable items from a selection as a single zip file.
+ */
+export async function downloadSelectedItemsAsZip(items: CanvasItem[], selectedIds: string[], sceneId: string) {
+  const entries = await collectSelectedItemBlobs(items, selectedIds, sceneId)
+  if (entries.length === 0) return
+  const zip = new JSZip()
+  for (const { filename, blob } of entries) zip.file(filename, blob)
+  downloadBlob(await zip.generateAsync({ type: 'blob' }), 'download.zip')
+}
+
+/**
+ * Export all downloadable items from a selection as a single zip file (Save As dialog).
+ */
+export async function exportSelectedItemsAsZip(items: CanvasItem[], selectedIds: string[], sceneId: string) {
+  const entries = await collectSelectedItemBlobs(items, selectedIds, sceneId)
+  if (entries.length === 0) return
+  const zip = new JSZip()
+  for (const { filename, blob } of entries) zip.file(filename, blob)
+  await saveAsOrDownload(await zip.generateAsync({ type: 'blob' }), 'download.zip', 'Zip archive', 'application/zip', 'zip')
+}
+
+/**
+ * Export all downloadable items to a user-chosen directory.
+ * Falls back to sequential individual downloads if the directory picker API is unavailable.
+ */
+export async function exportSelectedItemsToDirectory(items: CanvasItem[], selectedIds: string[], sceneId: string) {
+  const entries = await collectSelectedItemBlobs(items, selectedIds, sceneId)
+  if (entries.length === 0) return
+
+  if ('showDirectoryPicker' in window) {
+    try {
+      const dirHandle = await (window as unknown as { showDirectoryPicker: () => Promise<FileSystemDirectoryHandle> }).showDirectoryPicker()
+      for (const { filename, blob } of entries) {
+        const fileHandle = await dirHandle.getFileHandle(filename, { create: true })
+        const writable = await fileHandle.createWritable()
+        await writable.write(blob)
+        await writable.close()
+      }
+      return
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') return
+    }
+  }
+
+  // Fallback: download each file individually
+  for (const { filename, blob } of entries) {
+    downloadBlob(blob, filename)
   }
 }
 

@@ -45,6 +45,8 @@ export function useCanvasSelection({
   const marqueeBaseSelectionRef = useRef<string[]>([])
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    // Only handle left-click; right-click opens context menu without changing selection
+    if (e.evt.button !== 0) return
     // If in image crop mode and clicking on empty canvas, apply crop
     if (croppingImageId) {
       if (e.target === stageRef.current) {
@@ -158,6 +160,8 @@ export function useCanvasSelection({
 
   const handleItemClick = (e: Konva.KonvaEventObject<MouseEvent>, id: string) => {
     e.cancelBubble = true
+    // Only handle left-click; right-click opens context menu without changing selection
+    if (e.evt.button !== 0) return
     const metaPressed = e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey
     const isSelected = selectedIds.includes(id)
 
