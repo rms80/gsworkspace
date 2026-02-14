@@ -120,19 +120,10 @@ export default function CanvasContextMenu({
               HTMLGen Prompt
             </button>
             <button
-              onClick={() => { onAddCodingRobot?.(); onClose() }}
-              style={{
-                display: 'block',
-                width: '100%',
-                padding: '8px 16px',
-                border: 'none',
-                background: 'none',
-                textAlign: 'left',
-                cursor: 'pointer',
-                fontSize: 14,
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f0f0')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              onClick={() => { onAddCodingRobot?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
+              style={buttonStyle}
+              onMouseEnter={hoverOn}
+              onMouseLeave={hoverOff}
             >
               Coding Robot
             </button>

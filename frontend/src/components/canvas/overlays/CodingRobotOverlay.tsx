@@ -110,7 +110,7 @@ export default function CodingRobotOverlay({
             display: 'flex',
             alignItems: 'center',
             padding: `0 ${4 * stageScale}px`,
-            background: '#f5f0ea',
+            background: '#e8e8e8',
             borderBottom: `1px solid ${theme.border}`,
             fontSize: `${9 * stageScale}px`,
             color: '#999',
@@ -175,7 +175,7 @@ export default function CodingRobotOverlay({
                 maxWidth: '85%',
                 padding: `${4 * stageScale}px ${8 * stageScale}px`,
                 borderRadius: `${6 * stageScale}px`,
-                background: msg.role === 'user' ? '#e05020' : '#f0ebe0',
+                background: msg.role === 'user' ? '#6a6a6a' : '#e0e0e0',
                 color: msg.role === 'user' ? '#fff' : '#333',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
@@ -195,7 +195,7 @@ export default function CodingRobotOverlay({
             <div style={{
               padding: `${4 * stageScale}px ${8 * stageScale}px`,
               borderRadius: `${6 * stageScale}px`,
-              background: '#f0ebe0',
+              background: '#e0e0e0',
               color: '#999',
               fontStyle: 'italic',
             }}>
@@ -243,9 +243,9 @@ export default function CodingRobotOverlay({
           style={{
             width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
             height: BUTTON_HEIGHT * stageScale,
-            border: 'none',
+            border: `${1 * stageScale}px solid #000`,
             borderRadius: `${4 * stageScale}px`,
-            background: canSend ? theme.runButton : '#ccc',
+            background: canSend ? theme.runButton : '#787878',
             color: '#fff',
             fontSize: `${12 * stageScale}px`,
             fontWeight: 'bold',

@@ -101,7 +101,14 @@ function App() {
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
   const persistedSceneIdsRef = useRef<Set<string>>(new Set()) // Tracks scenes that have been saved to server
   const isHiddenWorkspaceRef = useRef(false) // Whether the current workspace is hidden (don't save as lastWorkspace)
-  const viewportMapRef = useRef<Map<string, ViewportState>>(new Map())
+  const viewportMapRef = useRef<Map<string, ViewportState>>((() => {
+    const saved = loadViewports(getStorageMode())
+    const map = new Map<string, ViewportState>()
+    for (const [id, vp] of Object.entries(saved)) {
+      map.set(id, vp)
+    }
+    return map
+  })())
   const prevActiveSceneIdRef = useRef<string | null>(null)
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
@@ -566,8 +573,8 @@ function App() {
       viewportMapRef.current.set(prevId, vp)
     }
 
-    // Restore new scene's viewport
-    if (activeSceneId && activeSceneId !== prevId) {
+    // Restore new scene's viewport (also restores on HMR re-mount when prevId === activeSceneId)
+    if (activeSceneId) {
       const saved = viewportMapRef.current.get(activeSceneId)
       if (saved && canvasRef.current) {
         canvasRef.current.setViewport({ x: saved.x, y: saved.y }, saved.scale)
@@ -597,6 +604,7 @@ function App() {
     return () => {
       clearInterval(interval)
       window.removeEventListener('beforeunload', saveCurrentViewport)
+      saveCurrentViewport()
     }
   }, [activeSceneId, storageMode])
 
@@ -1013,17 +1021,20 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addCodingRobotItem = useCallback(() => {
+  const addCodingRobotItem = useCallback((x?: number, y?: number) => {
+    const width = 400
+    const height = 350
+    const center = canvasRef.current?.getViewportCenter()
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'coding-robot',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
+      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
       label: 'Coding Robot',
       text: '',
       fontSize: 14,
-      width: 400,
-      height: 350,
+      width,
+      height,
       chatHistory: [],
       sessionId: null,
     }
