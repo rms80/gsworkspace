@@ -91,6 +91,38 @@ export async function generateWithClaudeCode(
         if ('session_id' in message && typeof (message as Record<string, unknown>).session_id === 'string') {
           capturedSessionId = (message as Record<string, unknown>).session_id as string
         }
+
+        // Log full usage data for debugging
+        console.log('[ClaudeCode] Usage:', JSON.stringify(message.usage))
+        console.log('[ClaudeCode] ModelUsage:', JSON.stringify(message.modelUsage))
+        console.log('[ClaudeCode] total_cost_usd:', message.total_cost_usd)
+
+        // Emit usage summary
+        if (onActivity) {
+          const durationSec = (message.duration_ms / 1000).toFixed(1)
+          const cost = message.total_cost_usd.toFixed(4)
+          const turns = message.num_turns
+
+          const modelLines: string[] = []
+          for (const [model, usage] of Object.entries(message.modelUsage)) {
+            // Shorten model ID: claude-sonnet-4-5-20250929 → sonnet-4-5
+            const shortModel = model
+              .replace(/^claude-/, '')
+              .replace(/-\d{8}$/, '')
+            const parts = [`${usage.inputTokens.toLocaleString()}in`, `${usage.outputTokens.toLocaleString()}out`]
+            // Include cache tokens if present
+            if (usage.cacheReadInputTokens > 0) parts.push(`${usage.cacheReadInputTokens.toLocaleString()}cache-read`)
+            if (usage.cacheCreationInputTokens > 0) parts.push(`${usage.cacheCreationInputTokens.toLocaleString()}cache-write`)
+            modelLines.push(`  ${shortModel}: ${parts.join(' / ')}`)
+          }
+
+          const summary = [
+            `${turns} turns, ${durationSec}s, $${cost}`,
+            ...modelLines,
+          ].join('\n')
+
+          onActivity({ type: 'status', content: summary })
+        }
       } else {
         console.error('[ClaudeCode] Error result:', JSON.stringify(message, null, 2))
         // For max_turns, there may still be useful partial output in the last assistant message
