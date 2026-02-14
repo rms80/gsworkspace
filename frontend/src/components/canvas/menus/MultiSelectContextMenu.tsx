@@ -8,6 +8,7 @@ interface MultiSelectContextMenuProps {
   selectedIds: string[]
   sceneId: string
   onClose: () => void
+  onCombineTextItems?: () => void
 }
 
 export default function MultiSelectContextMenu({
@@ -16,12 +17,19 @@ export default function MultiSelectContextMenu({
   selectedIds,
   sceneId,
   onClose,
+  onCombineTextItems,
 }: MultiSelectContextMenuProps) {
   const DOWNLOADABLE_TYPES = ['image', 'video', 'text-file', 'pdf']
   const hasDownloadable = selectedIds.some(id => {
     const item = items.find(i => i.id === id)
     return item && DOWNLOADABLE_TYPES.includes(item.type)
   })
+
+  const selectedTextItems = selectedIds.filter(id => {
+    const item = items.find(i => i.id === id)
+    return item && item.type === 'text'
+  })
+  const canCombineText = selectedTextItems.length >= 2
 
   const buttonStyle: React.CSSProperties = {
     display: 'block',
@@ -77,6 +85,11 @@ export default function MultiSelectContextMenu({
     onClose()
   }
 
+  const handleCombineText = () => {
+    onCombineTextItems?.()
+    onClose()
+  }
+
   return (
     <div
       style={{
@@ -92,6 +105,19 @@ export default function MultiSelectContextMenu({
       }}
       onClick={(e) => e.stopPropagation()}
     >
+      {canCombineText && (
+        <>
+          <button
+            onClick={handleCombineText}
+            style={buttonStyle}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          >
+            Combine
+          </button>
+          <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
+        </>
+      )}
       <button
         onClick={hasDownloadable ? handleDownloadAll : undefined}
         disabled={!hasDownloadable}
