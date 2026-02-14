@@ -2,15 +2,22 @@ import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHand
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
+import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
+import { uploadTextFile } from '../api/textfiles'
+import { ACTIVE_WORKSPACE } from '../api/workspace'
+import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
+import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
 import VideoContextMenu from './canvas/menus/VideoContextMenu'
+import PdfContextMenu from './canvas/menus/PdfContextMenu'
+import TextFileContextMenu from './canvas/menus/TextFileContextMenu'
 import HtmlExportMenu from './canvas/menus/HtmlExportMenu'
 import TextItemRenderer from './canvas/items/TextItemRenderer'
 import ImageItemRenderer from './canvas/items/ImageItemRenderer'
@@ -18,11 +25,15 @@ import VideoItemRenderer from './canvas/items/VideoItemRenderer'
 import PromptItemRenderer from './canvas/items/PromptItemRenderer'
 import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import CodingRobotItemRenderer from './canvas/items/CodingRobotItemRenderer'
+import PdfItemRenderer from './canvas/items/PdfItemRenderer'
+import TextFileItemRenderer from './canvas/items/TextFileItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
 import VideoLabelEditingOverlay from './canvas/overlays/VideoLabelEditingOverlay'
 import ImageLabelEditingOverlay from './canvas/overlays/ImageLabelEditingOverlay'
+import PdfLabelEditingOverlay from './canvas/overlays/PdfLabelEditingOverlay'
+import TextFileLabelEditingOverlay from './canvas/overlays/TextFileLabelEditingOverlay'
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import GifOverlay from './canvas/overlays/GifOverlay'
 import CodingRobotOverlay from './canvas/overlays/CodingRobotOverlay'
@@ -42,19 +53,21 @@ import { useImageLoader } from '../hooks/useImageLoader'
 import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
+  TEXT_FILE_EXTENSION_PATTERN, getTextFileFormat,
 } from '../constants/canvas'
+import type { TransformEntry } from '../history'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
   selectedIds: string[]
   sceneId: string
-  onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
+  onUpdateItem: (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => void
   onSelectItems: (ids: string[]) => void
   onAddTextAt: (x: number, y: number, text: string, optWidth?: number) => string
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
@@ -69,13 +82,18 @@ interface InfiniteCanvasProps {
   onSendCodingRobotMessage: (itemId: string, message: string) => void
   runningCodingRobotIds: Set<string>
   isOffline: boolean
-  onAddText?: () => void
-  onAddPrompt?: () => void
-  onAddImageGenPrompt?: () => void
-  onAddHtmlGenPrompt?: () => void
-  onAddCodingRobot?: () => void
+  onAddText?: (x?: number, y?: number) => void
+  onAddPrompt?: (x?: number, y?: number) => void
+  onAddImageGenPrompt?: (x?: number, y?: number) => void
+  onAddHtmlGenPrompt?: (x?: number, y?: number) => void
+  onAddCodingRobot?: (x?: number, y?: number) => void
   videoPlaceholders?: Array<{id: string, x: number, y: number, width: number, height: number, name: string}>
   onUploadVideoAt?: (file: File, x: number, y: number) => void
+  onBatchTransform?: (entries: TransformEntry[]) => void
+  onAddPdfAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => void
+  onTogglePdfMinimized?: (id: string) => void
+  onAddTextFileAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => void
+  onToggleTextFileMinimized?: (id: string) => void
 }
 
 export interface CanvasHandle {
@@ -83,7 +101,7 @@ export interface CanvasHandle {
   fitToView: () => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, runningCodingRobotIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, runningCodingRobotIds, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -95,7 +113,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const htmlGenPromptTransformerRef = useRef<Konva.Transformer>(null)
   const codingRobotTransformerRef = useRef<Konva.Transformer>(null)
   const htmlTransformerRef = useRef<Konva.Transformer>(null)
+  const pdfTransformerRef = useRef<Konva.Transformer>(null)
+  const textFileTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
+
+  // Multi-select drag coordination ref
+  const multiDragRef = useRef<{
+    dragNodeId: string
+    startNodeX: number
+    startNodeY: number
+    otherNodes: Array<{ id: string; node: Konva.Node; startX: number; startY: number }>
+    savedTransformerState: Map<Konva.Transformer, Konva.Node[]>
+  } | null>(null)
 
   // Background operations tracking
   const { startOperation, endOperation } = useBackgroundOperations()
@@ -117,9 +146,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     isViewportTransforming,
     isMiddleMousePanning: _isMiddleMousePanning,
     isAnyDragActive,
+    rightMouseDidDragRef,
     setStagePos,
     setStageScale: _setStageScale,
-    setIsAnyDragActive,
+    setIsAnyDragActive: _setIsAnyDragActive,
     setIsViewportTransforming,
     handleWheel,
     screenToCanvas,
@@ -290,14 +320,17 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             return
           }
         }
+        // No single text block selected — fall through to create at cursor
       }
 
-      // 't' (no modifiers): create/edit text block at cursor
-      if (e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) {
+      // 't' or Shift+T (without single text selected): create/edit text block at cursor
+      if ((e.key === 't' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) ||
+          (e.key === 'T' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey)) {
+        const isShiftT = e.shiftKey
         e.preventDefault()
 
-        // If a single text item is selected, edit it
-        if (selectedIds.length === 1) {
+        // 't' with a single text item selected: edit it
+        if (!isShiftT && selectedIds.length === 1) {
           const selectedItem = items.find(item => item.id === selectedIds[0])
           if (selectedItem && selectedItem.type === 'text') {
             setEditingTextId(selectedItem.id)
@@ -309,8 +342,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           }
         }
 
-        // If nothing selected, create new text block at cursor
-        if (selectedIds.length === 0) {
+        // Create new text block at cursor (for 't' when nothing selected, or Shift+T fallthrough)
+        if (isShiftT || selectedIds.length === 0) {
           const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
           const newId = onAddTextAt(canvasPos.x, canvasPos.y, '')
           // Select the new text block and start editing after it's rendered
@@ -330,6 +363,87 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, screenToCanvas, clipboard.mousePos, onAddTextAt, onSelectItems, onUpdateItem])
 
+  // 8c. Viewport hotkeys: Shift+V = fit-to-view, C = center at cursor, Shift+C = fit-to-view at 100%
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) {
+        return
+      }
+      if (isEditing) return
+
+      // Shift+V: fit to view
+      if (e.key === 'V' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        if (items.length === 0) return
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of items) {
+          const w = item.width * ((item as ImageItem).scaleX ?? 1)
+          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          minX = Math.min(minX, item.x)
+          minY = Math.min(minY, item.y)
+          maxX = Math.max(maxX, item.x + w)
+          maxY = Math.max(maxY, item.y + h)
+        }
+        const contentWidth = maxX - minX
+        const contentHeight = maxY - minY
+        const padding = 50
+        const scale = Math.min(
+          (stageSize.width - padding * 2) / contentWidth,
+          (stageSize.height - padding * 2) / contentHeight,
+          5,
+        )
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+        _setStageScale(scale)
+        setStagePos({
+          x: stageSize.width / 2 - centerX * scale,
+          y: stageSize.height / 2 - centerY * scale,
+        })
+        return
+      }
+
+      // Shift+C: center on content at 100% zoom
+      if (e.key === 'C' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        if (items.length === 0) return
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of items) {
+          const w = item.width * ((item as ImageItem).scaleX ?? 1)
+          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          minX = Math.min(minX, item.x)
+          minY = Math.min(minY, item.y)
+          maxX = Math.max(maxX, item.x + w)
+          maxY = Math.max(maxY, item.y + h)
+        }
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+        _setStageScale(1)
+        setStagePos({
+          x: stageSize.width / 2 - centerX,
+          y: stageSize.height / 2 - centerY,
+        })
+        return
+      }
+
+      // C: center viewport at cursor
+      if (e.key === 'c' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(clipboard.mousePos.x, clipboard.mousePos.y)
+        setStagePos({
+          x: stageSize.width / 2 - canvasPos.x * stageScale,
+          y: stageSize.height / 2 - canvasPos.y * stageScale,
+        })
+        return
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, items, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
+
   // 9. Menu state hooks
   const contextMenuState = useMenuState<{ x: number; y: number; canvasX: number; canvasY: number }>()
   const modelMenu = useMenuState<string>()
@@ -337,6 +451,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const htmlGenModelMenu = useMenuState<string>()
   const imageContextMenuState = useMenuState<{ imageId: string }>()
   const videoContextMenuState = useMenuState<{ videoId: string }>()
+  const pdfContextMenuState = useMenuState<{ pdfId: string }>()
+  const textFileContextMenuState = useMenuState<{ textFileId: string }>()
   const exportMenu = useMenuState<string>()
 
   // 10. Remaining UI state
@@ -350,6 +466,48 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const videoLabelInputRef = useRef<HTMLInputElement>(null)
   const [editingImageLabelId, setEditingImageLabelId] = useState<string | null>(null)
   const imageLabelInputRef = useRef<HTMLInputElement>(null)
+  const [pdfItemTransforms, setPdfItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [editingPdfLabelId, setEditingPdfLabelId] = useState<string | null>(null)
+  const pdfLabelInputRef = useRef<HTMLInputElement>(null)
+  const [textFileItemTransforms, setTextFileItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [editingTextFileLabelId, setEditingTextFileLabelId] = useState<string | null>(null)
+  const textFileLabelInputRef = useRef<HTMLInputElement>(null)
+  // Cache fetched text file content (keyed by item src URL)
+  const [textFileContents, setTextFileContents] = useState<Map<string, string>>(new Map())
+
+  // Fetch text file content from React side (avoids CORS issues with srcdoc iframe)
+  useEffect(() => {
+    const textFileItems = items.filter((item) => item.type === 'text-file' && !(item as TextFileItem).minimized) as TextFileItem[]
+    for (const item of textFileItems) {
+      if (!textFileContents.has(item.id)) {
+        // Mark as loading to avoid duplicate fetches
+        setTextFileContents((prev) => {
+          if (prev.has(item.id)) return prev
+          const next = new Map(prev)
+          next.set(item.id, '')
+          return next
+        })
+        // Use content-data endpoint to proxy through backend (avoids S3 CORS)
+        const fetchUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${sceneId}/content-data?contentId=${item.id}&contentType=text-file`
+        fetch(fetchUrl)
+          .then((r) => r.text())
+          .then((text) => {
+            setTextFileContents((prev) => {
+              const next = new Map(prev)
+              next.set(item.id, text)
+              return next
+            })
+          })
+          .catch(() => {
+            setTextFileContents((prev) => {
+              const next = new Map(prev)
+              next.set(item.id, 'Failed to load file.')
+              return next
+            })
+          })
+      }
+    }
+  }, [items, textFileContents, sceneId])
 
   // 11. Pulse animation hook
   const { pulsePhase } = usePulseAnimation({
@@ -377,8 +535,189 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'html-gen-prompt', ref: htmlGenPromptTransformerRef },
       { type: 'coding-robot', ref: codingRobotTransformerRef },
       { type: 'html', ref: htmlTransformerRef },
+      { type: 'pdf', ref: pdfTransformerRef, filterItem: (item) => item.type === 'pdf' && !item.minimized },
+      { type: 'text-file', ref: textFileTransformerRef, filterItem: (item) => item.type === 'text-file' && !item.minimized },
     ],
   })
+
+  // 13. Multi-select drag coordination (Layer-level handlers)
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef]
+
+  const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    // Guard: if already tracking a drag (e.g. Transformer started drag on
+    // another node), ignore subsequent dragstart events
+    if (multiDragRef.current) return
+
+    const target = e.target
+    const nodeId = target.id()
+    if (!nodeId) return
+
+    // Only track canvas items (not transformer anchors, etc.)
+    const isCanvasItem = items.some(i => i.id === nodeId)
+    if (!isCanvasItem) return
+
+    const otherNodes: Array<{ id: string; node: Konva.Node; startX: number; startY: number }> = []
+    const savedTransformerState = new Map<Konva.Transformer, Konva.Node[]>()
+
+    // For multi-select drags, coordinate other selected items
+    if (selectedIds.includes(nodeId) && selectedIds.length > 1) {
+      // Temporarily detach other selected nodes from their Transformers to prevent
+      // Konva's Transformer multi-drag from conflicting with our handler.
+      for (const trRef of allTransformerRefs) {
+        const tr = trRef.current
+        if (!tr) continue
+        const trNodes = tr.nodes()
+        if (trNodes.length <= 1) continue
+        const hasOtherSelected = trNodes.some(n => n.id() !== nodeId && selectedIds.includes(n.id()))
+        if (!hasOtherSelected) continue
+        savedTransformerState.set(tr, trNodes.slice())
+        tr.nodes(trNodes.filter(n => n.id() === nodeId || !selectedIds.includes(n.id())))
+      }
+
+      for (const id of selectedIds) {
+        if (id === nodeId) continue
+        const node = stageRef.current?.findOne('#' + id) as Konva.Node | undefined
+        if (node) {
+          otherNodes.push({ id, node, startX: node.x(), startY: node.y() })
+        }
+      }
+    }
+
+    multiDragRef.current = {
+      dragNodeId: nodeId,
+      startNodeX: target.x(),
+      startNodeY: target.y(),
+      otherNodes,
+      savedTransformerState,
+    }
+  }, [selectedIds, items])
+
+  const handleLayerDragMove = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!multiDragRef.current) return
+    // Only process events from the original user-dragged node
+    if (e.target.id() !== multiDragRef.current.dragNodeId) return
+    const { startNodeX, startNodeY, otherNodes } = multiDragRef.current
+    const dx = e.target.x() - startNodeX
+    const dy = e.target.y() - startNodeY
+
+    for (const { node, startX, startY } of otherNodes) {
+      node.x(startX + dx)
+      node.y(startY + dy)
+    }
+
+    // Update overlay transforms for videos, GIFs, and HTML items being moved
+    for (const { id, node } of otherNodes) {
+      const item = items.find(i => i.id === id)
+      if (!item) continue
+
+      if (item.type === 'video') {
+        const scaleX = item.scaleX ?? 1
+        const scaleY = item.scaleY ?? 1
+        const headerHeight = selectedIds.includes(item.id) ? VIDEO_HEADER_HEIGHT / Math.max(1, stageScale) : 0
+        setVideoItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y() + headerHeight, width: item.width * scaleX, height: item.height * scaleY })
+          return next
+        })
+      } else if (item.type === 'image' && gifIds.has(id)) {
+        const scaleX = item.scaleX ?? 1
+        const scaleY = item.scaleY ?? 1
+        const headerHeight = selectedIds.includes(item.id) ? IMAGE_HEADER_HEIGHT / Math.max(1, stageScale) : 0
+        setGifItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y() + headerHeight, width: item.width * scaleX, height: item.height * scaleY })
+          return next
+        })
+      } else if (item.type === 'html') {
+        setHtmlItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
+          return next
+        })
+      } else if (item.type === 'pdf' && !item.minimized) {
+        setPdfItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
+          return next
+        })
+      }
+    }
+  }, [items, selectedIds, stageScale, gifIds])
+
+  const handleLayerDragEnd = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
+    if (!multiDragRef.current) return
+    // Only process events from the original user-dragged node
+    if (e.target.id() !== multiDragRef.current.dragNodeId) return
+    const { dragNodeId, startNodeX, startNodeY, otherNodes, savedTransformerState } = multiDragRef.current
+    const dx = e.target.x() - startNodeX
+    const dy = e.target.y() - startNodeY
+
+    // Update other nodes' state (skipHistory — batch will handle it)
+    for (const { id } of otherNodes) {
+      const item = items.find(i => i.id === id)
+      if (item) {
+        onUpdateItem(id, { x: item.x + dx, y: item.y + dy }, true)
+      }
+    }
+
+    // Build and push batch transform entry
+    if (onBatchTransform && (dx !== 0 || dy !== 0)) {
+      const entries: TransformEntry[] = []
+      entries.push({
+        objectId: dragNodeId,
+        oldTransform: { x: startNodeX, y: startNodeY },
+        newTransform: { x: e.target.x(), y: e.target.y() },
+      })
+      for (const { id, startX, startY } of otherNodes) {
+        entries.push({
+          objectId: id,
+          oldTransform: { x: startX, y: startY },
+          newTransform: { x: startX + dx, y: startY + dy },
+        })
+      }
+      onBatchTransform(entries)
+    }
+
+    // Clean up overlay transforms
+    setVideoItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setGifItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setHtmlItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setPdfItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+
+    // Restore Transformer nodes that were detached during drag
+    for (const [tr, nodes] of savedTransformerState) {
+      tr.nodes(nodes)
+    }
+
+    multiDragRef.current = null
+  }, [items, onUpdateItem, onBatchTransform])
+
+  // Wrapper that suppresses individual history entries during batch drags.
+  // During an active drag (multiDragRef set), transform history is handled by
+  // the batch in handleLayerDragEnd, so individual updates use skipHistory.
+  const handleUpdateItem = useCallback((id: string, changes: Partial<CanvasItem>) => {
+    if (multiDragRef.current) {
+      onUpdateItem(id, changes, true)
+    } else {
+      onUpdateItem(id, changes)
+    }
+  }, [onUpdateItem])
 
   // Handle drag and drop from file system
   const handleDragOver = (e: React.DragEvent) => {
@@ -581,12 +920,69 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         }
         offsetIndex++
       }
+      // Handle PDF files
+      else if (file.type === 'application/pdf' && onAddPdfAt) {
+        const reader = new FileReader()
+        const fileName = file.name
+        const fileSize = file.size
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result as string
+          const itemId = uuidv4()
+          const name = fileName.replace(/\.[^/.]+$/, '')
+          try {
+            startOperation()
+            const s3Url = await uploadPdf(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.pdf`)
+            let thumbnailSrc: string | undefined
+            try {
+              const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${sceneId}/content-data?contentId=${itemId}&contentType=pdf`
+              const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
+              thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, sceneId, itemId)
+            } catch (thumbErr) {
+              console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+            }
+            endOperation()
+            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 700, name, fileSize, thumbnailSrc)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload PDF, using data URL:', err)
+            onAddPdfAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
+          }
+        }
+        reader.readAsDataURL(file)
+        offsetIndex++
+      }
+      // Handle text files
+      else if (onAddTextFileAt && (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name))) {
+        const reader = new FileReader()
+        const fileName = file.name
+        const fileSize = file.size
+        const fileFormat = getTextFileFormat(fileName) || 'txt'
+        reader.onload = async (event) => {
+          const dataUrl = event.target?.result as string
+          const itemId = uuidv4()
+          const name = fileName
+          try {
+            startOperation()
+            const s3Url = await uploadTextFile(dataUrl, sceneId, itemId, fileName || `document-${Date.now()}.${fileFormat}`, fileFormat)
+            endOperation()
+            onAddTextFileAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, s3Url, 600, 500, name, fileSize, fileFormat)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload text file, using data URL:', err)
+            onAddTextFileAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20, dataUrl, 600, 500, name, fileSize, fileFormat)
+          }
+        }
+        reader.readAsDataURL(file)
+        offsetIndex++
+      }
     }
   }
 
-  // Handle right-click context menu
+  // Handle right-click context menu (suppressed when right-drag panned)
   const handleContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault()
+    if (rightMouseDidDragRef.current) return
+
     const stage = stageRef.current
     if (!stage) return
 
@@ -728,6 +1124,99 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   }
   const editingImageItem = getEditingImageItem()
 
+  // PDF item label editing handlers
+  const handlePdfLabelDblClick = (id: string) => {
+    setEditingPdfLabelId(id)
+    setTimeout(() => {
+      pdfLabelInputRef.current?.focus()
+      pdfLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handlePdfLabelBlur = () => {
+    if (editingPdfLabelId && pdfLabelInputRef.current) {
+      onUpdateItem(editingPdfLabelId, { name: pdfLabelInputRef.current.value })
+    }
+    setEditingPdfLabelId(null)
+  }
+
+  const handlePdfLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingPdfLabelId(null)
+    } else if (e.key === 'Enter') {
+      handlePdfLabelBlur()
+    }
+  }
+
+  const getEditingPdfItem = (): PdfItem | null => {
+    if (!editingPdfLabelId) return null
+    const item = items.find((i) => i.id === editingPdfLabelId)
+    if (!item || item.type !== 'pdf') return null
+    return item
+  }
+  const editingPdfItem = getEditingPdfItem()
+
+  const handleTogglePdfMinimized = useCallback((id: string) => {
+    onTogglePdfMinimized?.(id)
+  }, [onTogglePdfMinimized])
+
+  // Text file item label editing handlers
+  const handleTextFileLabelDblClick = (id: string) => {
+    setEditingTextFileLabelId(id)
+    setTimeout(() => {
+      textFileLabelInputRef.current?.focus()
+      textFileLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleTextFileLabelBlur = () => {
+    if (editingTextFileLabelId && textFileLabelInputRef.current) {
+      onUpdateItem(editingTextFileLabelId, { name: textFileLabelInputRef.current.value })
+    }
+    setEditingTextFileLabelId(null)
+  }
+
+  const handleTextFileLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      setEditingTextFileLabelId(null)
+    } else if (e.key === 'Enter') {
+      handleTextFileLabelBlur()
+    }
+  }
+
+  const getEditingTextFileItem = (): TextFileItem | null => {
+    if (!editingTextFileLabelId) return null
+    const item = items.find((i) => i.id === editingTextFileLabelId)
+    if (!item || item.type !== 'text-file') return null
+    return item
+  }
+  const editingTextFileItem = getEditingTextFileItem()
+
+  const handleToggleTextFileMinimized = useCallback((id: string) => {
+    onToggleTextFileMinimized?.(id)
+  }, [onToggleTextFileMinimized])
+
+  const handleToggleTextFileMono = useCallback((id: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    onUpdateItem(id, { fontMono: !(item.fontMono ?? false) } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
+  const handleChangeTextFileFontSize = useCallback((id: string, delta: number) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    const currentSize = item.fontSize ?? 14
+    const newSize = Math.max(8, Math.min(48, currentSize + delta))
+    onUpdateItem(id, { fontSize: newSize } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
+  const handleToggleTextFileViewType = useCallback((id: string) => {
+    const item = items.find((i) => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    const current = item.viewType ?? (item.fileFormat === 'csv' ? 'table' : 'raw')
+    onUpdateItem(id, { viewType: current === 'table' ? 'raw' : 'table' } as Partial<CanvasItem>, true)
+  }, [items, onUpdateItem])
+
   const getEditingHtmlItem = () => {
     if (!editingHtmlLabelId) return null
     const item = items.find((i) => i.id === editingHtmlLabelId)
@@ -758,36 +1247,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         y={stagePos.y}
         scaleX={stageScale}
         scaleY={stageScale}
-        draggable={!croppingImageId}
-        onDragStart={(e) => {
-          // Prevent dragging when Ctrl is held (for marquee selection)
-          if (e.evt.ctrlKey || e.evt.metaKey) {
-            e.target.stopDrag()
-            return
-          }
-          // Disable iframe pointer events during any drag
-          setIsAnyDragActive(true)
-          // Hide HTML overlays while panning
-          if (e.target === stageRef.current && config.features.hideHtmlDuringTransform) {
-            setIsViewportTransforming(true)
-          }
-        }}
-        onDragMove={(e) => {
-          // Update stage position in real-time during panning for HTML iframe sync
-          if (e.target === stageRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() })
-          }
-        }}
-        onDragEnd={(e) => {
-          // Re-enable iframe pointer events
-          setIsAnyDragActive(false)
-          if (e.target === stageRef.current) {
-            setStagePos({ x: e.target.x(), y: e.target.y() })
-            if (config.features.hideHtmlDuringTransform) {
-              setIsViewportTransforming(false)
-            }
-          }
-        }}
         onWheel={handleWheel}
         onClick={handleStageClick}
         onMouseDown={handleMouseDown}
@@ -795,7 +1254,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         onMouseUp={handleMouseUp}
         onContextMenu={handleContextMenu}
       >
-      <Layer ref={layerRef}>
+      <Layer ref={layerRef} onDragStart={handleLayerDragStart} onDragMove={handleLayerDragMove} onDragEnd={handleLayerDragEnd}>
         {/* Canvas items */}
         {items.map((item) => {
           if (item.type === 'text') {
@@ -807,7 +1266,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isEditing={editingTextId === item.id}
                 onItemClick={handleItemClick}
                 onDblClick={handleTextDblClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
               />
             )
           } else if (item.type === 'image') {
@@ -826,12 +1285,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingImageLabelId={editingImageLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
                   imageContextMenuState.openMenu(
                     { imageId: id },
                     { x: e.evt.clientX, y: e.evt.clientY },
                   )
                 }}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleImageLabelDblClick}
                 setGifItemTransforms={itemIsGif ? setGifItemTransforms : undefined}
                 stageScale={stageScale}
@@ -848,12 +1308,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingVideoLabelId={editingVideoLabelId}
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
                   videoContextMenuState.openMenu(
                     { videoId: id },
                     { x: e.evt.clientX, y: e.evt.clientY },
                   )
                 }}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleVideoLabelDblClick}
                 setVideoItemTransforms={setVideoItemTransforms}
                 stageScale={stageScale}
@@ -871,7 +1332,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={promptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => modelMenu.openMenu(id, pos)}
                 onRun={onRunPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -889,7 +1350,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={imageGenPromptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => imageGenModelMenu.openMenu(id, pos)}
                 onRun={onRunImageGenPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -907,7 +1368,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 editing={htmlGenPromptEditing}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onOpenModelMenu={(id, pos) => htmlGenModelMenu.openMenu(id, pos)}
                 onRun={onRunHtmlGenPrompt}
                 onShowTooltip={handleShowTooltip}
@@ -935,9 +1396,56 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 editingHtmlLabelId={editingHtmlLabelId}
                 exportMenu={exportMenu}
                 onItemClick={handleItemClick}
-                onUpdateItem={onUpdateItem}
+                onUpdateItem={handleUpdateItem}
                 onLabelDblClick={handleHtmlLabelDblClick}
                 setHtmlItemTransforms={setHtmlItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
+            )
+          } else if (item.type === 'pdf') {
+            return (
+              <PdfItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                editingPdfLabelId={editingPdfLabelId}
+                onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
+                  pdfContextMenuState.openMenu(
+                    { pdfId: id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
+                }}
+                onUpdateItem={handleUpdateItem}
+                onLabelDblClick={handlePdfLabelDblClick}
+                onToggleMinimized={handleTogglePdfMinimized}
+                setPdfItemTransforms={setPdfItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
+            )
+          } else if (item.type === 'text-file') {
+            return (
+              <TextFileItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                editingTextFileLabelId={editingTextFileLabelId}
+                onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
+                  textFileContextMenuState.openMenu(
+                    { textFileId: id },
+                    { x: e.evt.clientX, y: e.evt.clientY },
+                  )
+                }}
+                onUpdateItem={handleUpdateItem}
+                onLabelDblClick={handleTextFileLabelDblClick}
+                onToggleMinimized={handleToggleTextFileMinimized}
+                onToggleMono={handleToggleTextFileMono}
+                onChangeFontSize={handleChangeTextFileFontSize}
+                onToggleViewType={handleToggleTextFileViewType}
+                setTextFileItemTransforms={setTextFileItemTransforms}
                 setIsViewportTransforming={setIsViewportTransforming}
               />
             )
@@ -1092,6 +1600,32 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             return newBox
           }}
         />
+        {/* Transformer for PDFs - free resize, no rotation */}
+        <Transformer
+          ref={pdfTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
+        {/* Transformer for text files - free resize, no rotation */}
+        <Transformer
+          ref={textFileTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
         {/* Transformer for videos - corner handles only, keep aspect ratio */}
         <Transformer
           ref={videoTransformerRef}
@@ -1114,6 +1648,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const y = transform?.y ?? item.y
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
+          const isSelected = selectedIds.includes(item.id)
+          // Allow iframe interaction when selected and not dragging
+          const iframeInteractive = isSelected && !isAnyDragActive
           return (
             <div
               key={`html-${item.id}`}
@@ -1126,6 +1663,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
                 zIndex: Z_IFRAME_OVERLAY,
+                // Let clicks/wheel pass through to Konva canvas when not selected or dragging
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
               }}
             >
               <iframe
@@ -1137,8 +1676,114 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   border: 'none',
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
-                  // Disable pointer events when selected, or when any drag is active (prevents iframe from capturing mouse)
-                  pointerEvents: (selectedIds.includes(item.id) || isAnyDragActive) ? 'none' : 'auto',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          )
+        })}
+
+      {/* PDF iframe overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'pdf' && !(item as PdfItem).minimized)
+        .map((item) => {
+          if (item.type !== 'pdf') return null
+          const transform = pdfItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
+          const isSelected = selectedIds.includes(item.id)
+          const isDragging = !!transform
+          const iframeInteractive = isSelected && !isAnyDragActive && !isDragging
+          return (
+            <div
+              key={`pdf-${item.id}`}
+              style={{
+                position: 'absolute',
+                top: (y + PDF_HEADER_HEIGHT) * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
+                overflow: 'hidden',
+                borderRadius: '0 0 4px 4px',
+                zIndex: Z_IFRAME_OVERLAY,
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
+              }}
+            >
+              <iframe
+                src={`${item.src}#navpanes=0&toolbar=1&view=FitH`}
+                style={{
+                  width: width * stageScale,
+                  height: height * stageScale,
+                  border: 'none',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
+                  background: '#fff',
+                }}
+              />
+            </div>
+          )
+        })}
+
+      {/* Text file iframe overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'text-file' && !(item as TextFileItem).minimized)
+        .map((item) => {
+          if (item.type !== 'text-file') return null
+          const transform = textFileItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
+          const isItemSelected = selectedIds.includes(item.id)
+          const isDragging = !!transform
+          const iframeInteractive = isItemSelected && !isAnyDragActive && !isDragging
+          const fontMono = item.fontMono ?? false
+          const fontSize = item.fontSize ?? 14
+          const textContent = textFileContents.get(item.id) ?? ''
+          const effectiveViewType = item.fileFormat === 'csv' && (item.viewType ?? 'table') === 'table' ? 'table' : 'raw'
+
+          let srcdoc: string
+          if (effectiveViewType === 'table' && textContent) {
+            const rows = parseCsv(textContent)
+            const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+            const headerRow = rows[0] || []
+            const bodyRows = rows.slice(1)
+            const thead = `<thead><tr>${headerRow.map((c) => `<th>${escapeHtml(c)}</th>`).join('')}</tr></thead>`
+            const tbody = `<tbody>${bodyRows.map((r) => `<tr>${r.map((c) => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')}</tbody>`
+            srcdoc = `<html><head><style>body{margin:0;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;color:#333;}table{border-collapse:collapse;width:100%;}th,td{border:1px solid #ddd;padding:4px 8px;text-align:left;white-space:nowrap;}th{background:#f0f0f0;font-weight:bold;position:sticky;top:0;}tr:hover{background:#f8f8f8;}</style></head><body><table>${thead}${tbody}</table></body></html>`
+          } else {
+            // Raw text view
+            const escapedContent = textContent
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+            srcdoc = `<html><head><style>body{margin:8px;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;white-space:pre-wrap;word-wrap:break-word;color:#333;}</style></head><body>${escapedContent || 'Loading...'}</body></html>`
+          }
+          return (
+            <div
+              key={`textfile-${item.id}-${fontMono}-${fontSize}-${effectiveViewType}`}
+              style={{
+                position: 'absolute',
+                top: (y + TEXTFILE_HEADER_HEIGHT) * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
+                overflow: 'hidden',
+                borderRadius: '0 0 4px 4px',
+                zIndex: Z_IFRAME_OVERLAY,
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
+              }}
+            >
+              <iframe
+                srcDoc={srcdoc}
+                style={{
+                  width: width * stageScale,
+                  height: height * stageScale,
+                  border: 'none',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#fff',
                 }}
               />
@@ -1380,10 +2025,35 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         />
       )}
 
+      {/* PDF label editing overlay */}
+      {editingPdfItem && (
+        <PdfLabelEditingOverlay
+          item={editingPdfItem}
+          inputRef={pdfLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handlePdfLabelBlur}
+          onKeyDown={handlePdfLabelKeyDown}
+        />
+      )}
+
+      {/* Text file label editing overlay */}
+      {editingTextFileItem && (
+        <TextFileLabelEditingOverlay
+          item={editingTextFileItem}
+          inputRef={textFileLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleTextFileLabelBlur}
+          onKeyDown={handleTextFileLabelKeyDown}
+        />
+      )}
+
       {/* Context menu */}
       {contextMenuState.menuPosition && (
         <CanvasContextMenu
           position={contextMenuState.menuPosition}
+          canvasPosition={contextMenuState.menuData ? { x: contextMenuState.menuData.canvasX, y: contextMenuState.menuData.canvasY } : undefined}
           onPaste={handleContextMenuPaste}
           onAddText={onAddText}
           onAddPrompt={onAddPrompt}
@@ -1493,6 +2163,28 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         />
       )}
 
+      {/* PDF context menu */}
+      {pdfContextMenuState.menuData && pdfContextMenuState.menuPosition && (
+        <PdfContextMenu
+          position={pdfContextMenuState.menuPosition}
+          pdfItem={items.find((i) => i.id === pdfContextMenuState.menuData!.pdfId && i.type === 'pdf') as import('../types').PdfItem | undefined}
+          sceneId={sceneId}
+          isOffline={isOffline}
+          onClose={pdfContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* TextFile context menu */}
+      {textFileContextMenuState.menuData && textFileContextMenuState.menuPosition && (
+        <TextFileContextMenu
+          position={textFileContextMenuState.menuPosition}
+          textFileItem={items.find((i) => i.id === textFileContextMenuState.menuData!.textFileId && i.type === 'text-file') as import('../types').TextFileItem | undefined}
+          sceneId={sceneId}
+          isOffline={isOffline}
+          onClose={textFileContextMenuState.closeMenu}
+        />
+      )}
+
       {/* Export menu */}
       {exportMenu.menuData && exportMenu.menuPosition && (() => {
         const htmlItem = items.find((i) => i.id === exportMenu.menuData && i.type === 'html')
@@ -1500,12 +2192,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         // Build image name map and image id map from canvas items for export
         const imageNameMap = new Map<string, string>()
         const imageIdMap = new Map<string, string>()
+        const cropSrcSet = new Set<string>()
         items.forEach((item) => {
           if (item.type === 'image') {
             if (item.name) {
               imageNameMap.set(item.src, item.name)
+              if (item.cropSrc) imageNameMap.set(item.cropSrc, item.name)
             }
             imageIdMap.set(item.src, item.id)
+            if (item.cropSrc) {
+              imageIdMap.set(item.cropSrc, item.id)
+              cropSrcSet.add(item.cropSrc)
+            }
           }
         })
         return (
@@ -1516,6 +2214,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             imageNameMap={imageNameMap}
             sceneId={sceneId}
             imageIdMap={imageIdMap}
+            cropSrcSet={cropSrcSet}
             onClose={exportMenu.closeMenu}
           />
         )

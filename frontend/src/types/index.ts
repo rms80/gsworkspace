@@ -126,7 +126,36 @@ export interface CodingRobotItem extends BaseItem {
   sessionId: string | null
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem
+export interface PdfItem extends BaseItem {
+  type: 'pdf'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  minimized?: boolean
+  thumbnailSrc?: string
+}
+
+export type TextFileFormat = 'txt' | 'csv' | 'js' | 'ts' | 'tsx' | 'cs' | 'cpp' | 'h' | 'c' | 'json' | 'py' | 'md' | 'sh' | 'log' | 'ini'
+
+export type TextFileViewType = 'raw' | 'table'
+
+export interface TextFileItem extends BaseItem {
+  type: 'text-file'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  minimized?: boolean
+  fileFormat: TextFileFormat
+  fontMono?: boolean
+  fontSize?: number
+  viewType?: TextFileViewType
+}
+
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem | PdfItem | TextFileItem
 
 export interface SelectionRect {
   x: number

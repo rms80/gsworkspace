@@ -15,6 +15,13 @@ const router = Router({ mergeParams: true })
 
 const SCENE_FILE_VERSION = '1'
 
+const TEXT_FILE_MIME_TYPES: Record<string, string> = {
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', ts: 'text/typescript',
+  tsx: 'text/typescript', cs: 'text/plain', cpp: 'text/plain', h: 'text/plain',
+  c: 'text/plain', json: 'application/json', py: 'text/x-python',
+  md: 'text/markdown', sh: 'text/x-shellscript', log: 'text/plain', ini: 'text/plain',
+}
+
 // Validate :id param is a valid UUID on all routes
 router.param('id', (req, res, next, id) => {
   if (!uuidValidate(id)) {
@@ -172,7 +179,28 @@ interface StoredCodingRobotItem extends StoredItemBase {
   chatHistoryFile?: string
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem
+interface StoredPdfItem extends StoredItemBase {
+  type: 'pdf'
+  file: string
+  name?: string
+  fileSize?: number
+  minimized?: boolean
+  thumbFile?: string
+}
+
+interface StoredTextFileItem extends StoredItemBase {
+  type: 'text-file'
+  file: string
+  name?: string
+  fileSize?: number
+  minimized?: boolean
+  fileFormat: string
+  fontMono?: boolean
+  fontSize?: number
+  viewType?: string
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem
 
 interface StoredScene {
   id: string
@@ -263,6 +291,8 @@ router.get('/:id/content-data', async (req, res) => {
       image: ['png', 'jpg', 'jpeg', 'gif', 'webp'],
       video: ['mp4', 'webm', 'mov', 'avi'],
       html: ['html'],
+      pdf: ['pdf'],
+      'text-file': ['txt', 'csv', 'js', 'ts', 'tsx', 'cs', 'cpp', 'h', 'c', 'json', 'py', 'md', 'sh', 'log', 'ini'],
     }
 
     const contentTypeExts = extensions[contentType as string] || ['png']
@@ -303,6 +333,22 @@ router.get('/:id/content-data', async (req, res) => {
       mov: 'video/quicktime',
       avi: 'video/x-msvideo',
       html: 'text/html',
+      pdf: 'application/pdf',
+      txt: 'text/plain',
+      csv: 'text/csv',
+      js: 'text/javascript',
+      cs: 'text/plain',
+      cpp: 'text/plain',
+      h: 'text/plain',
+      c: 'text/plain',
+      json: 'application/json',
+      ts: 'text/typescript',
+      tsx: 'text/typescript',
+      py: 'text/x-python',
+      md: 'text/markdown',
+      sh: 'text/x-shellscript',
+      log: 'text/plain',
+      ini: 'text/plain',
     }
 
     res.setHeader('Content-Type', mimeTypes[foundExt] || 'application/octet-stream')
@@ -656,6 +702,206 @@ router.post('/:id', async (req, res) => {
           file: htmlFile,
           zoom: item.zoom,
         })
+      } else if (item.type === 'pdf') {
+        const pdfFile = `${item.id}.pdf`
+        let pdfSaved = false
+
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await save(
+              `${sceneFolder}/${pdfFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+            pdfSaved = true
+          }
+        } else {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected PDF URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              pdfSaved = true
+            } else {
+              const pdfKey = `${sceneFolder}/${pdfFile}`
+              const alreadyExists = await exists(pdfKey)
+              if (alreadyExists) {
+                pdfSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  const contentType = 'application/pdf'
+
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      buffer = Buffer.from(arrayBuffer)
+                    }
+                  }
+
+                  if (buffer) {
+                    await save(pdfKey, buffer, contentType)
+                    pdfSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch PDF from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (pdfSaved) {
+          // Handle thumbnail
+          let thumbFile: string | undefined = undefined
+          if (item.thumbnailSrc) {
+            const thumbFileName = `${item.id}.thumb.png`
+            if (item.thumbnailSrc.startsWith('data:')) {
+              const matches = item.thumbnailSrc.match(/^data:([^;]+);base64,(.+)$/)
+              if (matches) {
+                await save(
+                  `${sceneFolder}/${thumbFileName}`,
+                  Buffer.from(matches[2], 'base64'),
+                  matches[1]
+                )
+                thumbFile = thumbFileName
+              }
+            } else {
+              // URL — check if it already points to this scene folder
+              if (item.thumbnailSrc.includes(`/${sceneFolder}/`)) {
+                thumbFile = thumbFileName
+              } else {
+                const thumbKey = `${sceneFolder}/${thumbFileName}`
+                const alreadyExists = await exists(thumbKey)
+                if (alreadyExists) {
+                  thumbFile = thumbFileName
+                } else {
+                  try {
+                    let buffer: Buffer | null = null
+                    if (item.thumbnailSrc.startsWith('/api/local-files/')) {
+                      const localKey = item.thumbnailSrc.slice('/api/local-files/'.length)
+                      buffer = await loadAsBuffer(localKey)
+                    } else {
+                      const validation = validateItemSrcUrl(item.thumbnailSrc)
+                      if (validation.valid && validation.type === 's3') {
+                        const response = await fetch(item.thumbnailSrc)
+                        if (response.ok) {
+                          buffer = Buffer.from(await response.arrayBuffer())
+                        }
+                      }
+                    }
+                    if (buffer) {
+                      await save(thumbKey, buffer, 'image/png')
+                      thumbFile = thumbFileName
+                    }
+                  } catch (err) {
+                    console.error(`Failed to save PDF thumbnail for ${item.id}:`, err)
+                  }
+                }
+              }
+            }
+          }
+
+          storedItems.push({
+            id: item.id,
+            type: 'pdf',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: pdfFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            thumbFile,
+          })
+        } else {
+          console.error(`Failed to save PDF ${item.id}, skipping from scene`)
+        }
+      } else if (item.type === 'text-file') {
+        const ext = item.fileFormat || 'txt'
+        const textFileFile = `${item.id}.${ext}`
+        let textFileSaved = false
+
+        if (item.src.startsWith('data:')) {
+          const matches = item.src.match(/^data:([^;]+);base64,(.+)$/)
+          if (matches) {
+            const contentType = matches[1]
+            const base64Data = matches[2]
+            await save(
+              `${sceneFolder}/${textFileFile}`,
+              Buffer.from(base64Data, 'base64'),
+              contentType
+            )
+            textFileSaved = true
+          }
+        } else {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected text file URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              textFileSaved = true
+            } else {
+              const textFileKey = `${sceneFolder}/${textFileFile}`
+              const alreadyExists = await exists(textFileKey)
+              if (alreadyExists) {
+                textFileSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  const contentType = TEXT_FILE_MIME_TYPES[ext] || 'text/plain'
+
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      const arrayBuffer = await response.arrayBuffer()
+                      buffer = Buffer.from(arrayBuffer)
+                    }
+                  }
+
+                  if (buffer) {
+                    await save(textFileKey, buffer, contentType)
+                    textFileSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch text file from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (textFileSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'text-file',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: textFileFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            fileFormat: item.fileFormat || 'txt',
+            fontMono: item.fontMono,
+            fontSize: item.fontSize,
+            viewType: item.viewType,
+          })
+        } else {
+          console.error(`Failed to save text file ${item.id}, skipping from scene`)
+        }
       }
     }
 
@@ -857,6 +1103,40 @@ router.get('/:id', async (req, res) => {
             text: item.text,
             chatHistory,
             sessionId: item.sessionId ?? null,
+          }
+        } else if (item.type === 'pdf') {
+          const pdfUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          const thumbnailSrc = item.thumbFile ? getPublicUrl(`${sceneFolder}/${item.thumbFile}`) : undefined
+          return {
+            id: item.id,
+            type: 'pdf' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: pdfUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            thumbnailSrc,
+          }
+        } else if (item.type === 'text-file') {
+          const textFileUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'text-file' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: textFileUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            minimized: item.minimized,
+            fileFormat: item.fileFormat,
+            fontMono: item.fontMono,
+            fontSize: item.fontSize,
+            viewType: item.viewType,
           }
         } else {
           // For HTML items, load the HTML file

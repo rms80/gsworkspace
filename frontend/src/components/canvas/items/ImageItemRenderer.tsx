@@ -2,6 +2,7 @@ import { Image as KonvaImage, Group, Rect, Text } from 'react-konva'
 import Konva from 'konva'
 import { ImageItem } from '../../../types'
 import { IMAGE_HEADER_HEIGHT, COLOR_SELECTED } from '../../../constants/canvas'
+import { snapToGrid } from '../../../utils/grid'
 
 interface ImageItemRendererProps {
   item: ImageItem
@@ -74,6 +75,7 @@ export default function ImageItemRenderer({
       x={item.x}
       y={item.y - headerHeight}
       draggable
+      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y + headerHeight) - headerHeight })}
       onClick={(e) => onItemClick(e, item.id)}
       onContextMenu={(e) => {
         e.evt.preventDefault()
@@ -194,8 +196,8 @@ export default function ImageItemRenderer({
           parent.x(newX)
           parent.y(newY - headerHeight)
           onUpdateItem(item.id, {
-            x: newX,
-            y: newY,
+            x: snapToGrid(newX),
+            y: snapToGrid(newY),
             scaleX: newScaleX,
             scaleY: newScaleY,
             rotation: node.rotation(),

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, RefObject } from 'react'
+import { useState, useRef, useEffect, RefObject, MutableRefObject } from 'react'
 import Konva from 'konva'
 import { config } from '../config'
 
@@ -9,6 +9,7 @@ export interface CanvasViewport {
   isViewportTransforming: boolean
   isMiddleMousePanning: boolean
   isAnyDragActive: boolean
+  rightMouseDidDragRef: MutableRefObject<boolean>
   setStagePos: (pos: { x: number; y: number }) => void
   setStageScale: (scale: number) => void
   setIsAnyDragActive: (v: boolean) => void
@@ -28,8 +29,11 @@ export function useCanvasViewport(
   const [isMiddleMousePanning, setIsMiddleMousePanning] = useState(false)
   const [isViewportTransforming, setIsViewportTransforming] = useState(false)
   const [isAnyDragActive, setIsAnyDragActive] = useState(false)
-  const middleMouseStartRef = useRef({ x: 0, y: 0, stageX: 0, stageY: 0 })
+  const panStartRef = useRef({ x: 0, y: 0, stageX: 0, stageY: 0 })
+  const panButtonRef = useRef<number>(-1)
+  const rightMouseDidDragRef = useRef(false)
   const zoomTimeoutRef = useRef<number | null>(null)
+  const DRAG_THRESHOLD = 5
 
   // Handle container resize
   useEffect(() => {
@@ -53,56 +57,79 @@ export function useCanvasViewport(
     }
   }, [])
 
-  // Middle-mouse panning
+  // Middle-mouse and right-mouse panning
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const handleMiddleMouseDown = (e: MouseEvent) => {
-      if (e.button !== 1) return
-      e.preventDefault()
-      e.stopPropagation()
+    const handlePanMouseDown = (e: MouseEvent) => {
+      // Button 1 = middle, button 2 = right
+      if (e.button !== 1 && e.button !== 2) return
+      if (e.button === 1) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
       setIsMiddleMousePanning(true)
       setIsAnyDragActive(true)
-      middleMouseStartRef.current = {
+      panButtonRef.current = e.button
+      panStartRef.current = {
         x: e.clientX,
         y: e.clientY,
         stageX: stagePos.x,
         stageY: stagePos.y,
+      }
+      if (e.button === 2) {
+        rightMouseDidDragRef.current = false
       }
       if (config.features.hideHtmlDuringTransform) {
         setIsViewportTransforming(true)
       }
     }
 
-    const handleMiddleMouseMove = (e: MouseEvent) => {
+    const handlePanMouseMove = (e: MouseEvent) => {
       if (!isMiddleMousePanning) return
-      const dx = e.clientX - middleMouseStartRef.current.x
-      const dy = e.clientY - middleMouseStartRef.current.y
+      const dx = e.clientX - panStartRef.current.x
+      const dy = e.clientY - panStartRef.current.y
+
+      // For right-mouse, require a minimum drag distance before panning
+      if (panButtonRef.current === 2 && !rightMouseDidDragRef.current) {
+        if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
+        rightMouseDidDragRef.current = true
+      }
+
       setStagePos({
-        x: middleMouseStartRef.current.stageX + dx,
-        y: middleMouseStartRef.current.stageY + dy,
+        x: panStartRef.current.stageX + dx,
+        y: panStartRef.current.stageY + dy,
       })
     }
 
-    const handleMiddleMouseUp = (e: MouseEvent) => {
-      if (e.button !== 1) return
+    const handlePanMouseUp = (e: MouseEvent) => {
+      if (e.button !== 1 && e.button !== 2) return
       if (!isMiddleMousePanning) return
+      if (e.button !== panButtonRef.current) return
       setIsMiddleMousePanning(false)
       setIsAnyDragActive(false)
+      panButtonRef.current = -1
       if (config.features.hideHtmlDuringTransform) {
         setIsViewportTransforming(false)
       }
     }
 
-    container.addEventListener('mousedown', handleMiddleMouseDown, { capture: true })
-    document.addEventListener('mousemove', handleMiddleMouseMove)
-    document.addEventListener('mouseup', handleMiddleMouseUp)
+    // Always suppress native context menu on the canvas container
+    const handleContextMenu = (e: MouseEvent) => {
+      e.preventDefault()
+    }
+
+    container.addEventListener('mousedown', handlePanMouseDown, { capture: true })
+    container.addEventListener('contextmenu', handleContextMenu)
+    document.addEventListener('mousemove', handlePanMouseMove)
+    document.addEventListener('mouseup', handlePanMouseUp)
 
     return () => {
-      container.removeEventListener('mousedown', handleMiddleMouseDown, { capture: true })
-      document.removeEventListener('mousemove', handleMiddleMouseMove)
-      document.removeEventListener('mouseup', handleMiddleMouseUp)
+      container.removeEventListener('mousedown', handlePanMouseDown, { capture: true })
+      container.removeEventListener('contextmenu', handleContextMenu)
+      document.removeEventListener('mousemove', handlePanMouseMove)
+      document.removeEventListener('mouseup', handlePanMouseUp)
     }
   }, [isMiddleMousePanning, stagePos.x, stagePos.y])
 
@@ -167,6 +194,7 @@ export function useCanvasViewport(
     isViewportTransforming,
     isMiddleMousePanning,
     isAnyDragActive,
+    rightMouseDidDragRef,
     setStagePos,
     setStageScale,
     setIsAnyDragActive,

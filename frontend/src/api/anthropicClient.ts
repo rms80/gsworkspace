@@ -4,7 +4,7 @@
  */
 
 import { getAnthropicApiKey } from '../utils/apiKeyStorage'
-import type { SpatialBlock } from '../utils/spatialJson'
+import type { SpatialData } from '../utils/spatialJson'
 
 const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
 
@@ -18,7 +18,7 @@ const MODEL_IDS: Record<ClaudeModel, string> = {
 }
 
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   src?: string
 }
@@ -37,7 +37,16 @@ interface AnthropicImageBlock {
   }
 }
 
-type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock
+interface AnthropicDocumentBlock {
+  type: 'document'
+  source: {
+    type: 'base64'
+    media_type: 'application/pdf'
+    data: string
+  }
+}
+
+type AnthropicContentBlock = AnthropicTextBlock | AnthropicImageBlock | AnthropicDocumentBlock
 
 interface AnthropicMessage {
   role: 'user' | 'assistant'
@@ -95,7 +104,7 @@ async function callAnthropic(request: AnthropicRequest): Promise<string> {
   return textContent?.text ?? ''
 }
 
-function buildContentBlocks(items: ContentItem[]): AnthropicContentBlock[] {
+async function buildContentBlocks(items: ContentItem[]): Promise<AnthropicContentBlock[]> {
   const contentBlocks: AnthropicContentBlock[] = []
 
   for (const item of items) {
@@ -123,6 +132,33 @@ function buildContentBlocks(items: ContentItem[]): AnthropicContentBlock[] {
       }
       // Note: For URLs, we'd need to fetch and convert to base64, which is complex in the browser
       // For now, we skip URL images in offline mode (most user images will be data URLs anyway)
+    } else if (item.type === 'pdf' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+        contentBlocks.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: base64,
+          },
+        })
+      } catch (err) {
+        console.warn('Failed to fetch PDF for LLM context:', err)
+      }
+    } else if (item.type === 'text-file' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const text = await response.text()
+        contentBlocks.push({
+          type: 'text',
+          text: `[Text file content]:\n${text}`,
+        })
+      } catch (err) {
+        console.warn('Failed to fetch text file for LLM context:', err)
+      }
     }
   }
 
@@ -134,7 +170,7 @@ export async function generateTextWithAnthropic(
   prompt: string,
   model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
-  const contentBlocks = buildContentBlocks(items)
+  const contentBlocks = await buildContentBlocks(items)
 
   // Add the user's prompt
   contentBlocks.push({
@@ -181,23 +217,24 @@ const HTML_GEN_SYSTEM_PROMPT = `You are an expert web designer and HTML develope
 ## Input Format
 
 You will receive:
-1. A JSON array of content blocks, each with:
-   - \`type\`: "text" or "image"
-   - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
-   - \`position\`: { x, y } coordinates
-   - \`size\`: { width, height } dimensions
+1. A JSON object with:
+   - \`page\`: contains \`bounds\` ({ x, y, width, height }) — the total bounding box of all content, with top-left at (0,0)
+   - \`items\`: an array of content blocks, each with:
+     - \`type\`: "text" or "image"
+     - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
+     - \`bounds\`: { x, y, width, height } — top-left corner position and dimensions, relative to the page origin
 
 2. A user prompt describing what kind of webpage to create
 
 Use the content blocks as source material and follow the user's prompt to create the webpage.`
 
 export async function generateHtmlWithAnthropic(
-  spatialItems: SpatialBlock[],
+  spatialData: SpatialData,
   userPrompt: string,
   model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
   // Build the combined prompt with spatial data
-  const spatialDataJson = JSON.stringify(spatialItems, null, 2)
+  const spatialDataJson = JSON.stringify(spatialData, null, 2)
   const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
   return callAnthropic({

@@ -3,6 +3,7 @@ import { Rect, Text, Group } from 'react-konva'
 import Konva from 'konva'
 import { TextItem } from '../../../types'
 import { MIN_TEXT_WIDTH, COLOR_SELECTED } from '../../../constants/canvas'
+import { snapToGrid } from '../../../utils/grid'
 
 interface TextItemRendererProps {
   item: TextItem
@@ -40,6 +41,7 @@ export default function TextItemRenderer({
       x={item.x}
       y={item.y}
       draggable
+      dragBoundFunc={(pos) => ({ x: snapToGrid(pos.x), y: snapToGrid(pos.y) })}
       onClick={(e) => onItemClick(e, item.id)}
       onDblClick={() => onDblClick(item.id)}
       onDragEnd={(e) => {
@@ -113,8 +115,8 @@ export default function TextItemRenderer({
         if (realTextRef.current) realTextRef.current.opacity(1)
 
         onUpdateItem(item.id, {
-          x: node.x(),
-          y: node.y(),
+          x: snapToGrid(node.x()),
+          y: snapToGrid(node.y()),
           width: newWidth,
         })
       }}

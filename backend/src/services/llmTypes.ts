@@ -12,18 +12,21 @@ const MIME_TYPES: Record<string, string> = {
 
 /** What the frontend sends in online mode */
 export interface LLMRequestItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   id?: string
   sceneId?: string
   useEdited?: boolean
+  fileFormat?: string
 }
 
-/** What LLM services receive (images already resolved to base64) */
+/** What LLM services receive (images/PDFs already resolved to base64) */
 export interface ResolvedContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   imageData?: { base64: string; mimeType: string }
+  pdfData?: { base64: string }
+  textFileData?: { text: string }
 }
 
 /**
@@ -65,5 +68,39 @@ export async function resolveImageData(
     }
   }
 
+  return null
+}
+
+/**
+ * Load a PDF from storage and return its base64 data.
+ */
+export async function resolvePdfData(
+  workspace: string,
+  sceneId: string,
+  itemId: string
+): Promise<{ base64: string } | null> {
+  const key = `${workspace}/${sceneId}/${itemId}.pdf`
+  const buffer = await loadAsBuffer(key)
+  if (buffer) {
+    return { base64: buffer.toString('base64') }
+  }
+  return null
+}
+
+/**
+ * Load a text file from storage and return its content as a UTF-8 string.
+ */
+export async function resolveTextFileData(
+  workspace: string,
+  sceneId: string,
+  itemId: string,
+  fileFormat: string
+): Promise<{ text: string } | null> {
+  const ext = fileFormat || 'txt'
+  const key = `${workspace}/${sceneId}/${itemId}.${ext}`
+  const buffer = await loadAsBuffer(key)
+  if (buffer) {
+    return { text: buffer.toString('utf-8') }
+  }
   return null
 }

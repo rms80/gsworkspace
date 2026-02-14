@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Konva from 'konva'
 import { CanvasItem, SelectionRect } from '../types'
+import { PDF_MINIMIZED_WIDTH, PDF_MINIMIZED_HEIGHT, TEXTFILE_MINIMIZED_WIDTH, TEXTFILE_MINIMIZED_HEIGHT } from '../constants/canvas'
 
 interface UseCanvasSelectionParams {
   items: CanvasItem[]
@@ -40,6 +41,8 @@ export function useCanvasSelection({
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
   const selectionStartRef = useRef({ x: 0, y: 0 })
+  const marqueeModifierRef = useRef<'shift' | 'ctrl' | null>(null)
+  const marqueeBaseSelectionRef = useRef<string[]>([])
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     // If in image crop mode and clicking on empty canvas, apply crop
@@ -57,14 +60,13 @@ export function useCanvasSelection({
       return
     }
     if (e.target !== stageRef.current) return
-    if (e.evt.ctrlKey || e.evt.metaKey) return
+    if (e.evt.shiftKey || e.evt.ctrlKey || e.evt.metaKey) return
     onSelectItems([])
   }
 
   const handleMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (e.evt.button === 1) return
+    if (e.evt.button !== 0) return
     if (e.target !== stageRef.current) return
-    if (!e.evt.ctrlKey && !e.evt.metaKey) return
 
     const stage = stageRef.current
     if (!stage) return
@@ -77,6 +79,8 @@ export function useCanvasSelection({
     }
 
     selectionStartRef.current = pos
+    marqueeModifierRef.current = e.evt.shiftKey ? 'shift' : (e.evt.ctrlKey || e.evt.metaKey) ? 'ctrl' : null
+    marqueeBaseSelectionRef.current = [...selectedIds]
     setSelectionRect({ x: pos.x, y: pos.y, width: 0, height: 0 })
     setIsSelecting(true)
   }
@@ -111,8 +115,12 @@ export function useCanvasSelection({
 
     const foundIds = items
       .filter((item) => {
-        const itemRight = item.x + item.width
-        const itemBottom = item.y + item.height
+        const isMinimizedPdf = item.type === 'pdf' && item.minimized
+        const isMinimizedTextFile = item.type === 'text-file' && item.minimized
+        const w = isMinimizedPdf ? PDF_MINIMIZED_WIDTH : isMinimizedTextFile ? TEXTFILE_MINIMIZED_WIDTH : item.width
+        const h = isMinimizedPdf ? PDF_MINIMIZED_HEIGHT : isMinimizedTextFile ? TEXTFILE_MINIMIZED_HEIGHT : item.height
+        const itemRight = item.x + w
+        const itemBottom = item.y + h
         return (
           item.x < selectionRect.x + selectionRect.width &&
           itemRight > selectionRect.x &&
@@ -122,7 +130,17 @@ export function useCanvasSelection({
       })
       .map((item) => item.id)
 
-    onSelectItems(foundIds)
+    const base = marqueeBaseSelectionRef.current
+    if (marqueeModifierRef.current === 'shift') {
+      // Add marqueed items to existing selection
+      onSelectItems([...new Set([...base, ...foundIds])])
+    } else if (marqueeModifierRef.current === 'ctrl') {
+      // Subtract marqueed items from existing selection
+      const removeSet = new Set(foundIds)
+      onSelectItems(base.filter((id) => !removeSet.has(id)))
+    } else {
+      onSelectItems(foundIds)
+    }
     setIsSelecting(false)
     setSelectionRect(null)
   }

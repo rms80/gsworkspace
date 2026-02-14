@@ -7,11 +7,14 @@ export type ChangeRecordType =
   | 'add_object'
   | 'delete_object'
   | 'transform_object'
+  | 'transform_objects'
   | 'update_text'
   | 'update_prompt'
   | 'update_model'
   | 'update_name'
+  | 'toggle_minimized'
   | 'selection'
+  | 'multi_step'
 
 /**
  * Combined state that change records operate on

@@ -51,6 +51,15 @@ export async function generateTextWithGemini(
           data: item.imageData.base64,
         },
       })
+    } else if (item.type === 'pdf' && item.pdfData) {
+      parts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: item.pdfData.base64,
+        },
+      })
+    } else if (item.type === 'text-file' && item.textFileData) {
+      parts.push({ text: `[Text file content]:\n${item.textFileData.text}` })
     }
   }
 
@@ -92,6 +101,15 @@ export async function generateImageWithGemini(
           data: item.imageData.base64,
         },
       })
+    } else if (item.type === 'pdf' && item.pdfData) {
+      parts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: item.pdfData.base64,
+        },
+      })
+    } else if (item.type === 'text-file' && item.textFileData) {
+      parts.push({ text: `[Text file content]:\n${item.textFileData.text}` })
     }
   }
 

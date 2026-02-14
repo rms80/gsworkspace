@@ -58,7 +58,7 @@ export async function getContentUrl(
 export async function getContentData(
   sceneId: string,
   contentId: string,
-  contentType: 'video' | 'image' | 'html',
+  contentType: 'video' | 'image' | 'html' | 'pdf' | 'text-file',
   isEdit: boolean = false
 ): Promise<Blob> {
   validateUuid(sceneId, 'scene ID')

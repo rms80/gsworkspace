@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import React from 'react'
 import { CanvasItem } from '../types'
+import { PROMPT_HEADER_HEIGHT, MIN_PROMPT_HEIGHT } from '../constants/canvas'
 
 interface UsePromptEditingParams {
   items: CanvasItem[]
@@ -57,7 +58,38 @@ export function usePromptEditing(
 
   const handleTextBlur = () => {
     if (editingId && textareaRef.current) {
-      onUpdateItem(editingId, { text: textareaRef.current.value })
+      const newText = textareaRef.current.value
+      const item = items.find((i) => i.id === editingId)
+
+      if (item && 'width' in item && 'fontSize' in item && 'height' in item) {
+        const { width, fontSize, height: currentHeight } = item as { width: number; fontSize: number; height: number }
+        const textWidth = width - 16
+
+        // Measure needed text height using offscreen element
+        const measurer = document.createElement('div')
+        measurer.style.position = 'absolute'
+        measurer.style.visibility = 'hidden'
+        measurer.style.width = textWidth + 'px'
+        measurer.style.fontSize = fontSize + 'px'
+        measurer.style.fontFamily = 'Arial'
+        measurer.style.lineHeight = '1'
+        measurer.style.whiteSpace = 'pre-wrap'
+        measurer.style.wordBreak = 'break-word'
+        measurer.textContent = newText
+        document.body.appendChild(measurer)
+        const textHeight = measurer.scrollHeight
+        document.body.removeChild(measurer)
+
+        const neededHeight = Math.max(MIN_PROMPT_HEIGHT, textHeight + PROMPT_HEADER_HEIGHT + 20)
+
+        if (neededHeight !== currentHeight) {
+          onUpdateItem(editingId, { text: newText, height: neededHeight } as Partial<CanvasItem>)
+        } else {
+          onUpdateItem(editingId, { text: newText })
+        }
+      } else {
+        onUpdateItem(editingId, { text: newText })
+      }
     }
     setEditingId(null)
     setEditingField(null)

@@ -1,5 +1,5 @@
 import { LLMModel, ImageGenModel } from '../types'
-import type { SpatialBlock } from '../utils/spatialJson'
+import type { SpatialData } from '../utils/spatialJson'
 import { isOfflineMode } from './scenes'
 import { getAnthropicApiKey, getGoogleApiKey } from '../utils/apiKeyStorage'
 import { generateTextWithAnthropic, generateHtmlWithAnthropic } from './anthropicClient'
@@ -19,22 +19,24 @@ function isGeminiModel(model: string): boolean {
 
 /** Used by offline-mode clients (anthropicClient, googleClient) which handle data URLs directly */
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   src?: string
-  // Online-mode fields: image items send IDs so the backend resolves them from storage
+  // Online-mode fields: image/pdf/text-file items send IDs so the backend resolves them from storage
   id?: string
   sceneId?: string
   useEdited?: boolean
+  fileFormat?: string
 }
 
 /** Shape sent to backend in online mode (only id/sceneId/useEdited, no src) */
 interface BackendItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   id?: string
   sceneId?: string
   useEdited?: boolean
+  fileFormat?: string
 }
 
 /** Strip src from items before sending to backend (prevents sending URLs/data to backend) */
@@ -42,6 +44,12 @@ function toBackendItems(items: ContentItem[]): BackendItem[] {
   return items.map((item) => {
     if (item.type === 'image') {
       return { type: item.type, id: item.id, sceneId: item.sceneId, useEdited: item.useEdited }
+    }
+    if (item.type === 'pdf') {
+      return { type: item.type, id: item.id, sceneId: item.sceneId }
+    }
+    if (item.type === 'text-file') {
+      return { type: item.type, id: item.id, sceneId: item.sceneId, fileFormat: item.fileFormat }
     }
     return { type: item.type, text: item.text }
   })
@@ -130,7 +138,7 @@ export interface GenerateHtmlResponse {
 }
 
 export async function generateHtml(
-  spatialItems: SpatialBlock[],
+  spatialData: SpatialData,
   userPrompt: string,
   model: LLMModel = 'claude-sonnet'
 ): Promise<string> {
@@ -141,12 +149,12 @@ export async function generateHtml(
       if (!getAnthropicApiKey()) {
         throw new Error('Anthropic API key not configured. Please add your API key in Edit > Settings.')
       }
-      return generateHtmlWithAnthropic(spatialItems, userPrompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
+      return generateHtmlWithAnthropic(spatialData, userPrompt, model as 'claude-haiku' | 'claude-sonnet' | 'claude-opus')
     } else if (isGeminiModel(model)) {
       if (!getGoogleApiKey()) {
         throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
       }
-      return generateHtmlWithGemini(spatialItems, userPrompt, model as 'gemini-flash' | 'gemini-pro')
+      return generateHtmlWithGemini(spatialData, userPrompt, model as 'gemini-flash' | 'gemini-pro')
     } else {
       throw new Error(`Unknown model: ${model}`)
     }
@@ -156,7 +164,7 @@ export async function generateHtml(
   const response = await fetch(`${API_BASE}/generate-html`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ spatialItems, userPrompt, model }),
+    body: JSON.stringify({ spatialData, userPrompt, model }),
   })
 
   if (!response.ok) {

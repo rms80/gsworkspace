@@ -57,12 +57,22 @@ export default function PromptEditingOverlay({
           defaultValue={item.text}
           onBlur={editing.handleTextBlur}
           onKeyDown={editing.handleKeyDown}
+          onFocus={(e) => {
+            const target = e.target as HTMLTextAreaElement
+            target.style.height = 'auto'
+            target.style.height = target.scrollHeight + 'px'
+          }}
+          onInput={(e) => {
+            const target = e.target as HTMLTextAreaElement
+            target.style.height = 'auto'
+            target.style.height = target.scrollHeight + 'px'
+          }}
           style={{
             position: 'absolute',
             top: (item.y + PROMPT_HEADER_HEIGHT + 6) * stageScale + stagePos.y,
             left: (item.x + 6) * stageScale + stagePos.x,
             width: (item.width - 16) * stageScale,
-            height: (item.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
+            minHeight: (item.height - PROMPT_HEADER_HEIGHT - 16) * stageScale,
             fontSize: item.fontSize * stageScale,
             fontFamily: 'sans-serif',
             padding: '2px',

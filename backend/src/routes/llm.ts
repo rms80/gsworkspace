@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
 import { generateWithClaudeCode } from '../services/claudeCode.js'
-import { LLMRequestItem, ResolvedContentItem, resolveImageData } from '../services/llmTypes.js'
+import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData, resolveTextFileData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -61,11 +61,11 @@ function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): stri
   return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API request failed. Check the server logs for details.`
 }
 
-// Load HTML generation system prompt
-const htmlGenSystemPrompt = readFileSync(
-  join(__dirname, '../../prompts/html-gen-system.txt'),
-  'utf-8'
-)
+const htmlGenSystemPromptPath = join(__dirname, '../../prompts/html-gen-system.txt')
+
+function loadHtmlGenSystemPrompt(): string {
+  return readFileSync(htmlGenSystemPromptPath, 'utf-8')
+}
 
 type LLMModel = ClaudeModel | GeminiModel
 
@@ -83,6 +83,20 @@ async function resolveItems(workspace: string, items: LLMRequestItem[]): Promise
         resolved.push({ type: 'image', imageData })
       } else {
         throw new Error(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
+      }
+    } else if (item.type === 'pdf' && item.id && item.sceneId) {
+      const pdfData = await resolvePdfData(workspace, item.sceneId, item.id)
+      if (pdfData) {
+        resolved.push({ type: 'pdf', pdfData })
+      } else {
+        throw new Error(`Could not resolve PDF ${item.id} in scene ${item.sceneId}`)
+      }
+    } else if (item.type === 'text-file' && item.id && item.sceneId) {
+      const textFileData = await resolveTextFileData(workspace, item.sceneId, item.id, item.fileFormat || 'txt')
+      if (textFileData) {
+        resolved.push({ type: 'text-file', textFileData })
+      } else {
+        throw new Error(`Could not resolve text file ${item.id} in scene ${item.sceneId}`)
       }
     }
   }
@@ -147,18 +161,26 @@ router.post('/generate-image', async (req, res) => {
   }
 })
 
+interface SpatialBounds {
+  x: number; y: number; width: number; height: number
+}
+
 interface SpatialBlock {
   type: 'text' | 'image'
   content?: string
-  src?: string
-  position: { x: number; y: number }
-  size: { width: number; height: number; scaleX?: number; scaleY?: number }
+  imageId?: string
+  bounds: SpatialBounds
+}
+
+interface SpatialData {
+  page: { bounds: SpatialBounds }
+  items: SpatialBlock[]
 }
 
 router.post('/generate-html', async (req, res) => {
   try {
-    const { spatialItems, userPrompt, model } = req.body as {
-      spatialItems: SpatialBlock[]
+    const { spatialData, userPrompt, model } = req.body as {
+      spatialData: SpatialData
       userPrompt: string
       model?: LLMModel
     }
@@ -170,15 +192,15 @@ router.post('/generate-html', async (req, res) => {
     const selectedModel = model || 'claude-sonnet'
 
     // Build the combined prompt with system instructions and spatial data
-    const spatialDataJson = JSON.stringify(spatialItems, null, 2)
+    const spatialDataJson = JSON.stringify(spatialData, null, 2)
     const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
     let html: string
 
     if (isGeminiModel(selectedModel)) {
-      html = await generateHtmlWithGemini(htmlGenSystemPrompt, combinedUserPrompt, selectedModel)
+      html = await generateHtmlWithGemini(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
     } else if (isClaudeModel(selectedModel)) {
-      html = await generateHtmlWithClaude(htmlGenSystemPrompt, combinedUserPrompt, selectedModel)
+      html = await generateHtmlWithClaude(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
     } else {
       return res.status(400).json({ error: `Unknown model: ${selectedModel}` })
     }

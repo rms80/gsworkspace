@@ -4,7 +4,7 @@
  */
 
 import { getGoogleApiKey } from '../utils/apiKeyStorage'
-import type { SpatialBlock } from '../utils/spatialJson'
+import type { SpatialData } from '../utils/spatialJson'
 
 const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models'
 
@@ -23,7 +23,7 @@ const IMAGE_GEN_MODEL_IDS: Record<ImageGenModel, string> = {
 }
 
 export interface ContentItem {
-  type: 'text' | 'image'
+  type: 'text' | 'image' | 'pdf' | 'text-file'
   text?: string
   src?: string
 }
@@ -102,7 +102,7 @@ async function callGemini(modelId: string, request: GeminiRequest): Promise<Gemi
   return response.json()
 }
 
-function buildContentParts(items: ContentItem[]): GeminiPart[] {
+async function buildContentParts(items: ContentItem[]): Promise<GeminiPart[]> {
   const parts: GeminiPart[] = []
 
   for (const item of items) {
@@ -125,6 +125,28 @@ function buildContentParts(items: ContentItem[]): GeminiPart[] {
       }
       // Note: For URLs, we'd need to fetch and convert to base64
       // Skipping URL images in offline mode for simplicity
+    } else if (item.type === 'pdf' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const arrayBuffer = await response.arrayBuffer()
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+        parts.push({
+          inlineData: {
+            mimeType: 'application/pdf',
+            data: base64,
+          },
+        })
+      } catch (err) {
+        console.warn('Failed to fetch PDF for LLM context:', err)
+      }
+    } else if (item.type === 'text-file' && item.src) {
+      try {
+        const response = await fetch(item.src)
+        const text = await response.text()
+        parts.push({ text: `[Text file content]:\n${text}` })
+      } catch (err) {
+        console.warn('Failed to fetch text file for LLM context:', err)
+      }
     }
   }
 
@@ -136,7 +158,7 @@ export async function generateTextWithGemini(
   prompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
-  const parts = buildContentParts(items)
+  const parts = await buildContentParts(items)
 
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })
@@ -177,23 +199,24 @@ const HTML_GEN_SYSTEM_PROMPT = `You are an expert web designer and HTML develope
 ## Input Format
 
 You will receive:
-1. A JSON array of content blocks, each with:
-   - \`type\`: "text" or "image"
-   - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
-   - \`position\`: { x, y } coordinates
-   - \`size\`: { width, height } dimensions
+1. A JSON object with:
+   - \`page\`: contains \`bounds\` ({ x, y, width, height }) — the total bounding box of all content, with top-left at (0,0)
+   - \`items\`: an array of content blocks, each with:
+     - \`type\`: "text" or "image"
+     - \`content\` (for text) or \`imageId\` (for image): The text content or image placeholder ID
+     - \`bounds\`: { x, y, width, height } — top-left corner position and dimensions, relative to the page origin
 
 2. A user prompt describing what kind of webpage to create
 
 Use the content blocks as source material and follow the user's prompt to create the webpage.`
 
 export async function generateHtmlWithGemini(
-  spatialItems: SpatialBlock[],
+  spatialData: SpatialData,
   userPrompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
   // Build the combined prompt with spatial data
-  const spatialDataJson = JSON.stringify(spatialItems, null, 2)
+  const spatialDataJson = JSON.stringify(spatialData, null, 2)
   const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
   const response = await callGemini(MODEL_IDS[model], {
@@ -222,7 +245,7 @@ export async function generateImageWithGemini(
   prompt: string,
   model: ImageGenModel = 'gemini-imagen'
 ): Promise<GeneratedImage[]> {
-  const parts = buildContentParts(items)
+  const parts = await buildContentParts(items)
 
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })

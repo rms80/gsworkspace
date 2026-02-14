@@ -18,6 +18,14 @@ if (ffprobeStatic?.path) {
   ffmpeg.setFfprobePath(ffprobeStatic.path)
 }
 
+// MIME types for text file formats
+const TEXT_FILE_MIME_TYPES: Record<string, string> = {
+  txt: 'text/plain', csv: 'text/csv', js: 'text/javascript', ts: 'text/typescript',
+  tsx: 'text/typescript', cs: 'text/plain', cpp: 'text/plain', h: 'text/plain',
+  c: 'text/plain', json: 'application/json', py: 'text/x-python',
+  md: 'text/markdown', sh: 'text/x-shellscript', log: 'text/plain', ini: 'text/plain',
+}
+
 // Browser-native video formats that don't need transcoding
 const BROWSER_NATIVE_EXTENSIONS = new Set(['mp4', 'webm', 'ogg', 'ogv'])
 
@@ -82,6 +90,85 @@ router.post('/upload-image', async (req, res) => {
   } catch (error) {
     console.error('Error uploading image:', error)
     res.status(500).json({ error: 'Failed to upload image' })
+  }
+})
+
+// Upload PDF
+router.post('/upload-pdf', async (req, res) => {
+  try {
+    const { pdfData, sceneId, itemId, filename } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.pdf`
+
+    // pdfData is base64, convert to buffer
+    const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '')
+    await save(key, Buffer.from(base64Data, 'base64'), 'application/pdf')
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading PDF:', error)
+    res.status(500).json({ error: 'Failed to upload PDF' })
+  }
+})
+
+// Upload text file (.txt, .csv, .js, .json, .py, .md, etc.)
+router.post('/upload-textfile', async (req, res) => {
+  try {
+    const { textData, sceneId, itemId, filename, fileFormat } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const ext = fileFormat || 'txt'
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.${ext}`
+
+    // textData is base64 data URL, convert to buffer
+    const base64Data = textData.replace(/^data:[^;]+;base64,/, '')
+    const contentType = TEXT_FILE_MIME_TYPES[ext] || 'text/plain'
+    await save(key, Buffer.from(base64Data, 'base64'), contentType)
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading text file:', error)
+    res.status(500).json({ error: 'Failed to upload text file' })
+  }
+})
+
+// Upload PDF thumbnail
+router.post('/upload-pdf-thumbnail', async (req, res) => {
+  try {
+    const { imageData, sceneId, itemId } = req.body
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const key = `${sceneFolder}/${itemId}.thumb.png`
+
+    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+    await save(key, Buffer.from(base64Data, 'base64'), 'image/png')
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading PDF thumbnail:', error)
+    res.status(500).json({ error: 'Failed to upload PDF thumbnail' })
   }
 })
 

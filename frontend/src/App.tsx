@@ -13,19 +13,25 @@ import StatusBar, { SaveStatus } from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
+import { usePromptExecution } from './hooks/usePromptExecution'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, ChatMessage } from './types'
+import { CanvasItem, Scene, ChatMessage, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
-import { generateFromPrompt, generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, ContentItem } from './api/llm'
+import { generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, ContentItem } from './api/llm'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
-import { isHtmlContent, stripCodeFences } from './utils/htmlDetection'
+import { snapToGrid } from './utils/grid'
 import DOMPurify from 'dompurify'
+import { config } from './config'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl, isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
-import { generateUniqueName, getExistingImageNames, getExistingVideoNames } from './utils/imageNames'
+import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
+import { uploadTextFile } from './api/textfiles'
+import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
+import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
+import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
@@ -34,13 +40,17 @@ import {
   AddObjectChange,
   DeleteObjectChange,
   TransformObjectChange,
+  TransformObjectsChange,
   UpdateTextChange,
   UpdatePromptChange,
   UpdateModelChange,
   UpdateNameChange,
+  ToggleMinimizedChange,
   SelectionChange,
+  MultiStepChange,
   ChangeRecord,
 } from './history'
+import type { TransformEntry } from './history'
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -739,16 +749,18 @@ function App() {
   }, [activeSceneId])
 
   // Item management (operates on active scene)
-  const addTextItem = useCallback(() => {
+  const addTextItem = useCallback((x?: number, y?: number) => {
+    const width = 200
+    const height = 100
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       text: 'Double-click to edit',
       fontSize: 14,
-      width: 200,
-      height: 100,
+      width,
+      height,
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
@@ -759,8 +771,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 200,
+        x: snapToGrid(100 + Math.random() * 200),
+        y: snapToGrid(100 + Math.random() * 200),
         src,
         width,
         height,
@@ -814,8 +826,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: 100 + Math.random() * 200,
-        y: 100 + Math.random() * 200,
+        x: snapToGrid(100 + Math.random() * 200),
+        y: snapToGrid(100 + Math.random() * 200),
         src,
         name,
         width: w,
@@ -879,51 +891,57 @@ function App() {
     }
   }, [isOffline, activeSceneId, addVideoItem, startOperation, endOperation])
 
-  const addPromptItem = useCallback(() => {
+  const addPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'claude-sonnet',
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addImageGenPromptItem = useCallback(() => {
+  const addImageGenPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'gemini-imagen',
     }
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
-  const addHtmlGenPromptItem = useCallback(() => {
+  const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
+    const width = 300
+    const height = 150
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: 100 + Math.random() * 200,
-      y: 100 + Math.random() * 200,
+      x: snapToGrid(x != null ? x - width / 2 : 100 + Math.random() * 200),
+      y: snapToGrid(y != null ? y - height / 2 : 100 + Math.random() * 200),
       label: 'HTML Gen',
-      text: 'Describe the webpage you want to create...',
+      text: 'create a professional-looking tutorial page for this content',
       fontSize: 14,
-      width: 300,
-      height: 150,
+      width,
+      height,
       model: 'claude-sonnet',
     }
     pushChange(new AddObjectChange(newItem))
@@ -956,8 +974,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'text',
-        x: x - width / 2,
-        y: y - height / 2,
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
         text,
         fontSize: 14,
         width,
@@ -979,8 +997,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: x - width / 2,
-        y: y - height / 2,
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
         src,
         name: uniqueName,
         width,
@@ -1013,8 +1031,8 @@ function App() {
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: x - w / 2,
-        y: y - h / 2,
+        x: snapToGrid(x - w / 2),
+        y: snapToGrid(y - h / 2),
         src,
         name: uniqueName,
         width: w,
@@ -1030,6 +1048,113 @@ function App() {
     },
     [updateActiveSceneItems, pushChange, items]
   )
+
+  const addPdfAt = useCallback(
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => {
+      const existingNames = getExistingPdfNames(items)
+      const uniqueName = generateUniqueName(name || 'PDF', existingNames)
+
+      const newItem: CanvasItem = {
+        id,
+        type: 'pdf',
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
+        src,
+        name: uniqueName,
+        width,
+        height,
+        fileSize,
+        thumbnailSrc,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange, items]
+  )
+
+  const addTextFileAt = useCallback(
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => {
+      const ext = `.${fileFormat || 'txt'}`
+      // Strip extension from existing names so generateUniqueName can compare base names
+      const existingNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
+      const uniqueBase = generateUniqueName(name || 'TextFile', existingNames)
+      // Re-append extension (generateUniqueName strips it, but for generic "TextFile" it won't have one)
+      const uniqueName = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
+
+      const newItem: CanvasItem = {
+        id,
+        type: 'text-file',
+        x: snapToGrid(x - width / 2),
+        y: snapToGrid(y - height / 2),
+        src,
+        name: uniqueName,
+        width,
+        height,
+        fileSize,
+        fileFormat: (fileFormat || 'txt') as TextFileFormat,
+        fontMono: true,
+      }
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange, items]
+  )
+
+  const handleAddTextFile = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    const itemId = uuidv4()
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      const name = file.name
+      const fileSize = file.size
+      const fileFormat = getTextFileFormat(file.name) || 'txt'
+      try {
+        startOperation()
+        const s3Url = await uploadTextFile(dataUrl, activeSceneId, itemId, file.name || `document-${Date.now()}.${fileFormat}`, fileFormat)
+        endOperation()
+        addTextFileAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 500, name, fileSize, fileFormat)
+      } catch (err) {
+        endOperation()
+        console.error('Failed to upload text file:', err)
+        addTextFileAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, dataUrl, 600, 500, name, fileSize, fileFormat)
+      }
+    }
+    reader.readAsDataURL(file)
+  }, [activeSceneId, addTextFileAt, startOperation, endOperation])
+
+  const handleAddPdf = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    const itemId = uuidv4()
+    const reader = new FileReader()
+    reader.onload = async (event) => {
+      const dataUrl = event.target?.result as string
+      const name = file.name.replace(/\.[^/.]+$/, '')
+      const fileSize = file.size
+      try {
+        startOperation()
+        const s3Url = await uploadPdf(dataUrl, activeSceneId, itemId, file.name || 'document.pdf')
+        // Generate and upload thumbnail via content-data proxy (avoids CORS with S3)
+        let thumbnailSrc: string | undefined
+        try {
+          const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/content-data?contentId=${itemId}&contentType=pdf`
+          const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
+          thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId, itemId)
+        } catch (thumbErr) {
+          console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+        }
+        endOperation()
+        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, s3Url, 600, 700, name, fileSize, thumbnailSrc)
+      } catch (err) {
+        endOperation()
+        console.error('Failed to upload PDF:', err)
+        addPdfAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200, dataUrl, 600, 700, name, fileSize)
+      }
+    }
+    reader.readAsDataURL(file)
+  }, [activeSceneId, addPdfAt, startOperation, endOperation])
 
   // Upload a video at a specific canvas position (called by InfiniteCanvas drop handler)
   const handleUploadVideoAt = useCallback(async (file: File, x: number, y: number) => {
@@ -1074,63 +1199,71 @@ function App() {
   }, [isOffline, activeSceneId, addVideoAt, startOperation, endOperation])
 
   const updateItem = useCallback(
-    (id: string, changes: Partial<CanvasItem>) => {
+    (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => {
       const item = items.find((i) => i.id === id)
       if (!item) return
 
-      // Determine change type and create appropriate record
-      const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
-        'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes ||
-        'cropRect' in changes || 'cropSrc' in changes
-      const hasText = 'text' in changes && item.type === 'text'
-      const hasPromptText = ('text' in changes || 'label' in changes) &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')
-      const hasModel = 'model' in changes &&
-        (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-      const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video')
+      if (!skipHistory) {
+        // Determine change type and create appropriate record
+        const hasTransform = 'x' in changes || 'y' in changes || 'width' in changes ||
+          'height' in changes || 'scaleX' in changes || 'scaleY' in changes || 'rotation' in changes ||
+          'cropRect' in changes || 'cropSrc' in changes
+        const hasText = 'text' in changes && item.type === 'text'
+        const hasPromptText = ('text' in changes || 'label' in changes) &&
+          (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')
+        const hasModel = 'model' in changes &&
+          (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
+        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file')
 
-      if (hasText && item.type === 'text') {
-        // Only record if text actually changed
-        if (item.text !== changes.text) {
-          pushChange(new UpdateTextChange(id, item.text, changes.text as string))
-        }
-      } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')) {
-        const newLabel = ('label' in changes ? changes.label : item.label) as string
-        const newText = ('text' in changes ? changes.text : item.text) as string
-        // Only record if label or text actually changed
-        if (item.label !== newLabel || item.text !== newText) {
-          pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
-        }
-      } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
-        // Only record if model actually changed
-        if (item.model !== changes.model) {
-          pushChange(new UpdateModelChange(id, item.model, changes.model as string))
-        }
-      } else if (hasName && (item.type === 'image' || item.type === 'video')) {
-        // Only record if name actually changed
-        const oldName = item.name
-        const newName = changes.name as string | undefined
-        if (oldName !== newName) {
-          pushChange(new UpdateNameChange(id, oldName, newName))
-        }
-      } else if (hasTransform) {
-        const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
-        if (item.type === 'image') {
-          Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation, cropRect: item.cropRect ?? null, cropSrc: item.cropSrc ?? null })
-        }
-        const newTransform = { ...oldTransform }
-        if ('x' in changes) newTransform.x = changes.x as number
-        if ('y' in changes) newTransform.y = changes.y as number
-        if ('width' in changes) newTransform.width = changes.width as number
-        if ('height' in changes) newTransform.height = changes.height as number
-        if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
-        if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
-        if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
-        if ('cropRect' in changes) (newTransform as Record<string, unknown>).cropRect = (changes as Record<string, unknown>).cropRect ?? null
-        if ('cropSrc' in changes) (newTransform as Record<string, unknown>).cropSrc = (changes as Record<string, unknown>).cropSrc ?? null
-        // Only record if transform actually changed
-        if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
-          pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+        if (hasText && item.type === 'text') {
+          // Only record if text actually changed
+          if (item.text !== changes.text) {
+            pushChange(new UpdateTextChange(id, item.text, changes.text as string))
+          }
+        } else if (hasPromptText && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')) {
+          const newLabel = ('label' in changes ? changes.label : item.label) as string
+          const newText = ('text' in changes ? changes.text : item.text) as string
+          // Only record if label or text actually changed
+          if (item.label !== newLabel || item.text !== newText) {
+            pushChange(new UpdatePromptChange(id, item.label, item.text, newLabel, newText))
+          }
+        } else if (hasModel && (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')) {
+          // Only record if model actually changed
+          if (item.model !== changes.model) {
+            pushChange(new UpdateModelChange(id, item.model, changes.model as string))
+          }
+        } else if (hasName && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file')) {
+          // Only record if name actually changed
+          const oldName = item.name
+          const newName = changes.name as string | undefined
+          if (oldName !== newName) {
+            pushChange(new UpdateNameChange(id, oldName, newName))
+          }
+        } else if ('minimized' in changes && (item.type === 'pdf' || item.type === 'text-file')) {
+          const oldMinimized = item.minimized ?? false
+          const newMinimized = changes.minimized as boolean
+          if (oldMinimized !== newMinimized) {
+            pushChange(new ToggleMinimizedChange(id, oldMinimized, newMinimized))
+          }
+        } else if (hasTransform) {
+          const oldTransform = { x: item.x, y: item.y, width: item.width, height: item.height }
+          if (item.type === 'image') {
+            Object.assign(oldTransform, { scaleX: item.scaleX, scaleY: item.scaleY, rotation: item.rotation, cropRect: item.cropRect ?? null, cropSrc: item.cropSrc ?? null })
+          }
+          const newTransform = { ...oldTransform }
+          if ('x' in changes) newTransform.x = changes.x as number
+          if ('y' in changes) newTransform.y = changes.y as number
+          if ('width' in changes) newTransform.width = changes.width as number
+          if ('height' in changes) newTransform.height = changes.height as number
+          if ('scaleX' in changes) (newTransform as Record<string, unknown>).scaleX = changes.scaleX
+          if ('scaleY' in changes) (newTransform as Record<string, unknown>).scaleY = changes.scaleY
+          if ('rotation' in changes) (newTransform as Record<string, unknown>).rotation = changes.rotation
+          if ('cropRect' in changes) (newTransform as Record<string, unknown>).cropRect = (changes as Record<string, unknown>).cropRect ?? null
+          if ('cropSrc' in changes) (newTransform as Record<string, unknown>).cropSrc = (changes as Record<string, unknown>).cropSrc ?? null
+          // Only record if transform actually changed
+          if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
+            pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+          }
         }
       }
 
@@ -1141,6 +1274,28 @@ function App() {
       )
     },
     [updateActiveSceneItems, items, pushChange]
+  )
+
+  const togglePdfMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'pdf') return
+    const minimized = !(item.minimized ?? false)
+    updateItem(id, { minimized })
+  }, [items, updateItem])
+
+  const toggleTextFileMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'text-file') return
+    const minimized = !(item.minimized ?? false)
+    updateItem(id, { minimized })
+  }, [items, updateItem])
+
+  const batchTransform = useCallback(
+    (entries: TransformEntry[]) => {
+      if (entries.length === 0) return
+      pushChange(new TransformObjectsChange(entries))
+    },
+    [pushChange]
   )
 
   const deleteSelected = useCallback(async () => {
@@ -1169,10 +1324,12 @@ function App() {
           })
         )
 
-    // Record deletion for each selected item (using S3 URLs where possible)
-    itemsForHistory.forEach((item) => {
-      pushChange(new DeleteObjectChange(item))
-    })
+    // Record deletion for selected items (using S3 URLs where possible)
+    if (itemsForHistory.length === 1) {
+      pushChange(new DeleteObjectChange(itemsForHistory[0]))
+    } else if (itemsForHistory.length > 1) {
+      pushChange(new MultiStepChange(itemsForHistory.map((item) => new DeleteObjectChange(item))))
+    }
 
     // Clear selection and remove items
     setSelectionMap((prev) => {
@@ -1205,106 +1362,10 @@ function App() {
     [activeSceneId, selectionMap, pushChange]
   )
 
-  const handleRunPrompt = useCallback(async (promptId: string) => {
-    const promptItem = items.find((item) => item.id === promptId && item.type === 'prompt')
-    if (!promptItem || promptItem.type !== 'prompt') return
-
-    // Mark prompt as running
-    setRunningPromptIds((prev) => new Set(prev).add(promptId))
-
-    // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
-
-    // Convert to ContentItem format for the API
-    const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
-      if (item.type === 'text') {
-        return { type: 'text' as const, text: item.text }
-      } else if (item.type === 'image') {
-        if (isOffline) {
-          // Offline mode: send src data URL directly to client-side LLM
-          let src = item.src
-          if (item.cropRect && activeSceneId) {
-            try {
-              src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
-            } catch (err) {
-              console.error('Failed to crop image for LLM, using original:', err)
-            }
-          }
-          return { type: 'image' as const, src }
-        }
-        // Online mode: send ID so backend resolves from storage
-        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
-      } else if (item.type === 'prompt') {
-        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
-      } else if (item.type === 'html') {
-        return { type: 'text' as const, text: `[HTML Content]:\n${item.html}` }
-      }
-      return { type: 'text' as const, text: '' }
-    }))).filter((item) => item.text || item.src || item.id)
-
-    try {
-      const result = await generateFromPrompt(contentItems, promptItem.text, promptItem.model)
-
-      // Check if the result looks like HTML content
-      // Position output to the right of the prompt, aligned with top
-      // Find existing outputs to stack vertically
-      const outputX = promptItem.x + promptItem.width + 20
-      const existingOutputsToRight = items.filter(item =>
-        item.x >= outputX - 10 &&
-        item.x <= outputX + 10 &&
-        item.y >= promptItem.y - 10
-      )
-      const outputY = existingOutputsToRight.length > 0
-        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
-        : promptItem.y
-
-      let newItem: CanvasItem
-      if (isHtmlContent(result)) {
-        // Create an HTML view item for webpage content
-        // Strip code fences that LLMs often wrap around HTML
-        const htmlContent = DOMPurify.sanitize(stripCodeFences(result).trim(), {
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-        })
-        // Generate title before creating item so it's saved properly
-        const title = await generateHtmlTitle(htmlContent)
-        newItem = {
-          id: uuidv4(),
-          type: 'html',
-          label: title,
-          x: outputX,
-          y: outputY,
-          html: htmlContent,
-          width: 800,
-          height: 300,
-          zoom: 0.75,
-        }
-      } else {
-        // Create a text item for regular text content
-        newItem = {
-          id: uuidv4(),
-          type: 'text',
-          x: outputX,
-          y: outputY,
-          text: result,
-          fontSize: 14,
-          width: Math.max(promptItem.width, 300),
-          height: 200,
-        }
-      }
-      updateActiveSceneItems((prev) => [...prev, newItem])
-    } catch (error) {
-      console.error('Failed to run prompt:', error)
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to run prompt: ${message}`)
-    } finally {
-      // Mark prompt as no longer running
-      setRunningPromptIds((prev) => {
-        const next = new Set(prev)
-        next.delete(promptId)
-        return next
-      })
-    }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
+  const { handleRunPrompt } = usePromptExecution({
+    items, selectedIds, activeSceneId, isOffline,
+    updateActiveSceneItems, setRunningPromptIds,
+  })
 
   const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
     const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
@@ -1444,11 +1505,11 @@ function App() {
     const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
 
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
-    const { blocks: spatialItems, imageMap } = convertItemsToSpatialJson(selectedItems)
+    const { spatialData, imageMap } = convertItemsToSpatialJson(selectedItems)
 
     // Update debug panel with request payload
     const debugPayload = {
-      spatialItems,
+      spatialData,
       userPrompt: promptItem.text,
       model: promptItem.model,
       imageMapKeys: Array.from(imageMap.keys()),
@@ -1456,15 +1517,20 @@ function App() {
     setDebugContent(JSON.stringify(debugPayload, null, 2))
 
     try {
-      let html = await generateHtml(spatialItems, promptItem.text, promptItem.model)
+      let html = await generateHtml(spatialData, promptItem.text, promptItem.model)
 
       // Replace image placeholder IDs with actual source URLs
       html = replaceImagePlaceholders(html, imageMap)
 
       // Sanitize LLM-generated HTML
-      html = DOMPurify.sanitize(html, {
-        FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-      })
+      if (config.features.sanitizeHtml) {
+        html = DOMPurify.sanitize(html, {
+          WHOLE_DOCUMENT: true,
+          ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+          ADD_ATTR: ['charset', 'content'],
+          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+        })
+      }
 
       // Position output to the right of the prompt, aligned with top
       // Find existing outputs to stack vertically
@@ -1990,12 +2056,63 @@ function App() {
           // Delegate to handleUploadVideoAt which handles placeholders
           handleUploadVideoAt(file, centerX + offsetIndex * 20, centerY + offsetIndex * 20)
           offsetIndex++
+        } else if (file.type === 'application/pdf') {
+          const reader = new FileReader()
+          const fileName = file.name
+          const fileSize = file.size
+          reader.onload = async (event) => {
+            const dataUrl = event.target?.result as string
+            const name = fileName.replace(/\.[^/.]+$/, '')
+            const itemId = uuidv4()
+            try {
+              startOperation()
+              const s3Url = await uploadPdf(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.pdf`)
+              let thumbnailSrc: string | undefined
+              try {
+                const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/content-data?contentId=${itemId}&contentType=pdf`
+                const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
+                thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId!, itemId)
+              } catch (thumbErr) {
+                console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
+              }
+              endOperation()
+              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 700, name, fileSize, thumbnailSrc)
+            } catch (err) {
+              endOperation()
+              console.error('Failed to upload PDF:', err)
+              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
+            }
+          }
+          reader.readAsDataURL(file)
+          offsetIndex++
+        } else if (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name)) {
+          const reader = new FileReader()
+          const fileName = file.name
+          const fileSize = file.size
+          const fileFormat = getTextFileFormat(fileName) || 'txt'
+          reader.onload = async (event) => {
+            const dataUrl = event.target?.result as string
+            const name = fileName
+            const itemId = uuidv4()
+            try {
+              startOperation()
+              const s3Url = await uploadTextFile(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.${fileFormat}`, fileFormat)
+              endOperation()
+              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 500, name, fileSize, fileFormat)
+            } catch (err) {
+              endOperation()
+              console.error('Failed to upload text file:', err)
+              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 500, name, fileSize, fileFormat)
+            }
+          }
+          reader.readAsDataURL(file)
+          offsetIndex++
         }
       }
     }
 
     processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt])
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt])
 
   if (authRequired && !authenticated) {
     return <LoginScreen serverName={serverName} onSuccess={handleLoginSuccess} />
@@ -2015,6 +2132,8 @@ function App() {
         onAddText={addTextItem}
         onAddImage={handleAddImage}
         onAddVideo={handleAddVideo}
+        onAddPdf={handleAddPdf}
+        onAddTextFile={handleAddTextFile}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
@@ -2084,6 +2203,7 @@ function App() {
           selectedIds={selectedIds}
           sceneId={activeSceneId || ''}
           onUpdateItem={updateItem}
+          onBatchTransform={batchTransform}
           onSelectItems={selectItems}
           onAddTextAt={addTextAt}
           onAddImageAt={addImageAt}
@@ -2105,6 +2225,10 @@ function App() {
           onAddCodingRobot={addCodingRobotItem}
           videoPlaceholders={videoPlaceholders}
           onUploadVideoAt={handleUploadVideoAt}
+          onAddPdfAt={addPdfAt}
+          onTogglePdfMinimized={togglePdfMinimized}
+          onAddTextFileAt={addTextFileAt}
+          onToggleTextFileMinimized={toggleTextFileMinimized}
         />
       ) : (
         <div
@@ -2132,6 +2256,7 @@ function App() {
         <DebugPanel
           content={debugContent}
           onClose={() => setDebugPanelOpen(false)}
+          onClear={() => setDebugContent('')}
         />
       )}
       <StatusBar

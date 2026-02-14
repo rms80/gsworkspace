@@ -54,6 +54,11 @@ export type ImageNameMap = Map<string, string>
 export type ImageIdMap = Map<string, string>
 
 /**
+ * Set of image src URLs that are cropped versions (need isEdit=true for backend fetch)
+ */
+export type CropSrcSet = Set<string>
+
+/**
  * Sanitize a name for use as a filename (remove/replace invalid characters)
  */
 function sanitizeFilename(name: string): string {
@@ -119,7 +124,8 @@ function getExtensionFromMimeType(mimeType: string): string {
 export async function fetchImageAsBlob(
   src: string,
   sceneId?: string,
-  imageIdMap?: ImageIdMap
+  imageIdMap?: ImageIdMap,
+  cropSrcSet?: CropSrcSet
 ): Promise<{ blob: Blob; extension: string }> {
   if (src.startsWith('data:')) {
     const blob = dataUrlToBlob(src)
@@ -137,7 +143,8 @@ export async function fetchImageAsBlob(
   // Use getContentData API for S3 URLs
   const itemId = imageIdMap?.get(src)
   if (sceneId && itemId) {
-    const blob = await getContentData(sceneId, itemId, 'image', false)
+    const isCrop = cropSrcSet?.has(src) ?? false
+    const blob = await getContentData(sceneId, itemId, 'image', isCrop)
     const extension = getExtensionFromMimeType(blob.type)
     return { blob, extension }
   }
@@ -172,12 +179,12 @@ export function rewriteHtmlImagePaths(html: string, imageMap: Map<string, string
 /**
  * Convert an image URL to a data URL for embedding
  */
-async function imageToDataUrl(src: string, sceneId?: string, imageIdMap?: ImageIdMap): Promise<string> {
+async function imageToDataUrl(src: string, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<string> {
   if (src.startsWith('data:')) {
     return src
   }
 
-  const { blob } = await fetchImageAsBlob(src, sceneId, imageIdMap)
+  const { blob } = await fetchImageAsBlob(src, sceneId, imageIdMap, cropSrcSet)
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onloadend = () => resolve(reader.result as string)
@@ -189,13 +196,13 @@ async function imageToDataUrl(src: string, sceneId?: string, imageIdMap?: ImageI
 /**
  * Rewrite HTML to embed all images as data URLs (fallback for browsers without File System Access API)
  */
-async function embedImagesAsDataUrls(html: string, sceneId?: string, imageIdMap?: ImageIdMap): Promise<string> {
+async function embedImagesAsDataUrls(html: string, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<string> {
   const sources = extractImageSources(html)
   let result = html
 
   for (const src of sources) {
     try {
-      const dataUrl = await imageToDataUrl(src, sceneId, imageIdMap)
+      const dataUrl = await imageToDataUrl(src, sceneId, imageIdMap, cropSrcSet)
       const escaped = src.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const regex = new RegExp(`src=["']${escaped}["']`, 'g')
       result = result.replace(regex, `src="${dataUrl}"`)
@@ -211,8 +218,8 @@ async function embedImagesAsDataUrls(html: string, sceneId?: string, imageIdMap?
 /**
  * Download HTML with embedded images (fallback method)
  */
-async function downloadEmbeddedHtml(html: string, filename: string, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
-  const embeddedHtml = await embedImagesAsDataUrls(html, sceneId, imageIdMap)
+async function downloadEmbeddedHtml(html: string, filename: string, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
+  const embeddedHtml = await embedImagesAsDataUrls(html, sceneId, imageIdMap, cropSrcSet)
   const blob = new Blob([embeddedHtml], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
 
@@ -256,10 +263,10 @@ interface FileSystemWindow {
  * Main export function - exports HTML with images to local files
  * User chooses HTML filename via save dialog, images go in a subfolder named {basename}_images/
  */
-export async function exportHtmlWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
+export async function exportHtmlWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
   // Fallback for browsers without File System Access API
   if (!hasFileSystemAccess()) {
-    await downloadEmbeddedHtml(html, `${suggestedFilename}.html`, sceneId, imageIdMap)
+    await downloadEmbeddedHtml(html, `${suggestedFilename}.html`, sceneId, imageIdMap, cropSrcSet)
     return
   }
 
@@ -301,7 +308,7 @@ export async function exportHtmlWithImages(html: string, suggestedFilename: stri
     const usedNames = new Set<string>()
     for (const src of sources) {
       try {
-        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap)
+        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap, cropSrcSet)
         const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
 
         const imageFileHandle = await imagesDirHandle.getFileHandle(imageFilename, { create: true })
@@ -379,8 +386,8 @@ function rewriteMarkdownImagePaths(markdown: string, imageMap: Map<string, strin
 /**
  * Download Markdown with embedded images (fallback method)
  */
-async function downloadEmbeddedMarkdown(html: string, filename: string, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
-  const embeddedHtml = await embedImagesAsDataUrls(html, sceneId, imageIdMap)
+async function downloadEmbeddedMarkdown(html: string, filename: string, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
+  const embeddedHtml = await embedImagesAsDataUrls(html, sceneId, imageIdMap, cropSrcSet)
   const markdown = htmlToMarkdown(embeddedHtml)
   const blob = new Blob([markdown], { type: 'text/markdown' })
   const url = URL.createObjectURL(blob)
@@ -398,10 +405,10 @@ async function downloadEmbeddedMarkdown(html: string, filename: string, sceneId?
  * Export HTML as Markdown with images to local files
  * User chooses Markdown filename via save dialog, images go in a subfolder named {basename}_images/
  */
-export async function exportMarkdownWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
+export async function exportMarkdownWithImages(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
   // Fallback for browsers without File System Access API
   if (!hasFileSystemAccess()) {
-    await downloadEmbeddedMarkdown(html, `${suggestedFilename}.md`, sceneId, imageIdMap)
+    await downloadEmbeddedMarkdown(html, `${suggestedFilename}.md`, sceneId, imageIdMap, cropSrcSet)
     return
   }
 
@@ -442,7 +449,7 @@ export async function exportMarkdownWithImages(html: string, suggestedFilename: 
     const usedNames = new Set<string>()
     for (const src of sources) {
       try {
-        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap)
+        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap, cropSrcSet)
         const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
 
         const imageFileHandle = await imagesDirHandle.getFileHandle(imageFilename, { create: true })
@@ -513,7 +520,8 @@ async function collectImagesForZip(
   zip: JSZip,
   imageNameMap?: ImageNameMap,
   sceneId?: string,
-  imageIdMap?: ImageIdMap
+  imageIdMap?: ImageIdMap,
+  cropSrcSet?: CropSrcSet
 ): Promise<Map<string, string>> {
   const sources = extractImageSources(html)
   const imageMap = new Map<string, string>()
@@ -524,7 +532,7 @@ async function collectImagesForZip(
     const usedNames = new Set<string>()
     for (const src of sources) {
       try {
-        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap)
+        const { blob, extension } = await fetchImageAsBlob(src, sceneId, imageIdMap, cropSrcSet)
         const imageFilename = generateImageFilename(src, extension, imageNameMap, usedNames)
         imagesFolder.file(imageFilename, blob)
         imageMap.set(src, `${imagesFolderName}/${imageFilename}`)
@@ -540,12 +548,12 @@ async function collectImagesForZip(
 /**
  * Export HTML with images as a ZIP file
  */
-export async function exportHtmlZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
+export async function exportHtmlZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
   const zip = new JSZip()
   const imagesFolderName = `${suggestedFilename}_images`
 
   // Collect images
-  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap, sceneId, imageIdMap)
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap, sceneId, imageIdMap, cropSrcSet)
 
   // Rewrite HTML with local paths
   const rewrittenHtml = rewriteHtmlImagePaths(html, imageMap)
@@ -560,12 +568,12 @@ export async function exportHtmlZip(html: string, suggestedFilename: string, ima
 /**
  * Export Markdown with images as a ZIP file
  */
-export async function exportMarkdownZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap): Promise<void> {
+export async function exportMarkdownZip(html: string, suggestedFilename: string, imageNameMap?: ImageNameMap, sceneId?: string, imageIdMap?: ImageIdMap, cropSrcSet?: CropSrcSet): Promise<void> {
   const zip = new JSZip()
   const imagesFolderName = `${suggestedFilename}_images`
 
   // Collect images
-  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap, sceneId, imageIdMap)
+  const imageMap = await collectImagesForZip(html, imagesFolderName, zip, imageNameMap, sceneId, imageIdMap, cropSrcSet)
 
   // Convert HTML to Markdown
   const markdown = htmlToMarkdown(html)
