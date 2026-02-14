@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, useCallback } from 'react'
 import { CodingRobotItem, ChatMessage, ActivityMessage } from '../../../types'
 import {
   CODING_ROBOT_HEADER_HEIGHT,
@@ -47,9 +47,16 @@ export default function CodingRobotOverlay({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activityEndRef = useRef<HTMLDivElement>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
-  const [showActivity, setShowActivity] = useState(false)
   const [viewStepIndex, setViewStepIndex] = useState(0)
   const prevStepCountRef = useRef(0)
+  const [liveWidthPx, setLiveWidthPx] = useState<number | null>(null) // transient during drag
+  const resizeDragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  const showActivity = item.showActivity ?? false
+  const setShowActivity = (val: boolean | ((v: boolean) => boolean)) => {
+    const newVal = typeof val === 'function' ? val(showActivity) : val
+    onUpdateItem(item.id, { showActivity: newVal })
+  }
 
   const theme = CODING_ROBOT_THEME
   const x = transform?.x ?? item.x
@@ -113,11 +120,43 @@ export default function CodingRobotOverlay({
     })
   }
 
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    const startX = e.clientX
+    const currentCanvasWidth = item.activityPanelWidth ?? CODING_ROBOT_ACTIVITY_PANEL_WIDTH
+    const startWidth = currentCanvasWidth * stageScale
+    resizeDragRef.current = { startX, startWidth }
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeDragRef.current) return
+      const delta = ev.clientX - resizeDragRef.current.startX
+      const newWidthPx = Math.max(150 * stageScale, resizeDragRef.current.startWidth + delta)
+      setLiveWidthPx(newWidthPx)
+    }
+    const onMouseUp = () => {
+      if (resizeDragRef.current) {
+        // Persist in canvas units
+        setLiveWidthPx((current) => {
+          if (current !== null) {
+            const canvasWidth = Math.round(current / stageScale)
+            onUpdateItem(item.id, { activityPanelWidth: canvasWidth })
+          }
+          return null
+        })
+      }
+      resizeDragRef.current = null
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [item.activityPanelWidth, item.id, stageScale, onUpdateItem])
+
   const statusBarHeight = item.sessionId ? 18 * stageScale : 0
   const inputAreaHeight = CODING_ROBOT_INPUT_HEIGHT * stageScale
   const chatAreaHeight = displayHeight - inputAreaHeight - statusBarHeight
 
-  const activityPanelWidth = CODING_ROBOT_ACTIVITY_PANEL_WIDTH * stageScale
+  const activityPanelWidth = liveWidthPx ?? (item.activityPanelWidth ?? CODING_ROBOT_ACTIVITY_PANEL_WIDTH) * stageScale
   const activityPanelGap = CODING_ROBOT_ACTIVITY_PANEL_GAP * stageScale
   const activityPanelLeft = left + displayWidth + activityPanelGap
 
@@ -174,21 +213,6 @@ export default function CodingRobotOverlay({
               Session: {item.sessionId}
             </span>
             <button
-              onClick={() => setShowActivity((v) => !v)}
-              title={showActivity ? 'Hide activity' : 'Show activity'}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: `0 ${2 * stageScale}px`,
-                fontSize: `${9 * stageScale}px`,
-                color: showActivity ? '#3b82f6' : '#999',
-                flexShrink: 0,
-              }}
-            >
-              Activity
-            </button>
-            <button
               onClick={handleCopySessionId}
               title="Copy session ID"
               style={{
@@ -201,7 +225,22 @@ export default function CodingRobotOverlay({
                 flexShrink: 0,
               }}
             >
-              {copyFeedback ? 'Copied' : 'Copy'}
+              {copyFeedback ? 'Copied' : 'Copy ID'}
+            </button>
+            <button
+              onClick={() => setShowActivity((v) => !v)}
+              title={showActivity ? 'Hide activity' : 'Show activity'}
+              style={{
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: `0 ${2 * stageScale}px`,
+                fontSize: `${9 * stageScale}px`,
+                color: showActivity ? '#3b82f6' : '#999',
+                flexShrink: 0,
+              }}
+            >
+              {showActivity ? 'Activity <' : 'Activity >'}
             </button>
           </div>
         )}
@@ -430,6 +469,22 @@ export default function CodingRobotOverlay({
             ))}
             <div ref={activityEndRef} />
           </div>
+
+          {/* Resize handle */}
+          <div
+            onMouseDown={handleResizeStart}
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              width: `${4 * stageScale}px`,
+              height: '100%',
+              cursor: 'col-resize',
+              background: 'transparent',
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#555' }}
+            onMouseLeave={(e) => { if (!resizeDragRef.current) (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
+          />
         </div>
       )}
     </>

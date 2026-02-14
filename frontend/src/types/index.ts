@@ -131,6 +131,8 @@ export interface CodingRobotItem extends BaseItem {
   height: number
   chatHistory: ChatMessage[]
   sessionId: string | null
+  showActivity?: boolean
+  activityPanelWidth?: number  // canvas units (unscaled)
 }
 
 export interface PdfItem extends BaseItem {
