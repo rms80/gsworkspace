@@ -85,7 +85,7 @@ interface InfiniteCanvasProps {
   runningHtmlGenPromptIds: Set<string>
   onSendCodingRobotMessage: (itemId: string, message: string) => void
   runningCodingRobotIds: Set<string>
-  codingRobotActivity: Map<string, ActivityMessage[]>
+  codingRobotActivity: Map<string, ActivityMessage[][]>
   isOffline: boolean
   onAddText?: (x?: number, y?: number) => void
   onAddPrompt?: (x?: number, y?: number) => string
@@ -1994,7 +1994,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isAnyDragActive={isAnyDragActive}
                 transform={transform}
                 selectedTextContent={selectedTextContent}
-                activityMessages={codingRobotActivity.get(item.id) || []}
+                activitySteps={codingRobotActivity.get(item.id) || []}
                 onSendMessage={onSendCodingRobotMessage}
                 onUpdateItem={onUpdateItem}
               />

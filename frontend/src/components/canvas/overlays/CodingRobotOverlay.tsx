@@ -26,7 +26,7 @@ interface CodingRobotOverlayProps {
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
   selectedTextContent: string
-  activityMessages: ActivityMessage[]
+  activitySteps: ActivityMessage[][]
   onSendMessage: (itemId: string, message: string) => void
   onUpdateItem: (id: string, changes: Partial<CodingRobotItem>) => void
 }
@@ -39,7 +39,7 @@ export default function CodingRobotOverlay({
   isAnyDragActive,
   transform,
   selectedTextContent,
-  activityMessages,
+  activitySteps,
   onSendMessage,
   onUpdateItem,
 }: CodingRobotOverlayProps) {
@@ -48,7 +48,8 @@ export default function CodingRobotOverlay({
   const activityEndRef = useRef<HTMLDivElement>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [showActivity, setShowActivity] = useState(false)
-  const prevIsRunningRef = useRef(false)
+  const [viewStepIndex, setViewStepIndex] = useState(0)
+  const prevStepCountRef = useRef(0)
 
   const theme = CODING_ROBOT_THEME
   const x = transform?.x ?? item.x
@@ -61,29 +62,33 @@ export default function CodingRobotOverlay({
   const left = x * stageScale + stagePos.x
   const top = (y + CODING_ROBOT_HEADER_HEIGHT) * stageScale + stagePos.y
 
-  // Auto-open activity panel when running starts
+  const totalSteps = activitySteps.length
+  const currentMessages = totalSteps > 0 ? activitySteps[viewStepIndex] || [] : []
+
+  // When a new step is added, auto-navigate to it
   useEffect(() => {
-    if (isRunning && !prevIsRunningRef.current) {
-      setShowActivity(true)
+    if (totalSteps > prevStepCountRef.current && totalSteps > 0) {
+      setViewStepIndex(totalSteps - 1)
     }
-    prevIsRunningRef.current = isRunning
-  }, [isRunning])
+    prevStepCountRef.current = totalSteps
+  }, [totalSteps])
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [item.chatHistory.length])
 
-  // Auto-scroll activity panel
+  // Auto-scroll activity panel when viewing latest step
   useEffect(() => {
-    activityEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activityMessages.length])
+    if (viewStepIndex === totalSteps - 1) {
+      activityEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [currentMessages.length, viewStepIndex, totalSteps])
 
   const canSend = !isRunning && (!!item.text.trim() || !!selectedTextContent)
 
   const handleSend = () => {
     if (!canSend) return
-    // If there are selected text blocks, use their content as the message
     const message = selectedTextContent || item.text.trim()
     if (!message) return
     onSendMessage(item.id, message)
@@ -108,14 +113,28 @@ export default function CodingRobotOverlay({
     })
   }
 
-  const showNoSessionBar = !item.sessionId && (isRunning || activityMessages.length > 0)
-  const statusBarHeight = (item.sessionId || showNoSessionBar) ? 18 * stageScale : 0
+  const statusBarHeight = item.sessionId ? 18 * stageScale : 0
   const inputAreaHeight = CODING_ROBOT_INPUT_HEIGHT * stageScale
   const chatAreaHeight = displayHeight - inputAreaHeight - statusBarHeight
 
   const activityPanelWidth = CODING_ROBOT_ACTIVITY_PANEL_WIDTH * stageScale
   const activityPanelGap = CODING_ROBOT_ACTIVITY_PANEL_GAP * stageScale
   const activityPanelLeft = left + displayWidth + activityPanelGap
+
+  const navBtnStyle: React.CSSProperties = {
+    border: 'none',
+    background: 'transparent',
+    color: '#888',
+    cursor: 'pointer',
+    fontSize: `${10 * stageScale}px`,
+    padding: `0 ${2 * stageScale}px`,
+    lineHeight: 1,
+  }
+  const navBtnDisabledStyle: React.CSSProperties = {
+    ...navBtnStyle,
+    color: '#444',
+    cursor: 'default',
+  }
 
   return (
     <>
@@ -183,38 +202,6 @@ export default function CodingRobotOverlay({
               }}
             >
               {copyFeedback ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-        )}
-
-        {/* Activity toggle when no session yet but running */}
-        {!item.sessionId && (isRunning || activityMessages.length > 0) && (
-          <div
-            style={{
-              height: 18 * stageScale,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              padding: `0 ${4 * stageScale}px`,
-              background: '#e8e8e8',
-              borderBottom: `1px solid ${theme.border}`,
-              fontSize: `${9 * stageScale}px`,
-              flexShrink: 0,
-            }}
-          >
-            <button
-              onClick={() => setShowActivity((v) => !v)}
-              title={showActivity ? 'Hide activity' : 'Show activity'}
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: `0 ${2 * stageScale}px`,
-                fontSize: `${9 * stageScale}px`,
-                color: showActivity ? '#3b82f6' : '#999',
-              }}
-            >
-              Activity
             </button>
           </div>
         )}
@@ -338,7 +325,7 @@ export default function CodingRobotOverlay({
       </div>
 
       {/* Activity panel */}
-      {showActivity && activityMessages.length > 0 && (
+      {showActivity && (
         <div
           style={{
             position: 'absolute',
@@ -357,7 +344,7 @@ export default function CodingRobotOverlay({
             overflow: 'hidden',
           }}
         >
-          {/* Panel header */}
+          {/* Panel header with step navigation */}
           <div style={{
             padding: `${4 * stageScale}px ${8 * stageScale}px`,
             background: '#2d2d2d',
@@ -369,7 +356,29 @@ export default function CodingRobotOverlay({
             alignItems: 'center',
             flexShrink: 0,
           }}>
-            <span>Activity</span>
+            {totalSteps > 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: `${3 * stageScale}px` }}>
+                <button
+                  onClick={() => setViewStepIndex((i) => Math.max(0, i - 1))}
+                  disabled={viewStepIndex <= 0}
+                  style={viewStepIndex <= 0 ? navBtnDisabledStyle : navBtnStyle}
+                  title="Previous step"
+                >
+                  &lt;
+                </button>
+                <span>{viewStepIndex + 1}/{totalSteps}</span>
+                <button
+                  onClick={() => setViewStepIndex((i) => Math.min(totalSteps - 1, i + 1))}
+                  disabled={viewStepIndex >= totalSteps - 1}
+                  style={viewStepIndex >= totalSteps - 1 ? navBtnDisabledStyle : navBtnStyle}
+                  title="Next step"
+                >
+                  &gt;
+                </button>
+              </div>
+            ) : (
+              <span>Activity</span>
+            )}
             <button
               onClick={() => setShowActivity(false)}
               style={{
@@ -391,7 +400,18 @@ export default function CodingRobotOverlay({
             overflowY: 'auto',
             padding: `${4 * stageScale}px`,
           }}>
-            {activityMessages.map((msg) => (
+            {currentMessages.length === 0 && (
+              <div style={{
+                color: '#555',
+                fontStyle: 'italic',
+                textAlign: 'center',
+                marginTop: `${20 * stageScale}px`,
+                fontSize: `${9 * stageScale}px`,
+              }}>
+                {isRunning ? 'Waiting for activity...' : 'No activity yet'}
+              </div>
+            )}
+            {currentMessages.map((msg) => (
               <div
                 key={msg.id}
                 style={{

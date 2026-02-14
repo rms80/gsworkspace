@@ -79,7 +79,7 @@ function App() {
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
   const [runningCodingRobotIds, setRunningCodingRobotIds] = useState<Set<string>>(new Set())
-  const [codingRobotActivity, setCodingRobotActivity] = useState<Map<string, ActivityMessage[]>>(new Map())
+  const [codingRobotActivity, setCodingRobotActivity] = useState<Map<string, ActivityMessage[][]>>(new Map())
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
@@ -1722,9 +1722,14 @@ function App() {
       item.id === itemId ? { ...item, text: '', chatHistory: updatedHistory } : item
     ))
 
-    // Mark as running and clear previous activity
+    // Mark as running and push a new empty step for this run
     setRunningCodingRobotIds((prev) => new Set(prev).add(itemId))
-    setCodingRobotActivity((prev) => { const next = new Map(prev); next.set(itemId, []); return next })
+    setCodingRobotActivity((prev) => {
+      const next = new Map(prev)
+      const existing = next.get(itemId) || []
+      next.set(itemId, [...existing, []])
+      return next
+    })
 
     // Gather selected items (excluding the robot itself) as context
     const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== itemId)
@@ -1753,8 +1758,10 @@ function App() {
           }
           setCodingRobotActivity((prev) => {
             const next = new Map(prev)
-            const existing = next.get(itemId) || []
-            next.set(itemId, [...existing, activityMsg])
+            const steps = next.get(itemId) || [[]]
+            const updated = [...steps]
+            updated[updated.length - 1] = [...updated[updated.length - 1], activityMsg]
+            next.set(itemId, updated)
             return next
           })
         }
