@@ -15,10 +15,7 @@
       "Bash(ping:*)",
       "Bash(netstat:*)",
       "Bash(taskkill:*)",
-      "Bash(powershell -Command \"Stop-Process -Id 34648 -Force\")",
-      "Bash(powershell -Command \"Stop-Process -Id 66492 -Force\")",
       "Bash(git checkout:*)",
-      "Bash(gh pr create --title \"Implement delta-based undo/redo system\" --body \"$\\(cat <<''EOF''\n## Summary\n- Adds a comprehensive undo/redo system using change records \\(deltas\\) instead of full state snapshots\n- Each change type \\(add, delete, transform, update text/prompt/model\\) has its own ChangeRecord implementation with reversible apply/reverse methods\n- History persists to S3 as a sidecar file \\(history.json\\) alongside each scene\n- Includes both toolbar buttons \\(Undo/Redo\\) and keyboard shortcuts \\(Ctrl+Z, Ctrl+Y\\)\n\n## Test plan\n- [ ] Create text, image, and prompt items - verify each action can be undone/redone\n- [ ] Transform items \\(move, resize, rotate\\) - verify transforms can be undone/redone\n- [ ] Edit text/prompt content - verify edits can be undone/redone\n- [ ] Delete items - verify deletions can be undone/redone\n- [ ] Verify Ctrl+Z and Ctrl+Y keyboard shortcuts work\n- [ ] Verify Undo/Redo buttons enable/disable appropriately\n- [ ] Reload page and verify history is restored from S3\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\nEOF\n\\)\")",
       "Bash(git revert:*)",
       "Bash(powershell:*)",
       "Bash(node:*)",
@@ -38,8 +35,14 @@
       "Bash(git -C /d/git/workspaceapp diff)",
       "Bash(git -C /d/git/workspaceapp log --oneline -5)",
       "Bash(git -C /d/git/workspaceapp add:*)",
-      "Bash(git -C /d/git/workspaceapp commit -m \"$\\(cat <<''EOF''\nUse relative asset paths for offline builds\n\nSet Vite base to ''./'' when VITE_OFFLINE_MODE is true so the built\nindex.html references assets and favicon with relative paths. Also\nuse import.meta.env.BASE_URL for the about.html fetch so it resolves\ncorrectly in both online and offline modes.\n\nCo-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(npx vite:*)"
+      "Bash(npx vite:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npx kill-port:*)",
+      "Bash(taskkill /F /FI \"WINDOWTITLE eq *tsx*\")",
+      "Bash(ls:*)",
+      "Bash(wmic:*)"
     ]
   }
 }
