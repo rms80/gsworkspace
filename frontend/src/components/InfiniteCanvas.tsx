@@ -553,11 +553,55 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         })
         return
       }
+
+      // F: center viewport on selection bounding box
+      // Shift+F: fit selection to screen (zoom so selection fills 90% of viewport)
+      if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (selectedIds.length === 0) return
+        e.preventDefault()
+        const selectedItems = items.filter(i => selectedIds.includes(i.id))
+        if (selectedItems.length === 0) return
+
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        for (const item of selectedItems) {
+          const w = item.width * ((item as ImageItem).scaleX ?? 1)
+          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          minX = Math.min(minX, item.x)
+          minY = Math.min(minY, item.y)
+          maxX = Math.max(maxX, item.x + w)
+          maxY = Math.max(maxY, item.y + h)
+        }
+        const centerX = (minX + maxX) / 2
+        const centerY = (minY + maxY) / 2
+
+        if (e.shiftKey) {
+          // Shift+F: zoom to fit selection at 90% of viewport
+          const contentWidth = maxX - minX
+          const contentHeight = maxY - minY
+          const scale = Math.min(
+            (stageSize.width * 0.9) / contentWidth,
+            (stageSize.height * 0.9) / contentHeight,
+            5,
+          )
+          _setStageScale(scale)
+          setStagePos({
+            x: stageSize.width / 2 - centerX * scale,
+            y: stageSize.height / 2 - centerY * scale,
+          })
+        } else {
+          // F: center on selection without changing zoom
+          setStagePos({
+            x: stageSize.width / 2 - centerX * stageScale,
+            y: stageSize.height / 2 - centerY * stageScale,
+          })
+        }
+        return
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [isEditing, items, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
+  }, [isEditing, items, selectedIds, stageSize, stageScale, clipboard.mousePos, screenToCanvas, setStagePos, _setStageScale])
 
   // 8d. 'Y' hotkey to create prompt at cursor, Shift+Y for image-gen prompt
   useEffect(() => {

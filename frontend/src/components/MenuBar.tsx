@@ -787,6 +787,8 @@ function MenuBar({
                   { shortcut: 'C', action: 'Center viewport at cursor' },
                   { shortcut: 'Shift+C', action: 'Center viewport on content (100%)' },
                   { shortcut: 'Shift+V', action: 'Fit all content to view' },
+                  { shortcut: 'F', action: 'Center viewport on selection' },
+                  { shortcut: 'Shift+F', action: 'Fit selection to view' },
                   { shortcut: '', action: '' },
                   { shortcut: 'Ctrl+O', action: 'Open Scene' },
                   { shortcut: 'Ctrl+Shift+O', action: 'Switch Workspace' },
