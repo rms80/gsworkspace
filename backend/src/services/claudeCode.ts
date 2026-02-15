@@ -1,9 +1,13 @@
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, Query } from '@anthropic-ai/claude-agent-sdk'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, dirname, resolve, relative } from 'path'
 import { fileURLToPath } from 'url'
 import { tmpdir } from 'os'
 import { ResolvedContentItem } from './llmTypes.js'
+
+// Track active conversations by requestId so they can be interrupted
+const activeConversations = new Map<string, Query>()
+const interruptedRequests = new Set<string>()
 
 // Resolve cwd to the repo root (one directory up from backend/)
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -19,11 +23,20 @@ export interface ActivityEvent {
   content: string
 }
 
+export function interruptQuery(requestId: string): boolean {
+  const conversation = activeConversations.get(requestId)
+  if (!conversation) return false
+  interruptedRequests.add(requestId)
+  conversation.interrupt()
+  return true
+}
+
 export async function generateWithClaudeCode(
   items: ResolvedContentItem[],
   prompt: string,
   sessionId?: string | null,
-  onActivity?: (event: ActivityEvent) => void
+  onActivity?: (event: ActivityEvent) => void,
+  requestId?: string
 ): Promise<ClaudeCodeResult> {
   // Build a text prompt with content blocks described inline
   const parts: string[] = []
@@ -73,9 +86,15 @@ export async function generateWithClaudeCode(
     options: queryOptions,
   })
 
+  // Track the conversation so it can be interrupted
+  if (requestId) {
+    activeConversations.set(requestId, conversation)
+  }
+
   let resultText = ''
   let capturedSessionId: string | null = null
 
+  try {
   for await (const message of conversation) {
     console.log('[ClaudeCode] Message type:', message.type, 'subtype' in message ? message.subtype : '')
 
@@ -126,6 +145,12 @@ export async function generateWithClaudeCode(
       } else {
         console.error('[ClaudeCode] Error result:', JSON.stringify(message, null, 2))
         // For max_turns, there may still be useful partial output in the last assistant message
+        if (requestId && interruptedRequests.has(requestId)) {
+          console.log('[ClaudeCode] Query interrupted — returning partial result')
+          onActivity?.({ type: 'status', content: 'Stopped' })
+          if (!resultText) resultText = '(Stopped by user)'
+          break
+        }
         if (message.subtype === 'error_max_turns') {
           console.log('[ClaudeCode] Hit max turns — returning whatever result text we have')
           onActivity?.({ type: 'status', content: 'Hit max turns limit' })
@@ -181,6 +206,11 @@ export async function generateWithClaudeCode(
             const removed = oldStr ? oldStr.split('\n').length : 0
             const added = newStr ? newStr.split('\n').length : 0
             onActivity({ type: 'tool_use', content: `Edit: ${relPath} [-${removed}/+${added}]` })
+          } else if (name === 'Bash') {
+            const desc = input.description ? String(input.description) : ''
+            const cmd = input.command ? String(input.command) : ''
+            const parts = [desc, cmd].filter(Boolean)
+            onActivity({ type: 'tool_use', content: `Bash: ${parts.join('\n')}` })
           } else {
             const inputStr = JSON.stringify(input)
             const summary = inputStr.length > 120 ? inputStr.slice(0, 120) + '...' : inputStr
@@ -195,6 +225,13 @@ export async function generateWithClaudeCode(
       } else {
         onActivity?.({ type: 'status', content: subtype })
       }
+    }
+  }
+
+  } finally {
+    if (requestId) {
+      activeConversations.delete(requestId)
+      interruptedRequests.delete(requestId)
     }
   }
 

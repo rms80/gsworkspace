@@ -4,7 +4,7 @@ import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
-import { generateWithClaudeCode } from '../services/claudeCode.js'
+import { generateWithClaudeCode, interruptQuery } from '../services/claudeCode.js'
 import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData, resolveTextFileData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -305,7 +305,8 @@ router.post('/generate-claude-code', async (req, res) => {
             clientDisconnected = true
           }
         }
-      }
+      },
+      requestId
     )
 
     // Store result in buffer
@@ -363,6 +364,13 @@ router.get('/generate-claude-code/poll/:requestId', (req, res) => {
     result: state.result,
     error: state.error,
   })
+})
+
+// Interrupt a running Claude Code query
+router.post('/generate-claude-code/interrupt/:requestId', (req, res) => {
+  const { requestId } = req.params
+  const interrupted = interruptQuery(requestId)
+  res.json({ interrupted })
 })
 
 /**

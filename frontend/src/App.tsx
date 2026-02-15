@@ -14,10 +14,12 @@ import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { usePromptExecution } from './hooks/usePromptExecution'
+import { useCodingRobotManager } from './hooks/useCodingRobotManager'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, ChatMessage, ActivityMessage, TextFileFormat } from './types'
+import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
-import { generateImage, generateHtml, generateHtmlTitle, generateWithClaudeCode, pollClaudeCodeRequest, ContentItem } from './api/llm'
+import { generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
+import { deleteActivity } from './utils/activityStorage'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { snapToGrid } from './utils/grid'
@@ -30,7 +32,6 @@ import { uploadImage } from './api/images'
 import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
 import { uploadTextFile } from './api/textfiles'
 import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
-import { saveActivitySteps, saveActiveStep, clearActiveStep, loadActivity, saveActiveRequestId, loadActiveRequestId, clearActiveRequestId } from './utils/activityStorage'
 import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
@@ -79,9 +80,6 @@ function App() {
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
-  const [runningCodingRobotIds, setRunningCodingRobotIds] = useState<Set<string>>(new Set())
-  const [reconnectingCodingRobotIds, setReconnectingCodingRobotIds] = useState<Set<string>>(new Set())
-  const [codingRobotActivity, setCodingRobotActivity] = useState<Map<string, ActivityMessage[][]>>(new Map())
   const [debugPanelOpen, setDebugPanelOpen] = useState(false)
   const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
@@ -122,230 +120,6 @@ function App() {
     const scenePart = activeScene?.name ? ` / ${activeScene.name}` : ''
     document.title = `${ACTIVE_WORKSPACE}${scenePart}`
   }, [activeScene?.name])
-
-  // Restore activity from IndexedDB for coding robot items in the active scene
-  useEffect(() => {
-    if (!activeScene) return
-    const robotItems = activeScene.items.filter((item) => item.type === 'coding-robot')
-    if (robotItems.length === 0) return
-
-    let cancelled = false
-    Promise.all(
-      robotItems.map(async (item) => {
-        const steps = await loadActivity(item.id)
-        return steps ? { itemId: item.id, steps } : null
-      })
-    ).then((results) => {
-      if (cancelled) return
-      const toRestore = results.filter((r): r is { itemId: string; steps: ActivityMessage[][] } => r !== null)
-      if (toRestore.length === 0) return
-      setCodingRobotActivity((prev) => {
-        // Only restore if we don't already have data for this item (avoid overwriting live data)
-        let changed = false
-        const next = new Map(prev)
-        for (const { itemId, steps } of toRestore) {
-          if (!next.has(itemId) || next.get(itemId)!.length === 0) {
-            next.set(itemId, steps)
-            changed = true
-          }
-        }
-        return changed ? next : prev
-      })
-    })
-    return () => { cancelled = true }
-  }, [activeSceneId]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Polling reconnection for coding robot items with an activeRequestId (after HMR)
-  // This effect checks both the item's activeRequestId and IndexedDB (for cases where
-  // HMR fired before the scene auto-saved).
-  useEffect(() => {
-    if (!activeScene) return
-
-    const robotItems = activeScene.items.filter(
-      (item): item is import('./types').CodingRobotItem => item.type === 'coding-robot'
-    )
-    if (robotItems.length === 0) return
-
-    let cancelled = false
-    const intervalIds: ReturnType<typeof setInterval>[] = []
-
-    // Check all coding robot items — some may have requestId only in IndexedDB
-    ;(async () => {
-      const toReconnect: Array<{ itemId: string; requestId: string }> = []
-
-      for (const robot of robotItems) {
-        // Skip items that are already being processed by an active SSE stream
-        if (runningCodingRobotIds.has(robot.id)) continue
-
-        let reqId = robot.activeRequestId
-        if (!reqId) {
-          // Check IndexedDB as fallback (scene may not have been saved before HMR)
-          reqId = await loadActiveRequestId(robot.id) ?? undefined
-        }
-        if (reqId) {
-          toReconnect.push({ itemId: robot.id, requestId: reqId })
-        }
-      }
-
-      if (cancelled || toReconnect.length === 0) return
-
-      for (const { itemId, requestId } of toReconnect) {
-        let eventsSeen = 0
-
-        // Count how many events we already have for this item's latest step
-        const existingSteps = codingRobotActivity.get(itemId)
-        if (existingSteps && existingSteps.length > 0) {
-          eventsSeen = existingSteps[existingSteps.length - 1].length
-        }
-
-        // Mark as running + reconnecting
-        setRunningCodingRobotIds((prev) => {
-          if (prev.has(itemId)) return prev
-          return new Set(prev).add(itemId)
-        })
-        setReconnectingCodingRobotIds((prev) => new Set(prev).add(itemId))
-
-        // Ensure we have at least an empty step for this run
-        setCodingRobotActivity((prev) => {
-          const next = new Map(prev)
-          const existing = next.get(itemId) || []
-          if (existing.length === 0) {
-            next.set(itemId, [[]])
-            return next
-          }
-          return prev
-        })
-
-        const intervalId = setInterval(async () => {
-          if (cancelled) return
-
-          try {
-            const poll = await pollClaudeCodeRequest(requestId, eventsSeen)
-
-            if (cancelled) return
-
-            // Clear reconnecting indicator after first successful poll
-            setReconnectingCodingRobotIds((prev) => {
-              if (!prev.has(itemId)) return prev
-              const next = new Set(prev)
-              next.delete(itemId)
-              return next
-            })
-
-            if (poll === null) {
-              // Request expired or not found — clear activeRequestId
-              clearActiveRequestId(itemId)
-              updateActiveSceneItems((prev) => prev.map((item) => {
-                if (item.id !== itemId || item.type !== 'coding-robot') return item
-                return { ...item, activeRequestId: undefined }
-              }))
-              setRunningCodingRobotIds((prev) => {
-                const next = new Set(prev)
-                next.delete(itemId)
-                return next
-              })
-              clearInterval(intervalId)
-              return
-            }
-
-            // Apply new activity events
-            if (poll.events.length > 0) {
-              const newMsgs: ActivityMessage[] = poll.events.map((e) => ({
-                id: e.id,
-                type: e.type,
-                content: e.content,
-                timestamp: e.timestamp,
-              }))
-
-              setCodingRobotActivity((prev) => {
-                const next = new Map(prev)
-                const steps = next.get(itemId) || [[]]
-                const updated = [...steps]
-                updated[updated.length - 1] = [...updated[updated.length - 1], ...newMsgs]
-                next.set(itemId, updated)
-                saveActiveStep(itemId, updated[updated.length - 1])
-                return next
-              })
-
-              eventsSeen += poll.events.length
-            }
-
-            // Handle terminal states
-            if (poll.status === 'completed' && poll.result) {
-              clearInterval(intervalId)
-              clearActiveRequestId(itemId)
-              const assistantMessage: ChatMessage = {
-                role: 'assistant',
-                content: poll.result.result,
-                timestamp: new Date().toISOString(),
-              }
-              updateActiveSceneItems((prev) => prev.map((item) => {
-                if (item.id !== itemId || item.type !== 'coding-robot') return item
-                return {
-                  ...item,
-                  chatHistory: [...item.chatHistory, assistantMessage],
-                  sessionId: poll.result!.sessionId ?? item.sessionId,
-                  activeRequestId: undefined,
-                }
-              }))
-              setRunningCodingRobotIds((prev) => {
-                const next = new Set(prev)
-                next.delete(itemId)
-                return next
-              })
-              setCodingRobotActivity((prev) => {
-                const steps = prev.get(itemId)
-                if (steps) {
-                  saveActivitySteps(itemId, steps)
-                  clearActiveStep(itemId)
-                }
-                return prev
-              })
-              playNotificationSound()
-            } else if (poll.status === 'error') {
-              clearInterval(intervalId)
-              clearActiveRequestId(itemId)
-              const errorMessage: ChatMessage = {
-                role: 'assistant',
-                content: `Error: ${poll.error || 'Unknown error'}`,
-                timestamp: new Date().toISOString(),
-              }
-              updateActiveSceneItems((prev) => prev.map((item) => {
-                if (item.id !== itemId || item.type !== 'coding-robot') return item
-                return {
-                  ...item,
-                  chatHistory: [...item.chatHistory, errorMessage],
-                  activeRequestId: undefined,
-                }
-              }))
-              setRunningCodingRobotIds((prev) => {
-                const next = new Set(prev)
-                next.delete(itemId)
-                return next
-              })
-              setCodingRobotActivity((prev) => {
-                const steps = prev.get(itemId)
-                if (steps) {
-                  saveActivitySteps(itemId, steps)
-                  clearActiveStep(itemId)
-                }
-                return prev
-              })
-            }
-          } catch (err) {
-            console.error('Polling reconnection error:', err)
-          }
-        }, 2000)
-
-        intervalIds.push(intervalId)
-      }
-    })()
-
-    return () => {
-      cancelled = true
-      intervalIds.forEach(clearInterval)
-    }
-  }, [activeSceneId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Selection for active scene (stored separately from items)
   const selectedIds = activeSceneId ? (selectionMap.get(activeSceneId) ?? []) : []
@@ -938,6 +712,21 @@ function App() {
     },
     [activeSceneId]
   )
+
+  const {
+    runningCodingRobotIds,
+    reconnectingCodingRobotIds,
+    codingRobotActivity,
+    handleSendCodingRobotMessage,
+    handleStopCodingRobot,
+    handleClearCodingRobotChat,
+  } = useCodingRobotManager({
+    activeSceneId,
+    activeScene,
+    items,
+    selectedIds,
+    updateActiveSceneItems,
+  })
 
   // Scene management
   const addScene = useCallback(async () => {
@@ -1634,6 +1423,13 @@ function App() {
       pushChange(new MultiStepChange(itemsForHistory.map((item) => new DeleteObjectChange(item))))
     }
 
+    // Clean up IndexedDB activity data for deleted coding robot items
+    for (const item of selectedItems) {
+      if (item.type === 'coding-robot') {
+        deleteActivity(item.id)
+      }
+    }
+
     // Clear selection and remove items
     setSelectionMap((prev) => {
       const newMap = new Map(prev)
@@ -1936,114 +1732,6 @@ function App() {
       })
     }
   }, [items, selectedIds, updateActiveSceneItems])
-
-  const handleSendCodingRobotMessage = useCallback(async (itemId: string, message: string) => {
-    const robotItem = items.find((item) => item.id === itemId && item.type === 'coding-robot')
-    if (!robotItem || robotItem.type !== 'coding-robot') return
-
-    // Generate a requestId for SSE reconnection after HMR
-    const requestId = uuidv4()
-    saveActiveRequestId(itemId, requestId)
-
-    // Append user message to chat history, clear input, and save requestId
-    const userMessage: ChatMessage = { role: 'user', content: message, timestamp: new Date().toISOString() }
-    const updatedHistory = [...robotItem.chatHistory, userMessage]
-    updateActiveSceneItems((prev) => prev.map((item) =>
-      item.id === itemId ? { ...item, text: '', chatHistory: updatedHistory, activeRequestId: requestId } : item
-    ))
-
-    // Mark as running and push a new empty step for this run
-    setRunningCodingRobotIds((prev) => new Set(prev).add(itemId))
-    setCodingRobotActivity((prev) => {
-      const next = new Map(prev)
-      const existing = next.get(itemId) || []
-      next.set(itemId, [...existing, []])
-      return next
-    })
-
-    // Gather selected items (excluding the robot itself) as context
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== itemId)
-    const contentItems: ContentItem[] = selectedItems.map((item) => {
-      if (item.type === 'text') {
-        return { type: 'text' as const, text: item.text }
-      } else if (item.type === 'image') {
-        return { type: 'image' as const, src: item.cropSrc || item.src, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropSrc }
-      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot') {
-        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
-      }
-      return { type: 'text' as const, text: '' }
-    }).filter((item) => item.text || item.src || item.id)
-
-    try {
-      const { result, sessionId: newSessionId } = await generateWithClaudeCode(
-        contentItems,
-        message,
-        robotItem.sessionId,
-        (event) => {
-          const activityMsg: ActivityMessage = {
-            id: event.id,
-            type: event.type,
-            content: event.content,
-            timestamp: event.timestamp,
-          }
-          setCodingRobotActivity((prev) => {
-            const next = new Map(prev)
-            const steps = next.get(itemId) || [[]]
-            const updated = [...steps]
-            updated[updated.length - 1] = [...updated[updated.length - 1], activityMsg]
-            next.set(itemId, updated)
-            // Persist active step to IndexedDB for HMR survival
-            saveActiveStep(itemId, updated[updated.length - 1])
-            return next
-          })
-        },
-        requestId
-      )
-
-      // Append assistant response and clear activeRequestId
-      clearActiveRequestId(itemId)
-      const assistantMessage: ChatMessage = { role: 'assistant', content: result, timestamp: new Date().toISOString() }
-      updateActiveSceneItems((prev) => prev.map((item) => {
-        if (item.id !== itemId || item.type !== 'coding-robot') return item
-        return {
-          ...item,
-          chatHistory: [...item.chatHistory, assistantMessage],
-          sessionId: newSessionId ?? item.sessionId,
-          activeRequestId: undefined,
-        }
-      }))
-    } catch (error) {
-      console.error('Failed to run coding robot:', error)
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error'
-      // If stream ended without result, don't add error — the polling reconnection will handle it
-      if (errorMsg === 'Stream ended without a result') {
-        // SSE stream was destroyed (e.g., by HMR). The requestId is still on the item,
-        // so the polling effect will pick it up and reconnect.
-        return
-      }
-      clearActiveRequestId(itemId)
-      const errorMessage: ChatMessage = { role: 'assistant', content: `Error: ${errorMsg}`, timestamp: new Date().toISOString() }
-      updateActiveSceneItems((prev) => prev.map((item) => {
-        if (item.id !== itemId || item.type !== 'coding-robot') return item
-        return { ...item, chatHistory: [...item.chatHistory, errorMessage], activeRequestId: undefined }
-      }))
-    } finally {
-      setRunningCodingRobotIds((prev) => {
-        const next = new Set(prev)
-        next.delete(itemId)
-        return next
-      })
-      // Persist completed steps to IndexedDB and clear active marker
-      setCodingRobotActivity((prev) => {
-        const steps = prev.get(itemId)
-        if (steps) {
-          saveActivitySteps(itemId, steps)
-          clearActiveStep(itemId)
-        }
-        return prev
-      })
-    }
-  }, [items, selectedIds, activeSceneId, updateActiveSceneItems])
 
   // Export current scene to ZIP
   const handleExportScene = useCallback(async () => {
@@ -2631,6 +2319,8 @@ function App() {
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
           onSendCodingRobotMessage={handleSendCodingRobotMessage}
+          onStopCodingRobotMessage={handleStopCodingRobot}
+          onClearCodingRobotChat={handleClearCodingRobotChat}
           runningCodingRobotIds={runningCodingRobotIds}
           reconnectingCodingRobotIds={reconnectingCodingRobotIds}
           codingRobotActivity={codingRobotActivity}

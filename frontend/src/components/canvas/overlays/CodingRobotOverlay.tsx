@@ -29,6 +29,8 @@ interface CodingRobotOverlayProps {
   selectedTextContent: string
   activitySteps: ActivityMessage[][]
   onSendMessage: (itemId: string, message: string) => void
+  onStopMessage?: (itemId: string) => void
+  onClearChat?: (itemId: string) => void
   onUpdateItem: (id: string, changes: Partial<CodingRobotItem>) => void
 }
 
@@ -43,12 +45,16 @@ export default function CodingRobotOverlay({
   selectedTextContent,
   activitySteps,
   onSendMessage,
+  onStopMessage,
+  onClearChat,
   onUpdateItem,
 }: CodingRobotOverlayProps) {
   const chatEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activityEndRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
   const [copyFeedback, setCopyFeedback] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [inputText, setInputText] = useState(item.text)
   const [viewStepIndex, setViewStepIndex] = useState(0)
   const prevStepCountRef = useRef(0)
@@ -89,6 +95,18 @@ export default function CodingRobotOverlay({
       setInputText('')
     }
   }, [item.text]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close menu on click outside
+  useEffect(() => {
+    if (!menuOpen) return
+    const handleClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [menuOpen])
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
@@ -223,35 +241,100 @@ export default function CodingRobotOverlay({
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
               Session: {item.sessionId}
             </span>
-            <button
-              onClick={handleCopySessionId}
-              title="Copy session ID"
-              style={{
-                border: 'none',
-                background: 'transparent',
-                cursor: 'pointer',
-                padding: `0 ${2 * stageScale}px`,
-                fontSize: `${9 * stageScale}px`,
-                color: copyFeedback ? '#22c55e' : '#999',
-                flexShrink: 0,
-              }}
-            >
-              {copyFeedback ? 'Copied' : 'Copy ID'}
-            </button>
+            <div ref={menuRef} style={{ position: 'relative', flexShrink: 0, marginRight: `${4 * stageScale}px` }}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                style={{
+                  border: `1px solid #bbb`,
+                  borderRadius: `${3 * stageScale}px`,
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  height: `${14 * stageScale}px`,
+                  padding: `0 ${3 * stageScale}px`,
+                  fontSize: `${9 * stageScale}px`,
+                  color: menuOpen ? '#3b82f6' : '#999',
+                  letterSpacing: `${1 * stageScale}px`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {copyFeedback ? 'Copied' : '...'}
+              </button>
+              {menuOpen && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  background: '#fff',
+                  border: '1px solid #ccc',
+                  borderRadius: `${3 * stageScale}px`,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                  zIndex: 10,
+                  minWidth: `${80 * stageScale}px`,
+                  overflow: 'hidden',
+                }}>
+                  <button
+                    onClick={() => { handleCopySessionId(); setMenuOpen(false) }}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: `${4 * stageScale}px ${8 * stageScale}px`,
+                      fontSize: `${9 * stageScale}px`,
+                      color: '#333',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => { (e.currentTarget).style.background = '#f0f0f0' }}
+                    onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                  >
+                    Copy Session ID
+                  </button>
+                  <button
+                    onClick={() => { onClearChat?.(item.id); setMenuOpen(false) }}
+                    disabled={isRunning}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                      cursor: isRunning ? 'default' : 'pointer',
+                      padding: `${4 * stageScale}px ${8 * stageScale}px`,
+                      fontSize: `${9 * stageScale}px`,
+                      color: isRunning ? '#aaa' : '#c00',
+                      textAlign: 'left',
+                      whiteSpace: 'nowrap',
+                    }}
+                    onMouseEnter={(e) => { if (!isRunning) (e.currentTarget).style.background = '#f0f0f0' }}
+                    onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                  >
+                    Clear Chat
+                  </button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => setShowActivity((v) => !v)}
               title={showActivity ? 'Hide activity' : 'Show activity'}
               style={{
-                border: 'none',
+                border: `1px solid ${showActivity ? '#3b82f6' : '#bbb'}`,
+                borderRadius: `${3 * stageScale}px`,
                 background: 'transparent',
                 cursor: 'pointer',
-                padding: `0 ${2 * stageScale}px`,
+                height: `${14 * stageScale}px`,
+                padding: `0 ${3 * stageScale}px`,
                 fontSize: `${9 * stageScale}px`,
                 color: showActivity ? '#3b82f6' : '#999',
                 flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
             >
-              {showActivity ? 'Activity <' : 'Activity >'}
+              Activity
             </button>
           </div>
         )}
@@ -354,23 +437,42 @@ export default function CodingRobotOverlay({
               outline: 'none',
             }}
           />
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            style={{
-              width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
-              height: BUTTON_HEIGHT * stageScale,
-              border: `${1 * stageScale}px solid #000`,
-              borderRadius: `${4 * stageScale}px`,
-              background: canSend ? theme.runButton : '#787878',
-              color: '#fff',
-              fontSize: `${12 * stageScale}px`,
-              fontWeight: 'bold',
-              cursor: canSend ? 'pointer' : 'default',
-            }}
-          >
-            Send
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: `${2 * stageScale}px` }}>
+            <button
+              onClick={handleSend}
+              disabled={!canSend}
+              style={{
+                width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
+                height: BUTTON_HEIGHT * stageScale,
+                border: '1px solid #444',
+                borderRadius: `${4 * stageScale}px`,
+                background: canSend ? theme.runButton : '#787878',
+                color: '#fff',
+                fontSize: `${12 * stageScale}px`,
+                fontWeight: 'bold',
+                cursor: canSend ? 'pointer' : 'default',
+              }}
+            >
+              Send
+            </button>
+            <button
+              onClick={() => onStopMessage?.(item.id)}
+              disabled={!isRunning}
+              style={{
+                width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
+                height: BUTTON_HEIGHT * stageScale,
+                border: '1px solid #444',
+                borderRadius: `${4 * stageScale}px`,
+                background: isRunning ? '#dc2626' : '#787878',
+                color: '#fff',
+                fontSize: `${12 * stageScale}px`,
+                fontWeight: 'bold',
+                cursor: isRunning ? 'pointer' : 'default',
+              }}
+            >
+              Stop
+            </button>
+          </div>
         </div>
       </div>
 

@@ -304,6 +304,19 @@ export async function quickLlmQuery(prompt: string): Promise<string> {
   return data.result
 }
 
+/**
+ * Interrupt a running Claude Code query by its requestId.
+ */
+export async function interruptClaudeCodeRequest(requestId: string): Promise<boolean> {
+  const response = await fetch(
+    `${API_BASE}/generate-claude-code/interrupt/${encodeURIComponent(requestId)}`,
+    { method: 'POST' }
+  )
+  if (!response.ok) return false
+  const data = await response.json() as { interrupted: boolean }
+  return data.interrupted
+}
+
 export interface ClaudeCodePollResponse {
   status: 'running' | 'completed' | 'error'
   events: ClaudeCodeActivityEvent[]
