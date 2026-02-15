@@ -22,7 +22,7 @@ import { generateImage, generateHtml, generateHtmlTitle, ContentItem } from './a
 import { deleteActivity } from './utils/activityStorage'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
-import { snapToGrid } from './utils/grid'
+import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
 import DOMPurify from 'dompurify'
 import { config } from './config'
 import { exportSceneToZip } from './utils/sceneExport'
@@ -835,12 +835,11 @@ function App() {
   const addTextItem = useCallback((x?: number, y?: number) => {
     const width = 200
     const height = 100
-    const center = canvasRef.current?.getViewportCenter()
+    const pos = resolvePosition(canvasRef.current, width, height, x, y)
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'text',
-      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
-      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
+      ...pos,
       text: 'Double-click to edit',
       fontSize: 14,
       width,
@@ -852,11 +851,11 @@ function App() {
 
   const addImageItem = useCallback(
     (id: string, src: string, width: number, height: number) => {
+      const pos = randomFixedPosition()
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: snapToGrid(100 + Math.random() * 200),
-        y: snapToGrid(100 + Math.random() * 200),
+        ...pos,
         src,
         width,
         height,
@@ -907,11 +906,11 @@ function App() {
         w = Math.round(w * scale)
         h = Math.round(h * scale)
       }
+      const pos = randomFixedPosition()
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: snapToGrid(100 + Math.random() * 200),
-        y: snapToGrid(100 + Math.random() * 200),
+        ...pos,
         src,
         name,
         width: w,
@@ -978,12 +977,11 @@ function App() {
   const addPromptItem = useCallback((x?: number, y?: number): string => {
     const width = 300
     const height = 150
-    const center = canvasRef.current?.getViewportCenter()
+    const pos = resolvePosition(canvasRef.current, width, height, x, y)
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'prompt',
-      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
-      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
+      ...pos,
       label: 'Prompt',
       text: 'Enter your prompt here...',
       fontSize: 14,
@@ -999,12 +997,11 @@ function App() {
   const addImageGenPromptItem = useCallback((x?: number, y?: number): string => {
     const width = 300
     const height = 150
-    const center = canvasRef.current?.getViewportCenter()
+    const pos = resolvePosition(canvasRef.current, width, height, x, y)
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'image-gen-prompt',
-      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
-      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
+      ...pos,
       label: 'Image Gen',
       text: 'Describe the image you want to generate...',
       fontSize: 14,
@@ -1020,12 +1017,11 @@ function App() {
   const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
     const width = 300
     const height = 150
-    const center = canvasRef.current?.getViewportCenter()
+    const pos = resolvePosition(canvasRef.current, width, height, x, y)
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'html-gen-prompt',
-      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
-      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
+      ...pos,
       label: 'HTML Gen',
       text: 'create a professional-looking tutorial page for this content',
       fontSize: 14,
@@ -1040,12 +1036,11 @@ function App() {
   const addCodingRobotItem = useCallback((x?: number, y?: number) => {
     const width = 400
     const height = 350
-    const center = canvasRef.current?.getViewportCenter()
+    const pos = resolvePosition(canvasRef.current, width, height, x, y)
     const newItem: CanvasItem = {
       id: uuidv4(),
       type: 'coding-robot',
-      x: snapToGrid(x != null ? x : (center?.x ?? 100) - width / 2 + Math.random() * 200 - 100),
-      y: snapToGrid(y != null ? y : (center?.y ?? 100) - height / 2 + Math.random() * 200 - 100),
+      ...pos,
       label: 'Coding Robot',
       text: '',
       fontSize: 14,
@@ -1063,11 +1058,11 @@ function App() {
       const width = optWidth ?? 400
       const height = 100
       const id = uuidv4()
+      const pos = centeredAtPoint(x, y, width, height, topLeft ?? false)
       const newItem: CanvasItem = {
         id,
         type: 'text',
-        x: topLeft ? snapToGrid(x) : snapToGrid(x - width / 2),
-        y: topLeft ? snapToGrid(y) : snapToGrid(y - height / 2),
+        ...pos,
         text,
         fontSize: 14,
         width,
@@ -1086,11 +1081,11 @@ function App() {
       const existingNames = getExistingImageNames(items)
       const uniqueName = generateUniqueName(name || 'Image', existingNames)
 
+      const pos = centeredAtPoint(x, y, width)
       const newItem: CanvasItem = {
         id,
         type: 'image',
-        x: snapToGrid(x - width / 2),
-        y: snapToGrid(y),
+        ...pos,
         src,
         name: uniqueName,
         width,
@@ -1120,11 +1115,11 @@ function App() {
         w = Math.round(w * scale)
         h = Math.round(h * scale)
       }
+      const pos = centeredAtPoint(x, y, w)
       const newItem: CanvasItem = {
         id,
         type: 'video',
-        x: snapToGrid(x - w / 2),
-        y: snapToGrid(y),
+        ...pos,
         src,
         name: uniqueName,
         width: w,
@@ -1146,11 +1141,11 @@ function App() {
       const existingNames = getExistingPdfNames(items)
       const uniqueName = generateUniqueName(name || 'PDF', existingNames)
 
+      const pos = centeredAtPoint(x, y, width)
       const newItem: CanvasItem = {
         id,
         type: 'pdf',
-        x: snapToGrid(x - width / 2),
-        y: snapToGrid(y),
+        ...pos,
         src,
         name: uniqueName,
         width,
@@ -1173,11 +1168,11 @@ function App() {
       // Re-append extension (generateUniqueName strips it, but for generic "TextFile" it won't have one)
       const uniqueName = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
 
+      const pos = centeredAtPoint(x, y, width)
       const newItem: CanvasItem = {
         id,
         type: 'text-file',
-        x: snapToGrid(x - width / 2),
-        y: snapToGrid(y),
+        ...pos,
         src,
         name: uniqueName,
         width,
