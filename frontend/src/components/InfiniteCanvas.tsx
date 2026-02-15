@@ -312,6 +312,23 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   })
 
   // 8b. Keyboard handlers
+  const startLabelEdit = useCallback((id: string, type: CanvasItem['type']) => {
+    const setters: Record<string, [React.Dispatch<React.SetStateAction<string | null>>, React.RefObject<HTMLInputElement>]> = {
+      'image': [setEditingImageLabelId, imageLabelInputRef],
+      'video': [setEditingVideoLabelId, videoLabelInputRef],
+      'pdf': [setEditingPdfLabelId, pdfLabelInputRef],
+      'text-file': [setEditingTextFileLabelId, textFileLabelInputRef],
+    }
+    const entry = setters[type]
+    if (!entry) return
+    const [setId, ref] = entry
+    setId(id)
+    setTimeout(() => {
+      ref.current?.focus()
+      ref.current?.select()
+    }, 0)
+  }, [])
+
   useCanvasKeyboardHandlers({
     isEditing,
     editingTextId,
@@ -342,6 +359,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     promptEditing,
     imageGenPromptEditing,
     htmlGenPromptEditing,
+    onStartLabelEdit: startLabelEdit,
   })
 
   // 9. Menu state hooks

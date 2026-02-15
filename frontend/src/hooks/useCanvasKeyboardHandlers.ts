@@ -56,13 +56,19 @@ interface UseKeyboardHandlersProps {
   onAddImageGenPrompt?: (x?: number, y?: number) => string
   promptEditing: {
     handleTextDblClick: (id: string) => void
+    handleLabelDblClick: (id: string) => void
   }
   imageGenPromptEditing: {
     handleTextDblClick: (id: string) => void
+    handleLabelDblClick: (id: string) => void
   }
   htmlGenPromptEditing: {
     handleTextDblClick: (id: string) => void
+    handleLabelDblClick: (id: string) => void
   }
+
+  // Label editing
+  onStartLabelEdit: (id: string, type: CanvasItem['type']) => void
 }
 
 /**
@@ -98,6 +104,7 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
     promptEditing,
     imageGenPromptEditing,
     htmlGenPromptEditing,
+    onStartLabelEdit,
   } = props
 
   // 'T' hotkey to create and edit text block at cursor, or edit selected text
@@ -256,6 +263,39 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, selectedIds, items, loadedImages, setCroppingImageId, setPendingCropRect, startVideoCrop, croppingImageId, croppingVideoId, applyCrop, applyOrCancelVideoCrop, setEditingTextId, textareaRef, promptEditing, imageGenPromptEditing, htmlGenPromptEditing])
+
+  // F2 hotkey to start label editing on the selected item
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (e.key !== 'F2' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
+      if (isEditing) return
+      if (selectedIds.length !== 1) return
+
+      const selectedItem = items.find(item => item.id === selectedIds[0])
+      if (!selectedItem) return
+
+      const type = selectedItem.type
+      if (type === 'image' || type === 'video' || type === 'pdf' || type === 'text-file') {
+        e.preventDefault()
+        onStartLabelEdit(selectedItem.id, type)
+      } else if (type === 'prompt') {
+        e.preventDefault()
+        promptEditing.handleLabelDblClick(selectedItem.id)
+      } else if (type === 'image-gen-prompt') {
+        e.preventDefault()
+        imageGenPromptEditing.handleLabelDblClick(selectedItem.id)
+      } else if (type === 'html-gen-prompt') {
+        e.preventDefault()
+        htmlGenPromptEditing.handleLabelDblClick(selectedItem.id)
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, selectedIds, items, onStartLabelEdit, promptEditing, imageGenPromptEditing, htmlGenPromptEditing])
 
   // Ctrl+D hotkey to download selected items (image, video, text-file, pdf)
   useEffect(() => {
