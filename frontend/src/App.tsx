@@ -16,6 +16,7 @@ import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
 import { usePromptExecution } from './hooks/usePromptExecution'
 import { useCodingRobotManager } from './hooks/useCodingRobotManager'
 import { useItemUpload } from './hooks/useItemUpload'
+import { useFileDrop } from './hooks/useFileDrop'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
@@ -34,12 +35,7 @@ import {
 } from './services/itemFactory'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
-import { isVideoFile } from './api/videos'
 import { uploadImage } from './api/images'
-import { uploadPdf, uploadPdfThumbnail } from './api/pdfs'
-import { uploadTextFile } from './api/textfiles'
-import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
-import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
@@ -77,7 +73,6 @@ function App() {
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const canvasRef = useRef<CanvasHandle>(null)
-  const pendingDropFilesRef = useRef<File[]>([])
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const [authRequired, setAuthRequired] = useState(false)
@@ -970,6 +965,11 @@ function App() {
     addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt,
   })
 
+  const { handleEmptyStateDrop } = useFileDrop({
+    activeSceneId, isOffline, startOperation, endOperation,
+    addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt,
+  })
+
   const updateItem = useCallback(
     (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => {
       const item = items.find((i) => i.id === id)
@@ -1569,122 +1569,6 @@ function App() {
     }
   }, [activeSceneId, isLoading, checkRemoteChanges])
 
-  // Process pending drop files when a scene becomes active
-  useEffect(() => {
-    if (!activeSceneId || pendingDropFilesRef.current.length === 0) return
-
-    const files = pendingDropFilesRef.current
-    pendingDropFilesRef.current = []
-
-    // Process each file
-    const processFiles = async () => {
-      let offsetIndex = 0
-      const centerX = 400
-      const centerY = 300
-
-      for (const file of files) {
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader()
-          const fileName = file.name
-          const fileSize = file.size
-
-          reader.onload = async (event) => {
-            const dataUrl = event.target?.result as string
-            const img = new window.Image()
-            img.onload = async () => {
-              // Scale down large images
-              const maxDim = 800
-              let width = img.width
-              let height = img.height
-              if (width > maxDim || height > maxDim) {
-                const scale = maxDim / Math.max(width, height)
-                width = Math.round(width * scale)
-                height = Math.round(height * scale)
-              }
-              const name = fileName.replace(/\.[^/.]+$/, '')
-              const originalWidth = img.naturalWidth
-              const originalHeight = img.naturalHeight
-
-              // Generate item ID upfront so it matches the uploaded file
-              const itemId = uuidv4()
-
-              try {
-                startOperation()
-                const s3Url = await uploadImage(dataUrl, activeSceneId!, itemId, fileName || `dropped-${Date.now()}.png`)
-                endOperation()
-                addImageAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, width, height, name, originalWidth, originalHeight, fileSize)
-              } catch (err) {
-                endOperation()
-                console.error('Failed to upload image:', err)
-                addImageAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, width, height, name, originalWidth, originalHeight, fileSize)
-              }
-            }
-            img.src = dataUrl
-          }
-          reader.readAsDataURL(file)
-          offsetIndex++
-        } else if (isVideoFile(file)) {
-          // Delegate to handleUploadVideoAt which handles placeholders
-          handleUploadVideoAt(file, centerX + offsetIndex * 20, centerY + offsetIndex * 20)
-          offsetIndex++
-        } else if (file.type === 'application/pdf') {
-          const reader = new FileReader()
-          const fileName = file.name
-          const fileSize = file.size
-          reader.onload = async (event) => {
-            const dataUrl = event.target?.result as string
-            const name = fileName.replace(/\.[^/.]+$/, '')
-            const itemId = uuidv4()
-            try {
-              startOperation()
-              const s3Url = await uploadPdf(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.pdf`)
-              let thumbnailSrc: string | undefined
-              try {
-                const proxyUrl = `/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/content-data?contentId=${itemId}&contentType=pdf`
-                const thumb = await renderPdfPageToDataUrl(proxyUrl, 1, PDF_MINIMIZED_HEIGHT * 4)
-                thumbnailSrc = await uploadPdfThumbnail(thumb.dataUrl, activeSceneId!, itemId)
-              } catch (thumbErr) {
-                console.error('Failed to generate/upload PDF thumbnail:', thumbErr)
-              }
-              endOperation()
-              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 700, name, fileSize, thumbnailSrc)
-            } catch (err) {
-              endOperation()
-              console.error('Failed to upload PDF:', err)
-              addPdfAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 700, name, fileSize)
-            }
-          }
-          reader.readAsDataURL(file)
-          offsetIndex++
-        } else if (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name)) {
-          const reader = new FileReader()
-          const fileName = file.name
-          const fileSize = file.size
-          const fileFormat = getTextFileFormat(fileName) || 'txt'
-          reader.onload = async (event) => {
-            const dataUrl = event.target?.result as string
-            const name = fileName
-            const itemId = uuidv4()
-            try {
-              startOperation()
-              const s3Url = await uploadTextFile(dataUrl, activeSceneId!, itemId, fileName || `document-${Date.now()}.${fileFormat}`, fileFormat)
-              endOperation()
-              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, s3Url, 600, 500, name, fileSize, fileFormat)
-            } catch (err) {
-              endOperation()
-              console.error('Failed to upload text file:', err)
-              addTextFileAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20, dataUrl, 600, 500, name, fileSize, fileFormat)
-            }
-          }
-          reader.readAsDataURL(file)
-          offsetIndex++
-        }
-      }
-    }
-
-    processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt])
-
   if (authRequired && !authenticated) {
     return <LoginScreen serverName={serverName} onSuccess={handleLoginSuccess} />
   }
@@ -1813,16 +1697,7 @@ function App() {
             e.preventDefault()
             e.dataTransfer.dropEffect = 'copy'
           }}
-          onDrop={async (e) => {
-            e.preventDefault()
-            const files = Array.from(e.dataTransfer.files)
-            const mediaFiles = files.filter(f => f.type.startsWith('image/') || isVideoFile(f))
-            if (mediaFiles.length === 0) return
-
-            // Store files and create a new scene
-            pendingDropFilesRef.current = mediaFiles
-            await addScene()
-          }}
+          onDrop={(e) => handleEmptyStateDrop(e, addScene)}
         >
           <div>No scene open. Use File &gt; Open Scene... to open a scene, or click + to create a new one.</div>
           <div style={{ fontSize: '0.9em', marginTop: '8px' }}>Or drag and drop images/videos here to create a new scene.</div>
