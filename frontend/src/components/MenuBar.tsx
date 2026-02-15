@@ -66,7 +66,7 @@ function MenuBar({
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
-  onAddCodingRobot,
+  onAddCodingRobot: _onAddCodingRobot,
   onUndo,
   onRedo,
   canUndo,
@@ -144,7 +144,7 @@ function MenuBar({
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },
-        { label: 'Coding Robot', onClick: onAddCodingRobot },
+        // { label: 'Coding Robot', onClick: onAddCodingRobot },
       ],
     },
     {

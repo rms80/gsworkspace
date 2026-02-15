@@ -21,7 +21,7 @@ export default function CanvasContextMenu({
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
-  onAddCodingRobot,
+  onAddCodingRobot: _onAddCodingRobot,
   onClose,
 }: CanvasContextMenuProps) {
   const [newSubmenuOpen, setNewSubmenuOpen] = useState(false)
@@ -119,14 +119,14 @@ export default function CanvasContextMenu({
             >
               HTMLGen Prompt
             </button>
-            <button
+            {/* <button
               onClick={() => { onAddCodingRobot?.(canvasPosition?.x, canvasPosition?.y); onClose() }}
               style={buttonStyle}
               onMouseEnter={hoverOn}
               onMouseLeave={hoverOff}
             >
               Coding Robot
-            </button>
+            </button> */}
           </div>
         )}
       </div>
