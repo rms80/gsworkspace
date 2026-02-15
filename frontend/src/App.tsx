@@ -19,10 +19,7 @@ import { useItemUpload } from './hooks/useItemUpload'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
-import { generateImage, generateHtml, generateHtmlTitle, ContentItem } from './api/llm'
 import { deleteActivity } from './utils/activityStorage'
-import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
-import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
 import {
   createTextItem,
@@ -35,8 +32,6 @@ import {
   createPdfItem,
   createTextFileItem,
 } from './services/itemFactory'
-import DOMPurify from 'dompurify'
-import { config } from './config'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { isVideoFile } from './api/videos'
@@ -47,7 +42,6 @@ import { renderPdfPageToDataUrl } from './utils/pdfThumbnail'
 import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from './constants/canvas'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
-import { playNotificationSound } from './utils/sound'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
   HistoryStack,
@@ -1201,223 +1195,12 @@ function App() {
     [activeSceneId, selectionMap, pushChange]
   )
 
-  const { handleRunPrompt } = usePromptExecution({
+  const { handleRunPrompt, handleRunImageGenPrompt, handleRunHtmlGenPrompt } = usePromptExecution({
     items, selectedIds, activeSceneId, isOffline,
     updateActiveSceneItems, setRunningPromptIds,
+    setRunningImageGenPromptIds, setRunningHtmlGenPromptIds,
+    setDebugContent,
   })
-
-  const handleRunImageGenPrompt = useCallback(async (promptId: string) => {
-    const promptItem = items.find((item) => item.id === promptId && item.type === 'image-gen-prompt')
-    if (!promptItem || promptItem.type !== 'image-gen-prompt') return
-
-    // Mark prompt as running
-    setRunningImageGenPromptIds((prev) => new Set(prev).add(promptId))
-
-    // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
-
-    // Convert to ContentItem format for the API
-    const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
-      if (item.type === 'text') {
-        return { type: 'text' as const, text: item.text }
-      } else if (item.type === 'image') {
-        if (isOffline) {
-          // Offline mode: send src data URL directly to client-side LLM
-          let src = item.src
-          if (item.cropRect && activeSceneId) {
-            try {
-              src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect)
-            } catch (err) {
-              console.error('Failed to crop image for LLM, using original:', err)
-            }
-          }
-          return { type: 'image' as const, src }
-        }
-        // Online mode: send ID so backend resolves from storage
-        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
-      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt') {
-        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
-      }
-      return { type: 'text' as const, text: '' }
-    }))).filter((item) => item.text || item.src || item.id)
-
-    try {
-      const images = await generateImage(contentItems, promptItem.text, promptItem.model)
-
-      // Position outputs to the right of the prompt, stacked vertically
-      const outputX = promptItem.x + promptItem.width + 20
-
-      // Find existing outputs to the right to stack below them
-      const existingOutputsToRight = items.filter(item =>
-        item.x >= outputX - 10 &&
-        item.x <= outputX + 10 &&
-        item.y >= promptItem.y - 10
-      )
-      const startY = existingOutputsToRight.length > 0
-        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
-        : promptItem.y
-
-      // Create new image items for each generated image
-      // Load each image to get its actual dimensions, then stack vertically
-      let currentY = startY
-      const newItems: CanvasItem[] = []
-
-      // Find the largest selected image to use as target size
-      const selectedImages = selectedItems.filter((item): item is typeof item & { type: 'image' } => item.type === 'image')
-      let targetSize = 400 // default max size
-      if (selectedImages.length > 0) {
-        // Find the largest displayed dimension among selected images
-        targetSize = Math.max(...selectedImages.map(img => {
-          const displayedWidth = img.width * (img.scaleX ?? 1)
-          const displayedHeight = img.height * (img.scaleY ?? 1)
-          return Math.max(displayedWidth, displayedHeight)
-        }))
-      }
-
-      for (const dataUrl of images) {
-        const item = await new Promise<CanvasItem>((resolve) => {
-          const img = new window.Image()
-          img.onload = () => {
-            // Scale to match selected image size, or default max size
-            let width = img.width
-            let height = img.height
-            if (width > targetSize || height > targetSize) {
-              const scale = targetSize / Math.max(width, height)
-              width = Math.round(width * scale)
-              height = Math.round(height * scale)
-            }
-            resolve({
-              id: uuidv4(),
-              type: 'image' as const,
-              x: outputX,
-              y: currentY,
-              src: dataUrl,
-              width,
-              height,
-            })
-          }
-          img.onerror = () => {
-            // Fallback to default size if image fails to load
-            resolve({
-              id: uuidv4(),
-              type: 'image' as const,
-              x: outputX,
-              y: currentY,
-              src: dataUrl,
-              width: 200,
-              height: 200,
-            })
-          }
-          img.src = dataUrl
-        })
-        newItems.push(item)
-        currentY = item.y + item.height + 20
-      }
-
-      if (newItems.length > 0) {
-        updateActiveSceneItems((prev) => [...prev, ...newItems])
-      } else {
-        alert('No images were generated. The model may not have produced any image output.')
-      }
-
-      playNotificationSound()
-    } catch (error) {
-      playNotificationSound('failure')
-      console.error('Failed to run image generation prompt:', error)
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to generate image: ${message}`)
-    } finally {
-      // Mark prompt as no longer running
-      setRunningImageGenPromptIds((prev) => {
-        const next = new Set(prev)
-        next.delete(promptId)
-        return next
-      })
-    }
-  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
-
-  const handleRunHtmlGenPrompt = useCallback(async (promptId: string) => {
-    const promptItem = items.find((item) => item.id === promptId && item.type === 'html-gen-prompt')
-    if (!promptItem || promptItem.type !== 'html-gen-prompt') return
-
-    // Mark prompt as running
-    setRunningHtmlGenPromptIds((prev) => new Set(prev).add(promptId))
-
-    // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
-
-    // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
-    const { spatialData, imageMap } = convertItemsToSpatialJson(selectedItems)
-
-    // Update debug panel with request payload
-    const debugPayload = {
-      spatialData,
-      userPrompt: promptItem.text,
-      model: promptItem.model,
-      imageMapKeys: Array.from(imageMap.keys()),
-    }
-    setDebugContent(JSON.stringify(debugPayload, null, 2))
-
-    try {
-      let html = await generateHtml(spatialData, promptItem.text, promptItem.model)
-
-      // Replace image placeholder IDs with actual source URLs
-      html = replaceImagePlaceholders(html, imageMap)
-
-      // Sanitize LLM-generated HTML
-      if (config.features.sanitizeHtml) {
-        html = DOMPurify.sanitize(html, {
-          WHOLE_DOCUMENT: true,
-          ADD_TAGS: ['style', 'link', 'meta', '#comment'],
-          ADD_ATTR: ['charset', 'content'],
-          FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
-        })
-      }
-
-      // Position output to the right of the prompt, aligned with top
-      // Find existing outputs to stack vertically
-      const outputX = promptItem.x + promptItem.width + 20
-      const existingOutputsToRight = items.filter(item =>
-        item.x >= outputX - 10 &&
-        item.x <= outputX + 10 &&
-        item.y >= promptItem.y - 10
-      )
-      const outputY = existingOutputsToRight.length > 0
-        ? Math.max(...existingOutputsToRight.map(item => item.y + item.height)) + 20
-        : promptItem.y
-
-      // Generate title before creating item so it's saved properly
-      const title = await generateHtmlTitle(html)
-
-      // Create new HtmlItem with result
-      const newItem: CanvasItem = {
-        id: uuidv4(),
-        type: 'html',
-        label: title,
-        x: outputX,
-        y: outputY,
-        html: html,
-        width: 800,
-        height: 600,
-        zoom: 0.75,
-      }
-      updateActiveSceneItems((prev) => [...prev, newItem])
-
-      playNotificationSound()
-    } catch (error) {
-      playNotificationSound('failure')
-      console.error('Failed to run HTML gen prompt:', error)
-      const message = error instanceof Error ? error.message : 'Unknown error'
-      alert(`Failed to generate HTML: ${message}`)
-    } finally {
-      // Mark prompt as no longer running
-      setRunningHtmlGenPromptIds((prev) => {
-        const next = new Set(prev)
-        next.delete(promptId)
-        return next
-      })
-    }
-  }, [items, selectedIds, updateActiveSceneItems])
 
   // Export current scene to ZIP
   const handleExportScene = useCallback(async () => {
