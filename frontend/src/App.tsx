@@ -24,6 +24,7 @@ import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { deleteActivity } from './utils/activityStorage'
+import { getCodingRobotEnabled } from './utils/experimentalSettings'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
 import {
   createTextItem,
@@ -105,6 +106,14 @@ function App() {
     debugContent, setDebugContent,
     handleOpenSceneDialog, handleCreateWorkspace, handleSwitchWorkspace,
   } = useDialogManager()
+
+  const [codingRobotEnabled, setCodingRobotEnabledState] = useState(getCodingRobotEnabled)
+  // Re-read experimental settings when settings dialog closes
+  useEffect(() => {
+    if (!settingsDialogOpen) {
+      setCodingRobotEnabledState(getCodingRobotEnabled())
+    }
+  }, [settingsDialogOpen])
 
   const { deleteViewport, clearViewports, reloadViewports } = useViewportManager({
     activeSceneId, isLoading, storageMode, canvasRef,
@@ -1407,7 +1416,7 @@ function App() {
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
-        onAddCodingRobot={addCodingRobotItem}
+        onAddCodingRobot={codingRobotEnabled ? addCodingRobotItem : undefined}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={canUndo}
@@ -1497,7 +1506,7 @@ function App() {
           onAddPrompt={addPromptItem}
           onAddImageGenPrompt={addImageGenPromptItem}
           onAddHtmlGenPrompt={addHtmlGenPromptItem}
-          onAddCodingRobot={addCodingRobotItem}
+          onAddCodingRobot={codingRobotEnabled ? addCodingRobotItem : undefined}
           videoPlaceholders={videoPlaceholders}
           onUploadVideoAt={handleUploadVideoAt}
           onAddPdfAt={addPdfAt}

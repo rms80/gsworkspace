@@ -11,7 +11,7 @@ interface MenuBarProps {
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
-  onAddCodingRobot: () => void
+  onAddCodingRobot?: () => void
   onUndo: () => void
   onRedo: () => void
   canUndo: boolean
@@ -66,7 +66,7 @@ function MenuBar({
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
-  onAddCodingRobot: _onAddCodingRobot,
+  onAddCodingRobot,
   onUndo,
   onRedo,
   canUndo,
@@ -144,7 +144,7 @@ function MenuBar({
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },
-        // { label: 'Coding Robot', onClick: onAddCodingRobot },
+        ...(onAddCodingRobot ? [{ label: 'Coding Robot', onClick: onAddCodingRobot }] : []),
       ],
     },
     {
