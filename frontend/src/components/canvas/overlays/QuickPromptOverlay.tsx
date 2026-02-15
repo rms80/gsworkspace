@@ -6,6 +6,7 @@ export type QuickPromptMode = 'prompt' | 'image-gen-prompt'
 interface QuickPromptOverlayProps {
   mode: QuickPromptMode
   screenPos: { x: number; y: number }
+  contextSummaryLines?: string[]
   onRun: (text: string) => void
   onRunAndSave: (text: string) => void
   onClose: () => void
@@ -14,6 +15,7 @@ interface QuickPromptOverlayProps {
 export default function QuickPromptOverlay({
   mode,
   screenPos,
+  contextSummaryLines,
   onRun,
   onRunAndSave,
   onClose,
@@ -127,6 +129,23 @@ export default function QuickPromptOverlay({
         >
           {title}
         </div>
+
+        {/* Context summary */}
+        {contextSummaryLines && contextSummaryLines.length > 0 && contextSummaryLines[0] !== 'No context selected' && (
+          <div
+            style={{
+              padding: '4px 12px',
+              fontSize: 11,
+              fontFamily: 'sans-serif',
+              color: theme.headerText,
+              backgroundColor: theme.headerBg,
+              opacity: 0.8,
+              borderTop: `1px solid ${theme.border}`,
+            }}
+          >
+            Context: {contextSummaryLines.join(', ')}
+          </div>
+        )}
 
         {/* Textarea */}
         <textarea
