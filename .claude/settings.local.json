@@ -42,7 +42,8 @@
       "Bash(npx kill-port:*)",
       "Bash(taskkill /F /FI \"WINDOWTITLE eq *tsx*\")",
       "Bash(ls:*)",
-      "Bash(wmic:*)"
+      "Bash(wmic:*)",
+      "Bash(git mv:*)"
     ]
   }
 }
