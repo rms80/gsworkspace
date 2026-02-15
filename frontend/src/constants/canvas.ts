@@ -87,6 +87,8 @@ export interface PromptThemeColors {
   pulseBorder: { base: [number, number, number]; delta: [number, number, number] }
   // Pulse: run button color range
   pulseRunButton: { base: [number, number, number]; delta: [number, number, number] }
+  // Pulse: header background color range (optional — header stays static if absent)
+  pulseHeader?: { base: [number, number, number]; delta: [number, number, number] }
   // Editing overlay colors
   inputBorder: string
   inputBg: string
@@ -148,6 +150,7 @@ export const CODING_ROBOT_THEME: PromptThemeColors = {
   runButton: '#22c55e',
   pulseBorder: { base: [138, 138, 138], delta: [60, 60, 60] },
   pulseRunButton: { base: [100, 100, 100], delta: [60, 60, 60] },
+  pulseHeader: { base: [176, 176, 176], delta: [60, 60, 60] },
   inputBorder: '#8a8a8a',
   inputBg: '#b0b0b0',
   inputText: '#2a2a2a',

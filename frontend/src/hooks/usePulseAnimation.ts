@@ -45,11 +45,12 @@ export function usePulseAnimation({
   }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size, runningCodingRobotIds.size])
 
   // Force Konva layer redraw when pulse phase changes
+  const anyRunning = runningPromptIds.size + runningImageGenPromptIds.size + runningHtmlGenPromptIds.size + runningCodingRobotIds.size
   useEffect(() => {
-    if (runningPromptIds.size > 0 && layerRef.current) {
+    if (anyRunning > 0 && layerRef.current) {
       layerRef.current.batchDraw()
     }
-  }, [pulsePhase, runningPromptIds.size])
+  }, [pulsePhase, anyRunning])
 
   return { pulsePhase }
 }

@@ -29,10 +29,15 @@ export default function CodingRobotItemRenderer({
   setCodingRobotItemTransforms,
 }: CodingRobotItemRendererProps) {
   const theme = CODING_ROBOT_THEME
+  const pulseIntensity = isRunning ? (Math.sin(pulsePhase) + 1) / 2 : 0
 
   const borderColor = isRunning
-    ? getPulseColor(pulsePhase, theme.pulseBorder)
+    ? getPulseColor(pulseIntensity, theme.pulseBorder)
     : isSelected ? COLOR_SELECTED : theme.border
+
+  const headerFill = isRunning && theme.pulseHeader
+    ? getPulseColor(pulseIntensity, theme.pulseHeader)
+    : theme.headerBg
 
   return (
     <Group
@@ -103,9 +108,9 @@ export default function CodingRobotItemRenderer({
       <Rect
         width={item.width}
         height={CODING_ROBOT_HEADER_HEIGHT}
-        fill={theme.headerBg}
+        fill={headerFill}
         stroke={borderColor}
-        strokeWidth={isSelected ? 2 : 1}
+        strokeWidth={isRunning ? 2 + pulseIntensity : (isSelected ? 2 : 1)}
         cornerRadius={[4, 4, 0, 0]}
       />
       {/* Label */}
