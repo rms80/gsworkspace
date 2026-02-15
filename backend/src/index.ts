@@ -200,9 +200,23 @@ async function start() {
     await initializeStorage()
   }
 
-  app.listen(PORT, () => {
-    console.log(`Server running on http://localhost:${PORT}`)
-  })
+  function tryListen() {
+    const server = app.listen(PORT, () => {
+      console.log(`Server running on http://localhost:${PORT}`)
+    })
+
+    server.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`Port ${PORT} in use, retrying in 2s...`)
+        server.close()
+        setTimeout(tryListen, 2000)
+      } else {
+        throw err
+      }
+    })
+  }
+
+  tryListen()
 }
 
 start().catch(console.error)

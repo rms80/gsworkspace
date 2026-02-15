@@ -128,10 +128,10 @@ export async function generateWithClaudeCode(
             const shortModel = model
               .replace(/^claude-/, '')
               .replace(/-\d{8}$/, '')
-            const parts = [`${usage.inputTokens.toLocaleString()}in`, `${usage.outputTokens.toLocaleString()}out`]
+            const parts = [`${usage.inputTokens.toLocaleString()} in`, `${usage.outputTokens.toLocaleString()} out`]
             // Include cache tokens if present
-            if (usage.cacheReadInputTokens > 0) parts.push(`${usage.cacheReadInputTokens.toLocaleString()}cache-read`)
-            if (usage.cacheCreationInputTokens > 0) parts.push(`${usage.cacheCreationInputTokens.toLocaleString()}cache-write`)
+            if (usage.cacheReadInputTokens > 0) parts.push(`${usage.cacheReadInputTokens.toLocaleString()} cache-read`)
+            if (usage.cacheCreationInputTokens > 0) parts.push(`${usage.cacheCreationInputTokens.toLocaleString()} cache-write`)
             modelLines.push(`  ${shortModel}: ${parts.join(' / ')}`)
           }
 

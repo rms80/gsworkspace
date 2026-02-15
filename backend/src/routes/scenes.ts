@@ -421,9 +421,7 @@ router.post('/:id', async (req, res) => {
             console.error(`Rejected image URL for item ${item.id}: ${validation.reason}`)
           } else {
             if (validation.type === 's3') {
-              console.log(`Processing S3 image URL for item ${item.id}`)
             } else if (validation.type === 'local') {
-              console.log(`Processing local image URL for item ${item.id}`)
             }
 
             // Check if the image is already in this scene folder (skip re-upload)
@@ -538,9 +536,7 @@ router.post('/:id', async (req, res) => {
             console.error(`Rejected video URL for item ${item.id}: ${validation.reason}`)
           } else {
             if (validation.type === 's3') {
-              console.log(`Processing S3 video URL for item ${item.id}`)
             } else if (validation.type === 'local') {
-              console.log(`Processing local video URL for item ${item.id}`)
             }
 
             // Check if the video is already in this scene folder (skip re-upload)

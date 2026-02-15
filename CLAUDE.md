@@ -87,6 +87,9 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 
 - Do not push the main branch unless I tell you to. Also before pushing to the main branch, run a full npm build to catch any errors.
 
+- When starting or restarting the backend dev server, pipe its output to `backend.log` in the repo root:
+  `cd /d/git/workspaceapp/backend && npm run dev >> ../backend.log 2>&1`
+
 
 
 ## Claude Memory

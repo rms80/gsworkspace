@@ -5,6 +5,25 @@ const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 })
 
+function truncatePrompt(text: string, maxWords = 50): string {
+  const words = text.split(/\s+/)
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ') + '...'
+}
+
+function logRequest(fn: string, model: string, modelId: string, prompt: string) {
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
+}
+
+function logResponse(fn: string, message: Anthropic.Message) {
+  const usage = message.usage as unknown as Record<string, number>
+  const parts = [`${usage.input_tokens} in`, `${usage.output_tokens} out`]
+  if (usage.cache_read_input_tokens) parts.push(`${usage.cache_read_input_tokens} cache-read`)
+  if (usage.cache_creation_input_tokens) parts.push(`${usage.cache_creation_input_tokens} cache-write`)
+  const resultLen = message.content.find((b) => b.type === 'text')?.text?.length ?? 0
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] ${fn} | stop=${message.stop_reason} | tokens: ${parts.join(' / ')} | result: ${resultLen} chars`)
+}
+
 export type ClaudeModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
 
 const MODEL_IDS: Record<ClaudeModel, string> = {
@@ -61,6 +80,8 @@ export async function generateText(
     text: `\n\nUser request: ${prompt}`,
   })
 
+  logRequest('generateText', model, MODEL_IDS[model], prompt)
+
   const message = await anthropic.messages.create({
     model: MODEL_IDS[model],
     max_tokens: 4096,
@@ -72,6 +93,8 @@ export async function generateText(
     ],
   })
 
+  logResponse('generateText', message)
+
   // Extract text from response
   const textContent = message.content.find((block) => block.type === 'text')
   return textContent?.type === 'text' ? textContent.text : ''
@@ -82,6 +105,8 @@ export async function generateHtmlWithClaude(
   userPrompt: string,
   model: ClaudeModel = 'claude-sonnet'
 ): Promise<string> {
+  logRequest('generateHtml', model, MODEL_IDS[model], userPrompt)
+
   const message = await anthropic.messages.create({
     model: MODEL_IDS[model],
     max_tokens: 8192,
@@ -93,6 +118,8 @@ export async function generateHtmlWithClaude(
       },
     ],
   })
+
+  logResponse('generateHtml', message)
 
   // Extract text from response
   const textContent = message.content.find((block) => block.type === 'text')

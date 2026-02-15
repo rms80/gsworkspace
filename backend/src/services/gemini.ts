@@ -3,6 +3,22 @@ import { ResolvedContentItem } from './llmTypes.js'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
 
+function truncatePrompt(text: string, maxWords = 50): string {
+  const words = text.split(/\s+/)
+  if (words.length <= maxWords) return text
+  return words.slice(0, maxWords).join(' ') + '...'
+}
+
+function logRequest(fn: string, model: string, modelId: string, prompt: string) {
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
+}
+
+function logResponse(fn: string, response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }, resultLen: number) {
+  const meta = response.usageMetadata
+  const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] ${fn} | tokens: ${tokens} | result: ${resultLen} chars`)
+}
+
 export type GeminiModel = 'gemini-flash' | 'gemini-pro'
 export type ImageGenModel = 'gemini-imagen' | 'gemini-flash-imagen'
 
@@ -21,6 +37,8 @@ export async function generateHtmlWithGemini(
   userPrompt: string,
   model: GeminiModel = 'gemini-flash'
 ): Promise<string> {
+  logRequest('generateHtml', model, MODEL_IDS[model], userPrompt)
+
   const genModel = genAI.getGenerativeModel({
     model: MODEL_IDS[model],
     systemInstruction: systemPrompt,
@@ -28,7 +46,9 @@ export async function generateHtmlWithGemini(
 
   const result = await genModel.generateContent(userPrompt)
   const response = await result.response
-  return response.text()
+  const text = response.text()
+  logResponse('generateHtml', response, text.length)
+  return text
 }
 
 export async function generateTextWithGemini(
@@ -66,9 +86,13 @@ export async function generateTextWithGemini(
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })
 
+  logRequest('generateText', model, MODEL_IDS[model], prompt)
+
   const result = await genModel.generateContent(parts)
   const response = await result.response
-  return response.text()
+  const text = response.text()
+  logResponse('generateText', response, text.length)
+  return text
 }
 
 export interface GeneratedImage {
@@ -116,6 +140,8 @@ export async function generateImageWithGemini(
   // Add the user's prompt
   parts.push({ text: `\n\nUser request: ${prompt}` })
 
+  logRequest('generateImage', model, IMAGE_GEN_MODEL_IDS[model], prompt)
+
   const result = await genModel.generateContent(parts)
   const response = await result.response
 
@@ -132,5 +158,8 @@ export async function generateImageWithGemini(
     }
   }
 
+  const meta = response.usageMetadata
+  const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] generateImage | tokens: ${tokens} | result: ${images.length} images`)
   return images
 }
