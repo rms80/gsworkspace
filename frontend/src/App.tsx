@@ -1,15 +1,15 @@
-import { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import InfiniteCanvas, { CanvasHandle } from './components/InfiniteCanvas'
 import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
-import OpenSceneDialog, { SceneInfo } from './components/OpenSceneDialog'
+import OpenSceneDialog from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
 import NewWorkspaceDialog from './components/NewWorkspaceDialog'
 import SwitchWorkspaceDialog from './components/SwitchWorkspaceDialog'
 import SettingsDialog from './components/SettingsDialog'
-import OfflineSplashDialog, { isOfflineSplashDismissed } from './components/OfflineSplashDialog'
-import StatusBar, { SaveStatus } from './components/StatusBar'
+import OfflineSplashDialog from './components/OfflineSplashDialog'
+import StatusBar from './components/StatusBar'
 import LoginScreen from './components/LoginScreen'
 import DebugPanel from './components/DebugPanel'
 import { useRemoteChangeDetection } from './hooks/useRemoteChangeDetection'
@@ -17,9 +17,12 @@ import { usePromptExecution } from './hooks/usePromptExecution'
 import { useCodingRobotManager } from './hooks/useCodingRobotManager'
 import { useItemUpload } from './hooks/useItemUpload'
 import { useFileDrop } from './hooks/useFileDrop'
+import { useDialogManager } from './hooks/useDialogManager'
+import { useViewportManager } from './hooks/useViewportManager'
+import { useAutoSave } from './hooks/useAutoSave'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
-import { saveScene, loadScene, listScenes, deleteScene, loadHistory, saveHistory, isOfflineMode, setOfflineMode, getSceneTimestamp, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { deleteActivity } from './utils/activityStorage'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
 import {
@@ -37,7 +40,7 @@ import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadImage } from './api/images'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames } from './utils/imageNames'
-import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace, loadViewports, saveViewports, ViewportState } from './utils/settings'
+import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
   HistoryStack,
@@ -73,7 +76,6 @@ function App() {
   const [openScenes, setOpenScenes] = useState<Scene[]>([])
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const canvasRef = useRef<CanvasHandle>(null)
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
   const [isLoading, setIsLoading] = useState(true)
   const [authRequired, setAuthRequired] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
@@ -81,36 +83,32 @@ function App() {
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
-  const [debugPanelOpen, setDebugPanelOpen] = useState(false)
-  const [debugContent, setDebugContent] = useState('')
   const [isOffline, setIsOffline] = useState(isOfflineMode())
   const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode())
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
   const [historyVersion, setHistoryVersion] = useState(0) // Used to trigger re-renders on history change
-  const [openSceneDialogOpen, setOpenSceneDialogOpen] = useState(false)
-  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false)
-  const [newWorkspaceDialogOpen, setNewWorkspaceDialogOpen] = useState(false)
-  const [switchWorkspaceDialogOpen, setSwitchWorkspaceDialogOpen] = useState(false)
-  const [offlineSplashOpen, setOfflineSplashOpen] = useState(() => isOfflineMode() && !isOfflineSplashDismissed())
-  const [availableScenes, setAvailableScenes] = useState<SceneInfo[]>([])
   const [isSaving, setIsSaving] = useState(false)
-  const saveTimeoutRef = useRef<number | null>(null)
-  const historySaveTimeoutRef = useRef<number | null>(null)
   const lastSavedRef = useRef<Map<string, string>>(new Map())
   const lastSavedHistoryRef = useRef<Map<string, string>>(new Map())
   const lastKnownServerModifiedAtRef = useRef<Map<string, string>>(new Map())
   const persistedSceneIdsRef = useRef<Set<string>>(new Set()) // Tracks scenes that have been saved to server
   const isHiddenWorkspaceRef = useRef(false) // Whether the current workspace is hidden (don't save as lastWorkspace)
-  const viewportMapRef = useRef<Map<string, ViewportState>>((() => {
-    const saved = loadViewports(getStorageMode())
-    const map = new Map<string, ViewportState>()
-    for (const [id, vp] of Object.entries(saved)) {
-      map.set(id, vp)
-    }
-    return map
-  })())
-  const prevActiveSceneIdRef = useRef<string | null>(null)
+
+  const {
+    openSceneDialogOpen, setOpenSceneDialogOpen, availableScenes,
+    settingsDialogOpen, setSettingsDialogOpen,
+    newWorkspaceDialogOpen, setNewWorkspaceDialogOpen,
+    switchWorkspaceDialogOpen, setSwitchWorkspaceDialogOpen,
+    offlineSplashOpen, setOfflineSplashOpen,
+    debugPanelOpen, setDebugPanelOpen,
+    debugContent, setDebugContent,
+    handleOpenSceneDialog, handleCreateWorkspace, handleSwitchWorkspace,
+  } = useDialogManager()
+
+  const { deleteViewport, clearViewports, reloadViewports } = useViewportManager({
+    activeSceneId, isLoading, storageMode, canvasRef,
+  })
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
   const items = activeScene?.items ?? []
@@ -146,6 +144,13 @@ function App() {
     lastKnownServerModifiedAt,
     isOffline,
     isSaving,
+  })
+
+  const { saveStatus, setSaveStatus } = useAutoSave({
+    activeScene, activeSceneId, isLoading, isOffline,
+    historyMap, historyVersion,
+    lastSavedRef, lastSavedHistoryRef, lastKnownServerModifiedAtRef, persistedSceneIdsRef,
+    setIsSaving, setConflict,
   })
 
   // Helper to push a change record to history
@@ -238,11 +243,7 @@ function App() {
         setSelectionMap(newSelectionMap)
 
         // Restore per-scene viewports from settings
-        const savedViewports = loadViewports(mode)
-        viewportMapRef.current.clear()
-        for (const [id, vp] of Object.entries(savedViewports)) {
-          viewportMapRef.current.set(id, vp)
-        }
+        reloadViewports(mode)
 
         // Restore active scene from settings if it's in the loaded scenes
         const loadedIds = scenesWithHistory.map(({ scene }) => scene.id)
@@ -263,7 +264,7 @@ function App() {
     } finally {
       setIsLoading(false)
     }
-  }, [isOffline])
+  }, [isOffline, reloadViewports])
 
   // Fetch backend storage mode on startup and load scenes
   useEffect(() => {
@@ -451,110 +452,8 @@ function App() {
     setAuthenticated(false)
     setOpenScenes([])
     setActiveSceneId(null)
-    viewportMapRef.current.clear()
-  }, [])
-
-  // Auto-save when active scene changes (debounced)
-  useEffect(() => {
-    if (!activeScene || isLoading) return
-
-    const sceneJson = JSON.stringify(activeScene)
-    const lastSaved = lastSavedRef.current.get(activeScene.id)
-
-    // Skip if nothing changed
-    if (sceneJson === lastSaved) return
-
-    // Mark as unsaved immediately when changes detected
-    setSaveStatus('unsaved')
-
-    // Clear any pending save
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-
-    // Debounce save by 1 second
-    saveTimeoutRef.current = window.setTimeout(async () => {
-      // Check for remote changes before saving (unless offline)
-      if (!isOffline) {
-        const lastKnown = lastKnownServerModifiedAtRef.current.get(activeScene.id)
-        if (lastKnown) {
-          try {
-            const remoteTimestamp = await getSceneTimestamp(activeScene.id)
-            if (remoteTimestamp && remoteTimestamp.modifiedAt !== lastKnown) {
-              // Remote has changed - don't save, show conflict dialog
-              setConflict(remoteTimestamp.modifiedAt)
-              setSaveStatus('unsaved')
-              return
-            }
-          } catch (error) {
-            // If we can't check, proceed with save (fail-open for UX)
-            console.error('Failed to check remote timestamp before save:', error)
-          }
-        }
-      }
-
-      setSaveStatus('saving')
-      setIsSaving(true)
-      try {
-        await saveScene(activeScene)
-        lastSavedRef.current.set(activeScene.id, JSON.stringify(activeScene))
-        // Update the known server timestamp to match what we just saved
-        lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
-        persistedSceneIdsRef.current.add(activeScene.id) // Mark as persisted
-        setSaveStatus('saved')
-      } catch (error) {
-        console.error('Failed to auto-save scene:', error)
-        setSaveStatus('error')
-      } finally {
-        setIsSaving(false)
-      }
-    }, 1000)
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current)
-      }
-    }
-  }, [activeScene, isLoading, isOffline, setConflict])
-
-  // Auto-save history when it changes (debounced)
-  useEffect(() => {
-    if (!activeSceneId || isLoading) return
-
-    // Only save history for scenes that have been persisted to the server
-    if (!persistedSceneIdsRef.current.has(activeSceneId)) return
-
-    const history = historyMap.get(activeSceneId)
-    if (!history) return
-
-    const serialized = history.serialize()
-    const historyJson = JSON.stringify(serialized)
-    const lastSaved = lastSavedHistoryRef.current.get(activeSceneId)
-
-    // Skip if nothing changed
-    if (historyJson === lastSaved) return
-
-    // Clear any pending save
-    if (historySaveTimeoutRef.current) {
-      clearTimeout(historySaveTimeoutRef.current)
-    }
-
-    // Debounce save by 2 seconds
-    historySaveTimeoutRef.current = window.setTimeout(async () => {
-      try {
-        await saveHistory(activeSceneId, serialized)
-        lastSavedHistoryRef.current.set(activeSceneId, JSON.stringify(serialized))
-      } catch (error) {
-        console.error('Failed to auto-save history:', error)
-      }
-    }, 2000)
-    
-    return () => {
-      if (historySaveTimeoutRef.current) {
-        clearTimeout(historySaveTimeoutRef.current)
-      }
-    }
-  }, [historyMap, historyVersion, activeSceneId, isLoading])
+    clearViewports()
+  }, [clearViewports])
 
   // Save open scene IDs and active scene to settings when they change
   useEffect(() => {
@@ -562,52 +461,6 @@ function App() {
     const openIds = openScenes.map((s) => s.id)
     saveOpenScenesToSettings(openIds, activeSceneId, storageMode)
   }, [openScenes, activeSceneId, isLoading, storageMode])
-
-  // Save/restore viewport on tab switch (useLayoutEffect runs before paint, avoiding flicker)
-  useLayoutEffect(() => {
-    if (isLoading) return
-    const prevId = prevActiveSceneIdRef.current
-
-    // Save previous scene's viewport
-    if (prevId && prevId !== activeSceneId && canvasRef.current) {
-      const vp = canvasRef.current.getViewport()
-      viewportMapRef.current.set(prevId, vp)
-    }
-
-    // Restore new scene's viewport (also restores on HMR re-mount when prevId === activeSceneId)
-    if (activeSceneId) {
-      const saved = viewportMapRef.current.get(activeSceneId)
-      if (saved && canvasRef.current) {
-        canvasRef.current.setViewport({ x: saved.x, y: saved.y }, saved.scale)
-      }
-    }
-
-    prevActiveSceneIdRef.current = activeSceneId
-  }, [activeSceneId, isLoading])
-
-  // Periodic viewport save to localStorage (every 5s) + beforeunload
-  useEffect(() => {
-    const saveCurrentViewport = () => {
-      if (activeSceneId && canvasRef.current) {
-        viewportMapRef.current.set(activeSceneId, canvasRef.current.getViewport())
-      }
-      // Convert map to record for persistence
-      const record: Record<string, ViewportState> = {}
-      viewportMapRef.current.forEach((vp, id) => {
-        record[id] = vp
-      })
-      saveViewports(record, storageMode)
-    }
-
-    const interval = setInterval(saveCurrentViewport, 5000)
-    window.addEventListener('beforeunload', saveCurrentViewport)
-
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('beforeunload', saveCurrentViewport)
-      saveCurrentViewport()
-    }
-  }, [activeSceneId, storageMode])
 
   // Undo handler
   const handleUndo = useCallback(() => {
@@ -795,7 +648,7 @@ function App() {
   }, [])
 
   const closeScene = useCallback((id: string) => {
-    viewportMapRef.current.delete(id)
+    deleteViewport(id)
     setOpenScenes((prev) => {
       const newScenes = prev.filter((s) => s.id !== id)
       // If closing the active scene, switch to another one
@@ -806,14 +659,14 @@ function App() {
       }
       return newScenes
     })
-  }, [activeSceneId])
+  }, [activeSceneId, deleteViewport])
 
   const handleDeleteScene = useCallback(async (id: string) => {
     try {
       await deleteScene(id)
       // Clean up the saved state tracking
       lastSavedRef.current.delete(id)
-      viewportMapRef.current.delete(id)
+      deleteViewport(id)
       // Remove from open scenes
       setOpenScenes((prev) => {
         const newScenes = prev.filter((s) => s.id !== id)
@@ -829,7 +682,7 @@ function App() {
       console.error('Failed to delete scene:', error)
       alert('Failed to delete scene')
     }
-  }, [activeSceneId])
+  }, [activeSceneId, deleteViewport])
 
   // Item management (operates on active scene)
   const addTextItem = useCallback((x?: number, y?: number) => {
@@ -1282,44 +1135,6 @@ function App() {
       console.error('Failed to import scene from folder:', error)
       alert('Failed to import scene. Make sure the folder contains a valid scene.json file.')
     }
-  }, [])
-
-  // Open the "Open Scene" dialog
-  const handleOpenSceneDialog = useCallback(async () => {
-    try {
-      const sceneList = await listScenes()
-      setAvailableScenes(sceneList)
-      setOpenSceneDialogOpen(true)
-    } catch (error) {
-      console.error('Failed to list scenes:', error)
-      alert('Failed to load scene list.')
-    }
-  }, [])
-
-  // Create a new workspace
-  const handleCreateWorkspace = useCallback(async (name: string, hidden: boolean) => {
-    try {
-      const response = await fetch('/api/workspaces', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, hidden }),
-      })
-      const data = await response.json()
-      if (!response.ok) {
-        alert(data.error || 'Failed to create workspace')
-        return
-      }
-      setNewWorkspaceDialogOpen(false)
-      // Navigate to the new workspace
-      window.location.href = `/${name}/`
-    } catch (error) {
-      console.error('Failed to create workspace:', error)
-      alert('Failed to create workspace')
-    }
-  }, [])
-
-  const handleSwitchWorkspace = useCallback((name: string) => {
-    window.location.href = `/${name}/`
   }, [])
 
   const handlePinCurrentScenes = useCallback(async () => {
