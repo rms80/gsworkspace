@@ -784,6 +784,8 @@ function MenuBar({
                   { shortcut: 'Y', action: 'New LLM prompt at cursor' },
                   { shortcut: 'Shift+Y', action: 'New ImageGen prompt at cursor' },
                   { shortcut: 'Ctrl+D', action: 'Download selected items' },
+                  { shortcut: 'Q', action: 'Quick LLM prompt at cursor' },
+                  { shortcut: 'Shift+Q', action: 'Quick ImageGen prompt at cursor' },
                   { shortcut: '', action: '' },
                   { shortcut: 'C', action: 'Center viewport at cursor' },
                   { shortcut: 'Shift+C', action: 'Center viewport on content (100%)' },

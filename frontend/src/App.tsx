@@ -1042,7 +1042,7 @@ function App() {
     [activeSceneId, selectionMap, pushChange]
   )
 
-  const { handleRunPrompt, handleRunImageGenPrompt, handleRunHtmlGenPrompt } = usePromptExecution({
+  const { handleRunPrompt, handleRunImageGenPrompt, handleRunHtmlGenPrompt, handleQuickPrompt, handleQuickImageGenPrompt } = usePromptExecution({
     items, selectedIds, activeSceneId, isOffline,
     updateActiveSceneItems, setRunningPromptIds,
     setRunningImageGenPromptIds, setRunningHtmlGenPromptIds,
@@ -1479,6 +1479,8 @@ function App() {
           onRunImageGenPrompt={handleRunImageGenPrompt}
           runningImageGenPromptIds={runningImageGenPromptIds}
           onRunHtmlGenPrompt={handleRunHtmlGenPrompt}
+          onQuickPrompt={handleQuickPrompt}
+          onQuickImageGenPrompt={handleQuickImageGenPrompt}
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
           onSendCodingRobotMessage={handleSendCodingRobotMessage}
           onStopCodingRobotMessage={handleStopCodingRobot}

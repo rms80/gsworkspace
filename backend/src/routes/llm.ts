@@ -386,14 +386,18 @@ router.post('/quick-query', async (req, res) => {
     }
 
     let result: string
+    let model: string
     if (process.env.ANTHROPIC_API_KEY) {
-      result = await generateText([], prompt, 'claude-haiku')
+      model = 'claude-haiku'
+      result = await generateText([], prompt, model)
     } else if (process.env.GEMINI_API_KEY) {
-      result = await generateTextWithGemini([], prompt, 'gemini-flash')
+      model = 'gemini-flash'
+      result = await generateTextWithGemini([], prompt, model)
     } else {
       return res.status(500).json({ error: 'No LLM API key configured on server. Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env.' })
     }
 
+    console.log(`[${new Date().toISOString().replace('T', ' ')}] [QuickQuery] [${model}] result: ${result}`)
     res.json({ result })
   } catch (error) {
     console.error('Error in quick query:', error)

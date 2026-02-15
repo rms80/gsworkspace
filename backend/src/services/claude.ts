@@ -12,7 +12,7 @@ function truncatePrompt(text: string, maxWords = 50): string {
 }
 
 function logRequest(fn: string, model: string, modelId: string, prompt: string) {
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] [request] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
 }
 
 function logResponse(fn: string, message: Anthropic.Message) {
@@ -21,7 +21,7 @@ function logResponse(fn: string, message: Anthropic.Message) {
   if (usage.cache_read_input_tokens) parts.push(`${usage.cache_read_input_tokens} cache-read`)
   if (usage.cache_creation_input_tokens) parts.push(`${usage.cache_creation_input_tokens} cache-write`)
   const resultLen = message.content.find((b) => b.type === 'text')?.text?.length ?? 0
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] ${fn} | stop=${message.stop_reason} | tokens: ${parts.join(' / ')} | result: ${resultLen} chars`)
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Claude] [response] ${fn} | stop=${message.stop_reason} | tokens: ${parts.join(' / ')} | result: ${resultLen} chars`)
 }
 
 export type ClaudeModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus'

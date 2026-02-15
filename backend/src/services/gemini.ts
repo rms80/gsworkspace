@@ -10,13 +10,13 @@ function truncatePrompt(text: string, maxWords = 50): string {
 }
 
 function logRequest(fn: string, model: string, modelId: string, prompt: string) {
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [request] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
 }
 
 function logResponse(fn: string, response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }, resultLen: number) {
   const meta = response.usageMetadata
   const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] ${fn} | tokens: ${tokens} | result: ${resultLen} chars`)
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [response] ${fn} | tokens: ${tokens} | result: ${resultLen} chars`)
 }
 
 export type GeminiModel = 'gemini-flash' | 'gemini-pro'
@@ -160,6 +160,6 @@ export async function generateImageWithGemini(
 
   const meta = response.usageMetadata
   const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] generateImage | tokens: ${tokens} | result: ${images.length} images`)
+  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [response] generateImage | tokens: ${tokens} | result: ${images.length} images`)
   return images
 }

@@ -69,6 +69,9 @@ interface UseKeyboardHandlersProps {
 
   // Label editing
   onStartLabelEdit: (id: string, type: CanvasItem['type']) => void
+
+  // Quick prompt
+  onOpenQuickPrompt: (mode: 'prompt' | 'image-gen-prompt', screenPos: { x: number; y: number }, canvasPos: { x: number; y: number }) => void
 }
 
 /**
@@ -105,6 +108,7 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
     imageGenPromptEditing,
     htmlGenPromptEditing,
     onStartLabelEdit,
+    onOpenQuickPrompt,
   } = props
 
   // 'T' hotkey to create and edit text block at cursor, or edit selected text
@@ -485,6 +489,33 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, screenToCanvas, mousePos, onAddPrompt, onAddImageGenPrompt, onSelectItems, promptEditing, imageGenPromptEditing])
+
+  // 'Q' hotkey to open quick prompt, Shift+Q for quick image-gen prompt
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === 'INPUT' ||
+        document.activeElement?.tagName === 'TEXTAREA'
+      ) return
+      if (isEditing) return
+
+      if (e.key === 'Q' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(mousePos.x, mousePos.y)
+        onOpenQuickPrompt('image-gen-prompt', { x: mousePos.x, y: mousePos.y }, canvasPos)
+        return
+      }
+
+      if (e.key === 'q' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        e.preventDefault()
+        const canvasPos = screenToCanvas(mousePos.x, mousePos.y)
+        onOpenQuickPrompt('prompt', { x: mousePos.x, y: mousePos.y }, canvasPos)
+        return
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [isEditing, screenToCanvas, mousePos, onOpenQuickPrompt])
 }
 
 /**

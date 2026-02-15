@@ -42,6 +42,7 @@ import CodingRobotOverlay from './canvas/overlays/CodingRobotOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
 import ImageCropOverlay from './canvas/overlays/ImageCropOverlay'
 import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
+import QuickPromptOverlay, { QuickPromptMode } from './canvas/overlays/QuickPromptOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
@@ -60,7 +61,7 @@ import {
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
-  PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME,
+  PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME, getPulseColor,
   LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
   TEXT_FILE_EXTENSION_PATTERN, getTextFileFormat,
 } from '../constants/canvas'
@@ -83,6 +84,8 @@ interface InfiniteCanvasProps {
   runningImageGenPromptIds: Set<string>
   onRunHtmlGenPrompt: (promptId: string) => void
   runningHtmlGenPromptIds: Set<string>
+  onQuickPrompt?: (text: string, outputPos: { x: number; y: number }, save: boolean) => Promise<void>
+  onQuickImageGenPrompt?: (text: string, outputPos: { x: number; y: number }, save: boolean) => Promise<void>
   onSendCodingRobotMessage: (itemId: string, message: string) => void
   onStopCodingRobotMessage?: (itemId: string) => void
   onClearCodingRobotChat?: (itemId: string) => void
@@ -112,7 +115,7 @@ export interface CanvasHandle {
   setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -142,6 +145,14 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
   // Conversion placeholders (video→GIF, GIF→video)
   const [conversionPlaceholders, setConversionPlaceholders] = useState<Array<{id: string, x: number, y: number, width: number, height: number, name: string}>>([])
+
+  // Quick prompt state
+  const [quickPrompt, setQuickPrompt] = useState<{ mode: QuickPromptMode; screenPos: { x: number; y: number }; canvasPos: { x: number; y: number } } | null>(null)
+
+  // Quick prompt generation placeholders
+  const [quickPromptPlaceholders, setQuickPromptPlaceholders] = useState<Array<{
+    id: string; x: number; y: number; width: number; height: number; type: 'text' | 'image'
+  }>>([])
 
   // Tooltip state for Run button
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null)
@@ -360,6 +371,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     imageGenPromptEditing,
     htmlGenPromptEditing,
     onStartLabelEdit: startLabelEdit,
+    onOpenQuickPrompt: (mode, screenPos, canvasPos) => {
+      setQuickPrompt({ mode, screenPos, canvasPos })
+    },
   })
 
   // 9. Menu state hooks
@@ -434,6 +448,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     runningImageGenPromptIds,
     runningHtmlGenPromptIds,
     runningCodingRobotIds,
+    quickPromptPlaceholderCount: quickPromptPlaceholders.length,
     layerRef,
   })
 
@@ -1408,6 +1423,38 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           </Group>
         ))}
 
+        {/* Quick prompt generation placeholders */}
+        {quickPromptPlaceholders.map((ph) => {
+          const pulseIntensity = (Math.sin(pulsePhase) + 1) / 2
+          const theme = ph.type === 'image' ? IMAGE_GEN_PROMPT_THEME : PROMPT_THEME
+          const strokeColor = getPulseColor(pulseIntensity, theme.pulseBorder)
+          const fillOpacity = 0.08 + 0.06 * pulseIntensity
+          return (
+            <Group key={`quickprompt-${ph.id}`} x={ph.x} y={ph.y}>
+              <Rect
+                width={ph.width}
+                height={ph.height}
+                fill={theme.border}
+                opacity={fillOpacity}
+                stroke={strokeColor}
+                strokeWidth={2 + pulseIntensity}
+                dash={[10, 5]}
+                cornerRadius={4}
+              />
+              <Text
+                text={ph.type === 'image' ? 'Generating image...' : 'Generating...'}
+                width={ph.width}
+                height={ph.height}
+                align="center"
+                verticalAlign="middle"
+                fill={strokeColor}
+                fontSize={16}
+                fontFamily="sans-serif"
+              />
+            </Group>
+          )
+        })}
+
         {/* Selection rectangle */}
         {selectionRect && (
           <Rect
@@ -2144,6 +2191,46 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       })()}
 
       {/* Tooltip for Run button */}
+      {/* Quick prompt overlay */}
+      {quickPrompt && (
+        <QuickPromptOverlay
+          mode={quickPrompt.mode}
+          screenPos={quickPrompt.screenPos}
+          onRun={(text) => {
+            const isImage = quickPrompt.mode === 'image-gen-prompt'
+            const pos = quickPrompt.canvasPos
+            const phId = 'qp_' + Date.now()
+            const ph = {
+              id: phId, x: pos.x, y: pos.y,
+              width: isImage ? 300 : 300, height: isImage ? 300 : 150,
+              type: (isImage ? 'image' : 'text') as 'text' | 'image',
+            }
+            setQuickPromptPlaceholders(prev => [...prev, ph])
+            const handler = isImage ? onQuickImageGenPrompt : onQuickPrompt
+            handler?.(text, pos, false)?.finally(() => {
+              setQuickPromptPlaceholders(prev => prev.filter(p => p.id !== phId))
+            })
+          }}
+          onRunAndSave={(text) => {
+            const isImage = quickPrompt.mode === 'image-gen-prompt'
+            const pos = quickPrompt.canvasPos
+            const promptWidth = 300
+            const phId = 'qp_' + Date.now()
+            const ph = {
+              id: phId, x: pos.x + promptWidth + 20, y: pos.y,
+              width: isImage ? 300 : 300, height: isImage ? 300 : 150,
+              type: (isImage ? 'image' : 'text') as 'text' | 'image',
+            }
+            setQuickPromptPlaceholders(prev => [...prev, ph])
+            const handler = isImage ? onQuickImageGenPrompt : onQuickPrompt
+            handler?.(text, pos, true)?.finally(() => {
+              setQuickPromptPlaceholders(prev => prev.filter(p => p.id !== phId))
+            })
+          }}
+          onClose={() => setQuickPrompt(null)}
+        />
+      )}
+
       {tooltip && (
         <div
           style={{

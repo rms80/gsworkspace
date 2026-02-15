@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { CanvasItem, TextFileItem, TextFileFormat } from '../types'
+import { CanvasItem, TextFileItem, TextFileFormat, PromptItem, ImageGenPromptItem } from '../types'
 import { generateFromPrompt, generateImage, generateHtml, ContentItem, generateHtmlTitle, quickLlmQuery } from '../api/llm'
 import { getCroppedImageDataUrl } from '../utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from '../utils/htmlDetection'
@@ -15,6 +15,17 @@ import { TEXTFILE_HEADER_HEIGHT } from '../constants/canvas'
 import { snapToGrid, getGridSize } from '../utils/grid'
 
 const TEXT_PADDING = 8
+
+/** Extract a short PascalCase name from an LLM response that may include preamble. */
+function extractShortName(response: string, fallback: string): string {
+  // Try each line from last to first — the actual name is usually the last line
+  const lines = response.trim().split('\n').filter(l => l.trim())
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const cleaned = lines[i].trim().replace(/[^a-zA-Z0-9]/g, '')
+    if (cleaned.length > 0 && cleaned.length <= 30) return cleaned
+  }
+  return fallback
+}
 
 /** Estimate item height from text content, capped at maxHeight. */
 function estimateTextHeight(text: string, fontSize: number, width: number, maxHeight: number): number {
@@ -338,11 +349,8 @@ export function usePromptExecution({
       const [images, baseName] = await Promise.all([
         generateImage(contentItems, promptItem.text, promptItem.model),
         quickLlmQuery(
-          `Based on this image generation prompt, generate a very short descriptive name (1-3 words, PascalCase, no spaces). Just output the name, nothing else.\n\nPrompt: ${promptItem.text.slice(0, 500)}`
-        ).then(r => {
-          const cleaned = r.trim().replace(/[^a-zA-Z0-9]/g, '')
-          return cleaned.length > 0 ? cleaned : 'Image'
-        }).catch(() => 'Image'),
+          `The prompt below was used to generate an image. Based on the prompt text, generate a very short descriptive name (1-3 words, PascalCase, no spaces). Just output the name, nothing else.\n\nPrompt:\n${promptItem.text.slice(0, 500)}`
+        ).then(r => extractShortName(r, 'Image')).catch(() => 'Image'),
       ])
 
       // Position outputs to the right of the prompt, stacked vertically
@@ -525,5 +533,293 @@ export function usePromptExecution({
     }
   }, [items, selectedIds, updateActiveSceneItems])
 
-  return { handleRunPrompt, handleRunImageGenPrompt, handleRunHtmlGenPrompt }
+  // --- Quick Prompt: run an ad-hoc LLM prompt without a scene item ---
+
+  const handleQuickPrompt = useCallback(async (
+    promptText: string,
+    outputPos: { x: number; y: number },
+    save: boolean,
+  ) => {
+    // Gather all selected items as context
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+
+    const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
+      if (item.type === 'text') {
+        return { type: 'text' as const, text: item.text }
+      } else if (item.type === 'image') {
+        if (isOffline) {
+          let src = item.src
+          if (item.cropRect && activeSceneId) {
+            try { src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect) }
+            catch { /* use original */ }
+          }
+          return { type: 'image' as const, src }
+        }
+        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
+      } else if (item.type === 'pdf') {
+        if (isOffline) return { type: 'pdf' as const, src: item.src }
+        return { type: 'pdf' as const, id: item.id, sceneId: activeSceneId! }
+      } else if (item.type === 'text-file') {
+        if (isOffline) return { type: 'text-file' as const, src: item.src }
+        return { type: 'text-file' as const, id: item.id, sceneId: activeSceneId!, fileFormat: item.fileFormat }
+      } else if (item.type === 'prompt') {
+        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      } else if (item.type === 'html') {
+        return { type: 'text' as const, text: `[HTML Content]:\n${item.html}` }
+      }
+      return { type: 'text' as const, text: '' }
+    }))).filter((ci) => ci.text || ci.src || ci.id)
+
+    // If saving, create a prompt item at cursor and position outputs to its right
+    let outputX = outputPos.x
+    let outputY = outputPos.y
+    const promptWidth = 300
+
+    if (save) {
+      const promptItem: PromptItem = {
+        id: uuidv4(),
+        type: 'prompt',
+        x: outputPos.x,
+        y: outputPos.y,
+        label: 'Quick Prompt',
+        text: promptText,
+        fontSize: 14,
+        width: promptWidth,
+        height: 150,
+        model: 'claude-sonnet',
+      }
+      updateActiveSceneItems((prev) => [...prev, promptItem])
+      outputX = outputPos.x + promptWidth + 20
+    }
+
+    try {
+      const result = await generateFromPrompt(contentItems, promptText, 'claude-sonnet')
+
+      const { text: remainingText, codeBlocks } = extractCodeBlocks(result)
+
+      if (codeBlocks.length > 0) {
+        const newItems: CanvasItem[] = []
+        const textWidth = 300
+
+        if (remainingText.trim()) {
+          newItems.push({
+            id: uuidv4(), type: 'text',
+            x: outputX, y: outputY,
+            text: remainingText, fontSize: 14, width: textWidth, height: 200,
+          })
+        }
+
+        const blockX = remainingText.trim() ? outputX + textWidth + 20 : outputX
+        let blockY = outputY
+        const usedNames = getExistingTextFileNames(items).map(n => n.replace(/\.[^/.]+$/, ''))
+        const inputHtmlItem = selectedItems.find((si) => si.type === 'html')
+
+        for (const block of codeBlocks) {
+          if (block.format === 'html') {
+            const htmlContent = config.features.sanitizeHtml
+              ? DOMPurify.sanitize(block.content, {
+                  WHOLE_DOCUMENT: true,
+                  ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+                  FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+                })
+              : block.content
+            const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
+            const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
+            const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
+            const title = await generateHtmlTitle(htmlContent)
+            newItems.push({
+              id: uuidv4(), type: 'html', label: title,
+              x: blockX, y: blockY, html: htmlContent,
+              width: htmlWidth, height: htmlHeight, zoom: htmlZoom,
+            })
+            blockY += htmlHeight + 20
+          } else {
+            const format = block.format as TextFileFormat
+            const itemId = uuidv4()
+            const mimeType = format === 'json' ? 'application/json' : 'text/plain'
+            const dataUrl = `data:${mimeType};base64,` + btoa(unescape(encodeURIComponent(block.content)))
+            const rawFilename = await generateCodeFilename(block.content, format, promptText)
+            const ext = `.${format}`
+            const uniqueBase = generateUniqueName(rawFilename, usedNames)
+            const filename = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
+            usedNames.push(uniqueBase)
+
+            let src = dataUrl
+            if (!isOffline && activeSceneId) {
+              try { src = await uploadTextFile(dataUrl, activeSceneId, itemId, filename, format) }
+              catch (err) { console.error(`Failed to upload ${format} file, using data URL:`, err) }
+            }
+
+            const fileHeight = estimateTextHeight(block.content, 14, 600, 400)
+            const fileItem: TextFileItem = {
+              id: itemId, type: 'text-file',
+              x: blockX, y: blockY, src, name: filename,
+              width: 600, height: fileHeight,
+              fileSize: new Blob([block.content]).size,
+              fileFormat: format, fontMono: true,
+            }
+            newItems.push(fileItem)
+            const itemBottom = blockY + fileHeight + TEXTFILE_HEADER_HEIGHT + 5
+            let nextY = snapToGrid(itemBottom)
+            if (nextY < itemBottom) nextY += getGridSize()
+            blockY = nextY
+          }
+        }
+
+        updateActiveSceneItems((prev) => [...prev, ...newItems])
+      } else if (isHtmlContent(result)) {
+        const strippedHtml = stripCodeFences(result).trim()
+        const htmlContent = config.features.sanitizeHtml
+          ? DOMPurify.sanitize(strippedHtml, {
+              WHOLE_DOCUMENT: true,
+              ADD_TAGS: ['style', 'link', 'meta', '#comment'],
+              FORBID_TAGS: ['script', 'iframe', 'object', 'embed'],
+            })
+          : strippedHtml
+        const inputHtmlItem = selectedItems.find((si) => si.type === 'html')
+        const htmlWidth = inputHtmlItem?.type === 'html' ? inputHtmlItem.width : 800
+        const htmlHeight = inputHtmlItem?.type === 'html' ? inputHtmlItem.height : 300
+        const htmlZoom = inputHtmlItem?.type === 'html' ? (inputHtmlItem.zoom ?? 1) : 0.75
+        const title = await generateHtmlTitle(htmlContent)
+        updateActiveSceneItems((prev) => [...prev, {
+          id: uuidv4(), type: 'html', label: title,
+          x: outputX, y: outputY, html: htmlContent,
+          width: htmlWidth, height: htmlHeight, zoom: htmlZoom,
+        }])
+      } else {
+        updateActiveSceneItems((prev) => [...prev, {
+          id: uuidv4(), type: 'text',
+          x: outputX, y: outputY, text: result, fontSize: 14,
+          width: 300, height: 200,
+        }])
+      }
+
+      playNotificationSound()
+    } catch (error) {
+      playNotificationSound('failure')
+      console.error('Failed to run quick prompt:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to run prompt: ${message}`)
+    }
+  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
+
+  // --- Quick Image Gen Prompt: run an ad-hoc image generation prompt ---
+
+  const handleQuickImageGenPrompt = useCallback(async (
+    promptText: string,
+    outputPos: { x: number; y: number },
+    save: boolean,
+  ) => {
+    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+
+    const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
+      if (item.type === 'text') {
+        return { type: 'text' as const, text: item.text }
+      } else if (item.type === 'image') {
+        if (isOffline) {
+          let src = item.src
+          if (item.cropRect && activeSceneId) {
+            try { src = await getCroppedImageDataUrl(activeSceneId, item.id, item.src, item.cropRect) }
+            catch { /* use original */ }
+          }
+          return { type: 'image' as const, src }
+        }
+        return { type: 'image' as const, id: item.id, sceneId: activeSceneId!, useEdited: !!item.cropRect }
+      } else if (item.type === 'prompt' || item.type === 'image-gen-prompt') {
+        return { type: 'text' as const, text: `[${item.label}]: ${item.text}` }
+      }
+      return { type: 'text' as const, text: '' }
+    }))).filter((ci) => ci.text || ci.src || ci.id)
+
+    let outputX = outputPos.x
+    let outputY = outputPos.y
+    const promptWidth = 300
+
+    if (save) {
+      const promptItem: ImageGenPromptItem = {
+        id: uuidv4(),
+        type: 'image-gen-prompt',
+        x: outputPos.x,
+        y: outputPos.y,
+        label: 'Quick Image Gen',
+        text: promptText,
+        fontSize: 14,
+        width: promptWidth,
+        height: 150,
+        model: 'gemini-imagen',
+      }
+      updateActiveSceneItems((prev) => [...prev, promptItem])
+      outputX = outputPos.x + promptWidth + 20
+    }
+
+    try {
+      const [images, baseName] = await Promise.all([
+        generateImage(contentItems, promptText, 'gemini-imagen'),
+        quickLlmQuery(
+          `The prompt below was used to generate an image. Based on the prompt text, generate a very short descriptive name (1-3 words, PascalCase, no spaces). Just output the name, nothing else.\n\nPrompt:\n${promptText.slice(0, 500)}`
+        ).then(r => extractShortName(r, 'Image')).catch(() => 'Image'),
+      ])
+
+      const selectedImages = selectedItems.filter((item): item is typeof item & { type: 'image' } => item.type === 'image')
+      let targetSize = 400
+      if (selectedImages.length > 0) {
+        targetSize = Math.max(...selectedImages.map(img => {
+          const displayedWidth = img.width * (img.scaleX ?? 1)
+          const displayedHeight = img.height * (img.scaleY ?? 1)
+          return Math.max(displayedWidth, displayedHeight)
+        }))
+      }
+
+      const newItems: CanvasItem[] = []
+      let currentY = outputY
+      const existingNames = getExistingImageNames(items)
+
+      for (const dataUrl of images) {
+        const name = generateUniqueName(baseName, existingNames)
+        existingNames.push(name)
+        const item = await new Promise<CanvasItem>((resolve) => {
+          const img = new window.Image()
+          img.onload = () => {
+            let width = img.width
+            let height = img.height
+            if (width > targetSize || height > targetSize) {
+              const scale = targetSize / Math.max(width, height)
+              width = Math.round(width * scale)
+              height = Math.round(height * scale)
+            }
+            resolve({
+              id: uuidv4(), type: 'image' as const,
+              x: outputX, y: currentY, src: dataUrl,
+              width, height, name,
+            })
+          }
+          img.onerror = () => {
+            resolve({
+              id: uuidv4(), type: 'image' as const,
+              x: outputX, y: currentY, src: dataUrl,
+              width: 200, height: 200, name,
+            })
+          }
+          img.src = dataUrl
+        })
+        newItems.push(item)
+        currentY = item.y + item.height + 20
+      }
+
+      if (newItems.length > 0) {
+        updateActiveSceneItems((prev) => [...prev, ...newItems])
+      } else {
+        alert('No images were generated. The model may not have produced any image output.')
+      }
+
+      playNotificationSound()
+    } catch (error) {
+      playNotificationSound('failure')
+      console.error('Failed to run quick image gen prompt:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      alert(`Failed to generate image: ${message}`)
+    }
+  }, [items, selectedIds, updateActiveSceneItems, isOffline, activeSceneId])
+
+  return { handleRunPrompt, handleRunImageGenPrompt, handleRunHtmlGenPrompt, handleQuickPrompt, handleQuickImageGenPrompt }
 }

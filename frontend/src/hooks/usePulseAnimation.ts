@@ -6,6 +6,7 @@ interface UsePulseAnimationParams {
   runningImageGenPromptIds: Set<string>
   runningHtmlGenPromptIds: Set<string>
   runningCodingRobotIds: Set<string>
+  quickPromptPlaceholderCount?: number
   layerRef: RefObject<Konva.Layer | null>
 }
 
@@ -18,13 +19,14 @@ export function usePulseAnimation({
   runningImageGenPromptIds,
   runningHtmlGenPromptIds,
   runningCodingRobotIds,
+  quickPromptPlaceholderCount = 0,
   layerRef,
 }: UsePulseAnimationParams): PulseAnimation {
   const [pulsePhase, setPulsePhase] = useState(0)
 
   // Pulse animation loop
   useEffect(() => {
-    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0 && runningCodingRobotIds.size === 0) {
+    if (runningPromptIds.size === 0 && runningImageGenPromptIds.size === 0 && runningHtmlGenPromptIds.size === 0 && runningCodingRobotIds.size === 0 && quickPromptPlaceholderCount === 0) {
       setPulsePhase(0)
       return
     }
@@ -42,10 +44,10 @@ export function usePulseAnimation({
     animationId = requestAnimationFrame(animate)
 
     return () => cancelAnimationFrame(animationId)
-  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size, runningCodingRobotIds.size])
+  }, [runningPromptIds.size, runningImageGenPromptIds.size, runningHtmlGenPromptIds.size, runningCodingRobotIds.size, quickPromptPlaceholderCount])
 
   // Force Konva layer redraw when pulse phase changes
-  const anyRunning = runningPromptIds.size + runningImageGenPromptIds.size + runningHtmlGenPromptIds.size + runningCodingRobotIds.size
+  const anyRunning = runningPromptIds.size + runningImageGenPromptIds.size + runningHtmlGenPromptIds.size + runningCodingRobotIds.size + quickPromptPlaceholderCount
   useEffect(() => {
     if (anyRunning > 0 && layerRef.current) {
       layerRef.current.batchDraw()
