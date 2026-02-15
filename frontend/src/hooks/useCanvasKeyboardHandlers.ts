@@ -71,7 +71,6 @@ interface UseKeyboardHandlersProps {
 export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
   const {
     isEditing,
-    editingTextId,
     setEditingTextId,
     selectedIds,
     items,

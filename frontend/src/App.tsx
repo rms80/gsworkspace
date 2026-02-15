@@ -20,6 +20,7 @@ import { useFileDrop } from './hooks/useFileDrop'
 import { useDialogManager } from './hooks/useDialogManager'
 import { useViewportManager } from './hooks/useViewportManager'
 import { useAutoSave } from './hooks/useAutoSave'
+import { useAuth } from './hooks/useAuth'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, Scene, TextFileFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
@@ -78,9 +79,6 @@ function App() {
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null)
   const canvasRef = useRef<CanvasHandle>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [authRequired, setAuthRequired] = useState(false)
-  const [authenticated, setAuthenticated] = useState(false)
-  const [serverName, setServerName] = useState('gsworkspace')
   const [runningPromptIds, setRunningPromptIds] = useState<Set<string>>(new Set())
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
@@ -117,6 +115,14 @@ function App() {
 
   const { deleteViewport, clearViewports, reloadViewports } = useViewportManager({
     activeSceneId, isLoading, storageMode, canvasRef,
+  })
+
+  const { authRequired, authenticated, serverName, checkAuthStatus, handleLoginSuccess: onLoginSuccess, handleLogout } = useAuth({
+    onLogout: () => {
+      setOpenScenes([])
+      setActiveSceneId(null)
+      clearViewports()
+    },
   })
 
   const activeScene = openScenes.find((s) => s.id === activeSceneId)
@@ -282,18 +288,10 @@ function App() {
 
       // Check auth status if not in offline mode
       if (storageMode !== 'offline') {
-        try {
-          const authRes = await fetch('/api/auth/status')
-          const authData = await authRes.json()
-          setAuthRequired(authData.authRequired)
-          setAuthenticated(authData.authenticated)
-          if (authData.serverName) setServerName(authData.serverName)
-          if (authData.authRequired && !authData.authenticated) {
-            setIsLoading(false)
-            return
-          }
-        } catch {
-          // If auth check fails, proceed (server might be down or auth not configured)
+        const authData = await checkAuthStatus()
+        if (authData?.authRequired && !authData.authenticated) {
+          setIsLoading(false)
+          return
         }
       }
 
@@ -430,12 +428,11 @@ function App() {
     }
   }, [loadAllScenes])
 
-  // Auth handlers
+  // Auth handler: after login, fetch config and load scenes
   const handleLoginSuccess = useCallback(async () => {
-    setAuthenticated(true)
+    onLoginSuccess()
     setIsLoading(true)
 
-    // Now that we're authenticated, fetch config and load scenes
     let modeToUse = storageMode
     try {
       const res = await fetch('/api/config')
@@ -450,19 +447,7 @@ function App() {
     }
 
     await loadAllScenes(modeToUse)
-  }, [storageMode, loadAllScenes])
-
-  const handleLogout = useCallback(async () => {
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' })
-    } catch {
-      // Ignore errors — we'll show the login screen anyway
-    }
-    setAuthenticated(false)
-    setOpenScenes([])
-    setActiveSceneId(null)
-    clearViewports()
-  }, [clearViewports])
+  }, [storageMode, loadAllScenes, onLoginSuccess])
 
   // Save open scene IDs and active scene to settings when they change
   useEffect(() => {
