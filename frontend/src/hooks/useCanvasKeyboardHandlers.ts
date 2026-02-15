@@ -532,8 +532,8 @@ export const keyboardHandlers = {
     onUpdateItem: (id: string, changes: Partial<CanvasItem>, skipHistory?: boolean) => void,
     setEditingTextId: (id: string | null) => void
   ) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey) {
-      // Enter commits text
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter commits text
       e.preventDefault()
       if (editingTextId && textareaRef.current) {
         onUpdateItem(editingTextId, { text: textareaRef.current.value })

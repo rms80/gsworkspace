@@ -96,7 +96,15 @@ export function usePromptEditing(
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      // Ctrl+Enter commits
+      e.preventDefault()
+      if (editingField === 'label') {
+        handleLabelBlur()
+      } else if (editingField === 'text') {
+        handleTextBlur()
+      }
+    } else if (e.key === 'Escape') {
       setEditingId(null)
       setEditingField(null)
     }
