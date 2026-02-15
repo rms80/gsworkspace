@@ -23,6 +23,17 @@ import { deleteActivity } from './utils/activityStorage'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from './utils/spatialJson'
 import { getCroppedImageDataUrl } from './utils/imageCrop'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
+import {
+  createTextItem,
+  createPromptItem,
+  createImageGenPromptItem,
+  createHtmlGenPromptItem,
+  createCodingRobotItem,
+  createImageItem,
+  createVideoItem,
+  createPdfItem,
+  createTextFileItem,
+} from './services/itemFactory'
 import DOMPurify from 'dompurify'
 import { config } from './config'
 import { exportSceneToZip } from './utils/sceneExport'
@@ -833,18 +844,8 @@ function App() {
 
   // Item management (operates on active scene)
   const addTextItem = useCallback((x?: number, y?: number) => {
-    const width = 200
-    const height = 100
-    const pos = resolvePosition(canvasRef.current, width, height, x, y)
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'text',
-      ...pos,
-      text: 'Double-click to edit',
-      fontSize: 14,
-      width,
-      height,
-    }
+    const pos = resolvePosition(canvasRef.current, 200, 100, x, y)
+    const newItem = createTextItem(pos)
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
@@ -852,14 +853,7 @@ function App() {
   const addImageItem = useCallback(
     (id: string, src: string, width: number, height: number) => {
       const pos = randomFixedPosition()
-      const newItem: CanvasItem = {
-        id,
-        type: 'image',
-        ...pos,
-        src,
-        width,
-        height,
-      }
+      const newItem = createImageItem(id, pos, src, width, height)
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
@@ -897,30 +891,8 @@ function App() {
 
   const addVideoItem = useCallback(
     (id: string, src: string, width: number, height: number, name?: string, fileSize?: number) => {
-      // Scale down large videos to reasonable canvas size
-      const maxDim = 640
-      let w = width
-      let h = height
-      if (w > maxDim || h > maxDim) {
-        const scale = maxDim / Math.max(w, h)
-        w = Math.round(w * scale)
-        h = Math.round(h * scale)
-      }
       const pos = randomFixedPosition()
-      const newItem: CanvasItem = {
-        id,
-        type: 'video',
-        ...pos,
-        src,
-        name,
-        width: w,
-        height: h,
-        originalWidth: width,
-        originalHeight: height,
-        fileSize,
-        muted: true,
-        loop: false,
-      }
+      const newItem = createVideoItem(id, pos, src, width, height, { name, fileSize })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
@@ -975,80 +947,31 @@ function App() {
   }, [isOffline, activeSceneId, addVideoItem, startOperation, endOperation])
 
   const addPromptItem = useCallback((x?: number, y?: number): string => {
-    const width = 300
-    const height = 150
-    const pos = resolvePosition(canvasRef.current, width, height, x, y)
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'prompt',
-      ...pos,
-      label: 'Prompt',
-      text: 'Enter your prompt here...',
-      fontSize: 14,
-      width,
-      height,
-      model: 'claude-sonnet',
-    }
+    const pos = resolvePosition(canvasRef.current, 300, 150, x, y)
+    const newItem = createPromptItem(pos)
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
     return newItem.id
   }, [updateActiveSceneItems, pushChange])
 
   const addImageGenPromptItem = useCallback((x?: number, y?: number): string => {
-    const width = 300
-    const height = 150
-    const pos = resolvePosition(canvasRef.current, width, height, x, y)
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'image-gen-prompt',
-      ...pos,
-      label: 'Image Gen',
-      text: 'Describe the image you want to generate...',
-      fontSize: 14,
-      width,
-      height,
-      model: 'gemini-imagen',
-    }
+    const pos = resolvePosition(canvasRef.current, 300, 150, x, y)
+    const newItem = createImageGenPromptItem(pos)
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
     return newItem.id
   }, [updateActiveSceneItems, pushChange])
 
   const addHtmlGenPromptItem = useCallback((x?: number, y?: number) => {
-    const width = 300
-    const height = 150
-    const pos = resolvePosition(canvasRef.current, width, height, x, y)
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'html-gen-prompt',
-      ...pos,
-      label: 'HTML Gen',
-      text: 'create a professional-looking tutorial page for this content',
-      fontSize: 14,
-      width,
-      height,
-      model: 'claude-sonnet',
-    }
+    const pos = resolvePosition(canvasRef.current, 300, 150, x, y)
+    const newItem = createHtmlGenPromptItem(pos)
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
 
   const addCodingRobotItem = useCallback((x?: number, y?: number) => {
-    const width = 400
-    const height = 350
-    const pos = resolvePosition(canvasRef.current, width, height, x, y)
-    const newItem: CanvasItem = {
-      id: uuidv4(),
-      type: 'coding-robot',
-      ...pos,
-      label: 'Coding Robot',
-      text: '',
-      fontSize: 14,
-      width,
-      height,
-      chatHistory: [],
-      sessionId: null,
-    }
+    const pos = resolvePosition(canvasRef.current, 400, 350, x, y)
+    const newItem = createCodingRobotItem(pos)
     pushChange(new AddObjectChange(newItem))
     updateActiveSceneItems((prev) => [...prev, newItem])
   }, [updateActiveSceneItems, pushChange])
@@ -1056,44 +979,22 @@ function App() {
   const addTextAt = useCallback(
     (x: number, y: number, text: string, optWidth?: number, topLeft?: boolean): string => {
       const width = optWidth ?? 400
-      const height = 100
-      const id = uuidv4()
-      const pos = centeredAtPoint(x, y, width, height, topLeft ?? false)
-      const newItem: CanvasItem = {
-        id,
-        type: 'text',
-        ...pos,
-        text,
-        fontSize: 14,
-        width,
-        height,
-      }
+      const pos = centeredAtPoint(x, y, width, 100, topLeft ?? false)
+      const newItem = createTextItem(pos, { text, width })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
-      return id
+      return newItem.id
     },
     [updateActiveSceneItems, pushChange]
   )
 
   const addImageAt = useCallback(
     (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => {
-      // Generate unique name using the utility
       const existingNames = getExistingImageNames(items)
       const uniqueName = generateUniqueName(name || 'Image', existingNames)
 
       const pos = centeredAtPoint(x, y, width)
-      const newItem: CanvasItem = {
-        id,
-        type: 'image',
-        ...pos,
-        src,
-        name: uniqueName,
-        width,
-        height,
-        originalWidth,
-        originalHeight,
-        fileSize,
-      }
+      const newItem = createImageItem(id, pos, src, width, height, { name: uniqueName, originalWidth, originalHeight, fileSize })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
@@ -1102,34 +1003,14 @@ function App() {
 
   const addVideoAt = useCallback(
     (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => {
-      // Generate unique name using the utility
       const existingNames = getExistingVideoNames(items)
       const uniqueName = generateUniqueName(name || 'Video', existingNames)
 
-      // Scale down large videos to reasonable canvas size
+      // createVideoItem handles the scaling internally; compute scaled width for centering
       const maxDim = 640
-      let w = width
-      let h = height
-      if (w > maxDim || h > maxDim) {
-        const scale = maxDim / Math.max(w, h)
-        w = Math.round(w * scale)
-        h = Math.round(h * scale)
-      }
+      const w = (width > maxDim || height > maxDim) ? Math.round(width * (maxDim / Math.max(width, height))) : width
       const pos = centeredAtPoint(x, y, w)
-      const newItem: CanvasItem = {
-        id,
-        type: 'video',
-        ...pos,
-        src,
-        name: uniqueName,
-        width: w,
-        height: h,
-        originalWidth: originalWidth ?? width,
-        originalHeight: originalHeight ?? height,
-        fileSize,
-        muted: true,
-        loop: false,
-      }
+      const newItem = createVideoItem(id, pos, src, width, height, { name: uniqueName, fileSize, originalWidth: originalWidth ?? width, originalHeight: originalHeight ?? height })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
@@ -1142,17 +1023,7 @@ function App() {
       const uniqueName = generateUniqueName(name || 'PDF', existingNames)
 
       const pos = centeredAtPoint(x, y, width)
-      const newItem: CanvasItem = {
-        id,
-        type: 'pdf',
-        ...pos,
-        src,
-        name: uniqueName,
-        width,
-        height,
-        fileSize,
-        thumbnailSrc,
-      }
+      const newItem = createPdfItem(id, pos, src, width, height, { name: uniqueName, fileSize, thumbnailSrc })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
@@ -1169,18 +1040,7 @@ function App() {
       const uniqueName = uniqueBase.endsWith(ext) ? uniqueBase : uniqueBase + ext
 
       const pos = centeredAtPoint(x, y, width)
-      const newItem: CanvasItem = {
-        id,
-        type: 'text-file',
-        ...pos,
-        src,
-        name: uniqueName,
-        width,
-        height,
-        fileSize,
-        fileFormat: (fileFormat || 'txt') as TextFileFormat,
-        fontMono: true,
-      }
+      const newItem = createTextFileItem(id, pos, src, width, height, { name: uniqueName, fileSize, fileFormat: (fileFormat || 'txt') as TextFileFormat })
       pushChange(new AddObjectChange(newItem))
       updateActiveSceneItems((prev) => [...prev, newItem])
     },
