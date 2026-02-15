@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo, forwardRef, useImper
 import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
+import { marked } from 'marked'
 import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, ActivityMessage } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
@@ -1136,8 +1137,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const handleToggleTextFileViewType = useCallback((id: string) => {
     const item = items.find((i) => i.id === id)
     if (!item || item.type !== 'text-file') return
-    const current = item.viewType ?? (item.fileFormat === 'csv' ? 'table' : 'raw')
-    onUpdateItem(id, { viewType: current === 'table' ? 'raw' : 'table' } as Partial<CanvasItem>, true)
+    if (item.fileFormat === 'md') {
+      const current = item.viewType ?? 'markdown'
+      onUpdateItem(id, { viewType: current === 'markdown' ? 'raw' : 'markdown' } as Partial<CanvasItem>, true)
+    } else {
+      const current = item.viewType ?? (item.fileFormat === 'csv' ? 'table' : 'raw')
+      onUpdateItem(id, { viewType: current === 'table' ? 'raw' : 'table' } as Partial<CanvasItem>, true)
+    }
   }, [items, onUpdateItem])
 
   const getEditingHtmlItem = () => {
@@ -1733,10 +1739,16 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const fontMono = item.fontMono ?? false
           const fontSize = item.fontSize ?? 14
           const textContent = textFileContents.get(item.id) ?? ''
-          const effectiveViewType = item.fileFormat === 'csv' && (item.viewType ?? 'table') === 'table' ? 'table' : 'raw'
+          const effectiveViewType =
+            item.fileFormat === 'csv' && (item.viewType ?? 'table') === 'table' ? 'table' :
+            item.fileFormat === 'md' && (item.viewType ?? 'markdown') === 'markdown' ? 'markdown' :
+            'raw'
 
           let srcdoc: string
-          if (effectiveViewType === 'table' && textContent) {
+          if (effectiveViewType === 'markdown' && textContent) {
+            const htmlContent = marked.parse(textContent, { async: false }) as string
+            srcdoc = `<html><head><style>body{margin:8px 12px;font-family:${fontMono ? 'monospace' : 'system-ui,sans-serif'};font-size:${fontSize}px;color:#333;line-height:1.5;}h1,h2,h3,h4,h5,h6{margin:0.8em 0 0.4em;}h1{font-size:1.6em;border-bottom:1px solid #ddd;padding-bottom:4px;}h2{font-size:1.3em;border-bottom:1px solid #eee;padding-bottom:3px;}h3{font-size:1.1em;}p{margin:0.5em 0;}code{background:#f0f0f0;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:0.9em;}pre{background:#f5f5f5;padding:8px;border-radius:4px;overflow-x:auto;}pre code{background:none;padding:0;}blockquote{margin:0.5em 0;padding:4px 12px;border-left:3px solid #ddd;color:#666;}ul,ol{margin:0.5em 0;padding-left:1.5em;}table{border-collapse:collapse;margin:0.5em 0;}th,td{border:1px solid #ddd;padding:4px 8px;}th{background:#f0f0f0;}a{color:#4a90d9;}img{max-width:100%;}</style></head><body>${htmlContent}</body></html>`
+          } else if (effectiveViewType === 'table' && textContent) {
             const rows = parseCsv(textContent)
             const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
             const headerRow = rows[0] || []

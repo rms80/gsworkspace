@@ -197,7 +197,11 @@ export default function TextFileItemRenderer({
   const fileSizeWidth = fileSizeText ? fileSizeText.length * 7 + 8 : 0
   const fontMono = item.fontMono ?? false
   const isCsv = item.fileFormat === 'csv'
-  const isRawView = !isCsv || (item.viewType ?? 'table') === 'raw'
+  const isMd = item.fileFormat === 'md'
+  const hasViewToggle = isCsv || isMd
+  const isRawView = isCsv ? (item.viewType ?? 'table') === 'raw' :
+                    isMd ? (item.viewType ?? 'markdown') === 'raw' :
+                    true
 
   // Compute button positions from right to left
   let cursor = MINIMIZE_BTN_WIDTH + 4
@@ -207,7 +211,7 @@ export default function TextFileItemRenderer({
   cursor += COPY_BTN_WIDTH + 8
 
   let rawTextBtnX = 0
-  if (isCsv) {
+  if (hasViewToggle) {
     rawTextBtnX = item.width - cursor - RAW_TEXT_BTN_WIDTH - 8
     cursor += RAW_TEXT_BTN_WIDTH + 8
   }
@@ -429,8 +433,8 @@ export default function TextFileItemRenderer({
           verticalAlign="middle"
         />
       </Group>
-      {/* Raw Text toggle button (CSV only) */}
-      {isCsv && (
+      {/* Raw Text toggle button (CSV and Markdown) */}
+      {hasViewToggle && (
         <Group
           x={rawTextBtnX}
           y={4}

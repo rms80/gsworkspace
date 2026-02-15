@@ -149,7 +149,7 @@ export interface PdfItem extends BaseItem {
 
 export type TextFileFormat = 'txt' | 'csv' | 'js' | 'ts' | 'tsx' | 'cs' | 'cpp' | 'h' | 'c' | 'json' | 'py' | 'md' | 'sh' | 'log' | 'ini'
 
-export type TextFileViewType = 'raw' | 'table'
+export type TextFileViewType = 'raw' | 'table' | 'markdown'
 
 export interface TextFileItem extends BaseItem {
   type: 'text-file'
