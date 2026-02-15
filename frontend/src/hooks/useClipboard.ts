@@ -4,6 +4,7 @@ import { CanvasItem } from '../types'
 import { uploadImage } from '../api/images'
 import { getContentData } from '../api/scenes'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
+import { extractYouTubeVideoId, extractYouTubeStartTime } from '../utils/youtubeUrl'
 
 interface UseClipboardParams {
   items: CanvasItem[]
@@ -18,6 +19,7 @@ interface UseClipboardParams {
   onAddImageAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, originalWidth?: number, originalHeight?: number, fileSize?: number) => void
   onUpdateItem: (id: string, changes: Partial<CanvasItem>) => void
   onDeleteSelected: () => void
+  onAddEmbedVideoAt?: (x: number, y: number, videoId: string, startTime?: number) => void
 }
 
 export interface ClipboardActions {
@@ -38,6 +40,7 @@ export function useClipboard({
   onAddImageAt,
   onUpdateItem,
   onDeleteSelected,
+  onAddEmbedVideoAt,
 }: UseClipboardParams): ClipboardActions {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const { startOperation, endOperation } = useBackgroundOperations()
@@ -128,6 +131,13 @@ export function useClipboard({
       }
 
       if (text) {
+        // Check for YouTube URL before falling back to text
+        const videoId = extractYouTubeVideoId(text)
+        if (videoId && onAddEmbedVideoAt) {
+          e.preventDefault()
+          onAddEmbedVideoAt(canvasPos.x, canvasPos.y, videoId, extractYouTubeStartTime(text))
+          return
+        }
         e.preventDefault()
         onAddTextAt(canvasPos.x, canvasPos.y, text)
       }
@@ -154,6 +164,11 @@ export function useClipboard({
       } else if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot') {
         e.preventDefault()
         e.clipboardData?.setData('text/plain', item.text)
+      } else if (item.type === 'embed-video') {
+        e.preventDefault()
+        let url = `https://www.youtube.com/watch?v=${item.videoId}`
+        if (item.startTime) url += `&t=${item.startTime}s`
+        e.clipboardData?.setData('text/plain', url)
       }
     }
 
@@ -313,6 +328,12 @@ export function useClipboard({
         if (item.types.includes('text/plain')) {
           const blob = await item.getType('text/plain')
           const text = await blob.text()
+          // Check for YouTube URL before falling back to text
+          const videoId = extractYouTubeVideoId(text)
+          if (videoId && onAddEmbedVideoAt) {
+            onAddEmbedVideoAt(canvasX, canvasY, videoId, extractYouTubeStartTime(text))
+            return
+          }
           onAddTextAt(canvasX, canvasY, text)
           return
         }
@@ -321,6 +342,11 @@ export function useClipboard({
       // Fallback for browsers that don't support clipboard.read()
       const text = await navigator.clipboard.readText()
       if (text) {
+        const videoId = extractYouTubeVideoId(text)
+        if (videoId && onAddEmbedVideoAt) {
+          onAddEmbedVideoAt(canvasX, canvasY, videoId, extractYouTubeStartTime(text))
+          return
+        }
         onAddTextAt(canvasX, canvasY, text)
       }
     }

@@ -10,6 +10,7 @@ import llmRouter from './routes/llm.js'
 import scenesRouter from './routes/scenes.js'
 import localFilesRouter from './routes/localFiles.js'
 import configRouter from './routes/config.js'
+import embedRouter from './routes/embed.js'
 import workspacesRouter from './routes/workspaces.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
@@ -159,6 +160,7 @@ app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
 app.use('/api/w/:workspace/items', itemsRouter)
 app.use('/api/w/:workspace/llm', llmRouter)
 app.use('/api/w/:workspace/scenes', scenesRouter)
+app.use('/api/w/:workspace/embed', embedRouter)
 
 // Non-workspace routes
 app.use('/api/local-files', localFilesRouter)

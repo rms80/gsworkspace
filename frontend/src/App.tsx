@@ -37,7 +37,9 @@ import {
   createVideoItem,
   createPdfItem,
   createTextFileItem,
+  createEmbedVideoItem,
 } from './services/itemFactory'
+import { fetchYouTubeTitle } from './api/embed'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadImage } from './api/images'
@@ -807,6 +809,22 @@ function App() {
     [updateActiveSceneItems, pushChange, items]
   )
 
+  const addEmbedVideoAt = useCallback(
+    (x: number, y: number, videoId: string, startTime?: number) => {
+      const pos = centeredAtPoint(x, y, 560)
+      const newItem = createEmbedVideoItem(pos, videoId, { label: 'Loading...', startTime })
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+      // Fetch title async and update label
+      fetchYouTubeTitle(videoId).then((title) => {
+        updateActiveSceneItems((prev) =>
+          prev.map((item) => item.id === newItem.id ? { ...item, label: title } : item)
+        )
+      })
+    },
+    [updateActiveSceneItems, pushChange]
+  )
+
   const { videoPlaceholders, handleAddImage, handleAddVideo, handleAddPdf, handleAddTextFile, handleUploadVideoAt } = useItemUpload({
     activeSceneId, isOffline, startOperation, endOperation,
     addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt,
@@ -1500,6 +1518,7 @@ function App() {
           onTogglePdfMinimized={togglePdfMinimized}
           onAddTextFileAt={addTextFileAt}
           onToggleTextFileMinimized={toggleTextFileMinimized}
+          onAddEmbedVideoAt={addEmbedVideoAt}
         />
       ) : (
         <div

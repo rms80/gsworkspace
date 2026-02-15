@@ -10,6 +10,8 @@ import type {
   PdfItem,
   TextFileItem,
   TextFileFormat,
+  EmbedVideoItem,
+  EmbedVideoProvider,
 } from '../types'
 
 interface Pos {
@@ -204,5 +206,23 @@ export function createTextFileItem(
     fontMono: true,
     ...(opts?.name != null && { name: opts.name }),
     ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
+  }
+}
+
+export function createEmbedVideoItem(
+  pos: Pos,
+  videoId: string,
+  opts?: { label?: string; provider?: EmbedVideoProvider; width?: number; height?: number; startTime?: number },
+): EmbedVideoItem {
+  return {
+    id: uuidv4(),
+    type: 'embed-video',
+    ...pos,
+    videoId,
+    provider: opts?.provider ?? 'youtube',
+    label: opts?.label ?? 'YouTube Video',
+    width: opts?.width ?? 560,
+    height: opts?.height ?? 315,
+    ...(opts?.startTime != null && { startTime: opts.startTime }),
   }
 }

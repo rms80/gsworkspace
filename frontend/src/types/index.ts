@@ -165,7 +165,19 @@ export interface TextFileItem extends BaseItem {
   viewType?: TextFileViewType
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem | PdfItem | TextFileItem
+export type EmbedVideoProvider = 'youtube'
+
+export interface EmbedVideoItem extends BaseItem {
+  type: 'embed-video'
+  videoId: string
+  provider: EmbedVideoProvider
+  label: string
+  width: number
+  height: number
+  startTime?: number  // seconds offset for playback start
+}
+
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem | PdfItem | TextFileItem | EmbedVideoItem
 
 export interface SelectionRect {
   x: number

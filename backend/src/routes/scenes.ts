@@ -203,7 +203,15 @@ interface StoredTextFileItem extends StoredItemBase {
   viewType?: string
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem
+interface StoredEmbedVideoItem extends StoredItemBase {
+  type: 'embed-video'
+  videoId: string
+  provider: string
+  label: string
+  startTime?: number
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem | StoredEmbedVideoItem
 
 interface StoredScene {
   id: string
@@ -904,6 +912,19 @@ router.post('/:id', async (req, res) => {
         } else {
           console.error(`Failed to save text file ${item.id}, skipping from scene`)
         }
+      } else if (item.type === 'embed-video') {
+        storedItems.push({
+          id: item.id,
+          type: 'embed-video',
+          x: item.x,
+          y: item.y,
+          width: item.width,
+          height: item.height,
+          videoId: item.videoId,
+          provider: item.provider,
+          label: item.label,
+          ...(item.startTime != null && { startTime: item.startTime }),
+        })
       }
     }
 
@@ -1142,6 +1163,19 @@ router.get('/:id', async (req, res) => {
             fontMono: item.fontMono,
             fontSize: item.fontSize,
             viewType: item.viewType,
+          }
+        } else if (item.type === 'embed-video') {
+          return {
+            id: item.id,
+            type: 'embed-video' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            videoId: item.videoId,
+            provider: item.provider,
+            label: item.label,
+            ...(item.startTime != null && { startTime: item.startTime }),
           }
         } else {
           // For HTML items, load the HTML file

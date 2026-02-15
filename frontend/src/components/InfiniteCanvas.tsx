@@ -29,6 +29,7 @@ import HtmlItemRenderer from './canvas/items/HtmlItemRenderer'
 import CodingRobotItemRenderer from './canvas/items/CodingRobotItemRenderer'
 import PdfItemRenderer from './canvas/items/PdfItemRenderer'
 import TextFileItemRenderer from './canvas/items/TextFileItemRenderer'
+import EmbedVideoItemRenderer from './canvas/items/EmbedVideoItemRenderer'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
@@ -57,7 +58,7 @@ import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useCanvasKeyboardHandlers, keyboardHandlers } from '../hooks/useCanvasKeyboardHandlers'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT, EMBED_VIDEO_HEADER_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -105,6 +106,7 @@ interface InfiniteCanvasProps {
   onTogglePdfMinimized?: (id: string) => void
   onAddTextFileAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => void
   onToggleTextFileMinimized?: (id: string) => void
+  onAddEmbedVideoAt?: (x: number, y: number, videoId: string, startTime?: number) => void
 }
 
 export interface CanvasHandle {
@@ -115,7 +117,7 @@ export interface CanvasHandle {
   setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -130,6 +132,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const pdfTransformerRef = useRef<Konva.Transformer>(null)
   const textFileTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
+  const embedVideoTransformerRef = useRef<Konva.Transformer>(null)
 
   // Multi-select drag coordination ref
   const multiDragRef = useRef<{
@@ -320,6 +323,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     onAddImageAt,
     onUpdateItem,
     onDeleteSelected,
+    onAddEmbedVideoAt,
   })
 
   // 8b. Keyboard handlers
@@ -403,6 +407,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const [editingPdfLabelId, setEditingPdfLabelId] = useState<string | null>(null)
   const pdfLabelInputRef = useRef<HTMLInputElement>(null)
   const [textFileItemTransforms, setTextFileItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [embedVideoItemTransforms, setEmbedVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [editingTextFileLabelId, setEditingTextFileLabelId] = useState<string | null>(null)
   const textFileLabelInputRef = useRef<HTMLInputElement>(null)
   // Cache fetched text file content (keyed by item src URL)
@@ -471,11 +476,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'html', ref: htmlTransformerRef },
       { type: 'pdf', ref: pdfTransformerRef, filterItem: (item) => item.type === 'pdf' && !item.minimized },
       { type: 'text-file', ref: textFileTransformerRef, filterItem: (item) => item.type === 'text-file' && !item.minimized },
+      { type: 'embed-video', ref: embedVideoTransformerRef },
     ],
   })
 
   // 13. Multi-select drag coordination (Layer-level handlers)
-  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef]
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef, embedVideoTransformerRef]
 
   const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     // Guard: if already tracking a drag (e.g. Transformer started drag on
@@ -574,6 +580,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
           return next
         })
+      } else if (item.type === 'embed-video') {
+        const embedHeaderHeight = selectedIds.includes(item.id) ? EMBED_VIDEO_HEADER_HEIGHT / Math.max(1, stageScale) : 0
+        setEmbedVideoItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y() + embedHeaderHeight, width: item.width, height: item.height })
+          return next
+        })
       }
     }
   }, [items, selectedIds, stageScale, gifIds])
@@ -629,6 +642,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       return next
     })
     setPdfItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setEmbedVideoItemTransforms((prev) => {
       const next = new Map(prev)
       for (const { id } of otherNodes) next.delete(id)
       return next
@@ -1371,6 +1389,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 setIsViewportTransforming={setIsViewportTransforming}
               />
             )
+          } else if (item.type === 'embed-video') {
+            return (
+              <EmbedVideoItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                stageScale={stageScale}
+                onItemClick={handleItemClick}
+                onUpdateItem={handleUpdateItem}
+                setEmbedVideoItemTransforms={setEmbedVideoItemTransforms}
+              />
+            )
           }
           return null
         })}
@@ -1587,6 +1617,13 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={true}
         />
+        {/* Transformer for embed videos - corner handles only, keep aspect ratio */}
+        <Transformer
+          ref={embedVideoTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
+          keepRatio={true}
+        />
       </Layer>
     </Stage>
 
@@ -1741,6 +1778,73 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   background: '#fff',
                 }}
               />
+            </div>
+          )
+        })}
+
+      {/* Embed video (YouTube) iframe overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'embed-video')
+        .map((item) => {
+          if (item.type !== 'embed-video') return null
+          const transform = embedVideoItemTransforms.get(item.id)
+          const x = transform?.x ?? item.x
+          const y = transform?.y ?? item.y
+          const width = transform?.width ?? item.width
+          const height = transform?.height ?? item.height
+          const isSelected = selectedIds.includes(item.id)
+          const iframeInteractive = isSelected && !isAnyDragActive
+          const embedParams = new URLSearchParams({ rel: '0' })
+          if (item.startTime) embedParams.set('start', String(item.startTime))
+          const embedSrc = `https://www.youtube.com/embed/${item.videoId}?${embedParams}`
+          return (
+            <div
+              key={`embed-video-${item.id}`}
+              style={{
+                position: 'absolute',
+                top: y * stageScale + stagePos.y,
+                left: x * stageScale + stagePos.x,
+                width: width * stageScale,
+                height: height * stageScale,
+                overflow: 'hidden',
+                zIndex: Z_IFRAME_OVERLAY,
+                pointerEvents: iframeInteractive ? 'auto' : 'none',
+              }}
+            >
+              <iframe
+                src={embedSrc}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                style={{
+                  width: width * stageScale,
+                  height: height * stageScale,
+                  border: 'none',
+                  pointerEvents: iframeInteractive ? 'auto' : 'none',
+                  background: '#000',
+                }}
+              />
+              {/* Play triangle overlay when not selected */}
+              {!isSelected && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 0,
+                      height: 0,
+                      borderTop: `${height * stageScale * 0.1}px solid transparent`,
+                      borderBottom: `${height * stageScale * 0.1}px solid transparent`,
+                      borderLeft: `${height * stageScale * 0.15}px solid rgba(255, 255, 255, 0.3)`,
+                    }}
+                  />
+                </div>
+              )}
             </div>
           )
         })}

@@ -48,6 +48,12 @@ export function getTextFileFormat(filename: string): string | null {
   return match ? match[1].toLowerCase() : null
 }
 
+// --- Embed video item dimensions ---
+
+export const EMBED_VIDEO_HEADER_HEIGHT = 24
+export const EMBED_VIDEO_DEFAULT_WIDTH = 560
+export const EMBED_VIDEO_DEFAULT_HEIGHT = 315
+
 // --- Image item dimensions ---
 
 export const IMAGE_HEADER_HEIGHT = 24
