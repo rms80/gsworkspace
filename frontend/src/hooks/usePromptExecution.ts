@@ -6,7 +6,7 @@ import { getCroppedImageDataUrl } from '../utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from '../utils/htmlDetection'
 import { extractCodeBlocks } from '../utils/codeBlockExtractor'
 import { uploadTextFile } from '../api/textfiles'
-import { generateUniqueName, getExistingTextFileNames } from '../utils/imageNames'
+import { generateUniqueName, getExistingImageNames, getExistingTextFileNames } from '../utils/imageNames'
 import DOMPurify from 'dompurify'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from '../utils/spatialJson'
 import { playNotificationSound } from '../utils/sound'
@@ -334,7 +334,16 @@ export function usePromptExecution({
     }))).filter((item) => item.text || item.src || item.id)
 
     try {
-      const images = await generateImage(contentItems, promptItem.text, promptItem.model)
+      // Generate images and a short descriptive label in parallel
+      const [images, baseName] = await Promise.all([
+        generateImage(contentItems, promptItem.text, promptItem.model),
+        quickLlmQuery(
+          `Based on this image generation prompt, generate a very short descriptive name (1-3 words, PascalCase, no spaces). Just output the name, nothing else.\n\nPrompt: ${promptItem.text.slice(0, 500)}`
+        ).then(r => {
+          const cleaned = r.trim().replace(/[^a-zA-Z0-9]/g, '')
+          return cleaned.length > 0 ? cleaned : 'Image'
+        }).catch(() => 'Image'),
+      ])
 
       // Position outputs to the right of the prompt, stacked vertically
       const outputX = promptItem.x + promptItem.width + 20
@@ -366,7 +375,10 @@ export function usePromptExecution({
         }))
       }
 
+      const existingNames = getExistingImageNames(items)
       for (const dataUrl of images) {
+        const name = generateUniqueName(baseName, existingNames)
+        existingNames.push(name)
         const item = await new Promise<CanvasItem>((resolve) => {
           const img = new window.Image()
           img.onload = () => {
@@ -386,6 +398,7 @@ export function usePromptExecution({
               src: dataUrl,
               width,
               height,
+              name,
             })
           }
           img.onerror = () => {
@@ -398,6 +411,7 @@ export function usePromptExecution({
               src: dataUrl,
               width: 200,
               height: 200,
+              name,
             })
           }
           img.src = dataUrl
