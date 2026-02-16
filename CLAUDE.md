@@ -90,6 +90,7 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 - When starting or restarting the backend dev server, pipe its output to `backend.log` in the repo root:
   `cd /d/git/workspaceapp/backend && npm run dev >> ../backend.log 2>&1`
 
+- when you create a memory, also store a brief summary in the memory text below
 
 
 ## Claude Memory
