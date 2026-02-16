@@ -109,6 +109,19 @@ export class HistoryStack {
    * Serialize the history stack to a plain object
    */
   serialize(): SerializedHistory {
+    // Only save records up to the current position — discard future (redo) history
+    const activeRecords = this.records.slice(0, this.currentIndex + 1)
+    return {
+      records: activeRecords.map((record) => record.serialize()),
+      currentIndex: this.currentIndex,
+    }
+  }
+
+  /**
+   * Serialize the full history stack including future (redo) records.
+   * Used for debug display only.
+   */
+  serializeFull(): SerializedHistory {
     return {
       records: this.records.map((record) => record.serialize()),
       currentIndex: this.currentIndex,

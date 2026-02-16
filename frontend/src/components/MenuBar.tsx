@@ -24,6 +24,7 @@ interface MenuBarProps {
   onGetSceneJson?: () => string
   onGetServerSceneJson?: () => Promise<string>
   onGetHistoryJson?: () => string
+  onGetServerHistoryJson?: () => Promise<string>
   onClearHistory?: () => void
   onOpenSettings?: () => void
   onLogout?: () => void
@@ -79,6 +80,7 @@ function MenuBar({
   onGetSceneJson,
   onGetServerSceneJson,
   onGetHistoryJson,
+  onGetServerHistoryJson,
   onClearHistory,
   onOpenSettings,
   onLogout,
@@ -221,11 +223,28 @@ function MenuBar({
     }
   }
 
-  function handleShowHistoryJson() {
+  async function handleShowHistoryJson() {
     if (onGetHistoryJson) {
+      const localJson = onGetHistoryJson()
       setJsonDialogTitle('History JSON')
-      setJsonDialogContent(onGetHistoryJson())
+      setLocalJsonContent(localJson)
+      setJsonDialogContent(localJson)
+      setJsonViewMode('local')
+      setServerJsonContent('')
       setJsonDialogOpen(true)
+
+      // Fetch server history JSON in background
+      if (onGetServerHistoryJson) {
+        setServerJsonLoading(true)
+        try {
+          const serverJson = await onGetServerHistoryJson()
+          setServerJsonContent(serverJson)
+        } catch (err) {
+          setServerJsonContent(`Error fetching server history JSON: ${err}`)
+        } finally {
+          setServerJsonLoading(false)
+        }
+      }
     }
   }
 
@@ -890,7 +909,7 @@ function MenuBar({
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h2 style={{ margin: 0, fontSize: '18px' }}>{jsonDialogTitle}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {jsonDialogTitle === 'Scene JSON' && onGetServerSceneJson && (
+                {((jsonDialogTitle === 'Scene JSON' && onGetServerSceneJson) || (jsonDialogTitle === 'History JSON' && onGetServerHistoryJson)) && (
                   <div style={{ display: 'flex', backgroundColor: '#e0e0e0', borderRadius: '4px', padding: '2px' }}>
                     <button
                       onClick={() => handleJsonViewModeChange('local')}

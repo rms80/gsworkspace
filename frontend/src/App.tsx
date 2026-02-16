@@ -1446,7 +1446,22 @@ function App() {
             return `Error: ${err}`
           }
         }}
-        onGetHistoryJson={() => activeHistory ? JSON.stringify(activeHistory.serialize(), null, 2) : '{}'}
+        onGetHistoryJson={() => activeHistory ? JSON.stringify(activeHistory.serializeFull(), null, 2) : '{}'}
+        onGetServerHistoryJson={async () => {
+          if (!activeSceneId) return '{}'
+          try {
+            const response = await fetch(`/api/w/${ACTIVE_WORKSPACE}/scenes/${activeSceneId}/history`)
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            const text = await response.text()
+            try {
+              return JSON.stringify(JSON.parse(text), null, 2)
+            } catch {
+              return text
+            }
+          } catch (err) {
+            return `Error: ${err}`
+          }
+        }}
         onClearHistory={() => {
           if (activeSceneId) {
             setHistoryMap((prev) => {
