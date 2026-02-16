@@ -44,7 +44,8 @@
       "Bash(ls:*)",
       "Bash(wmic:*)",
       "Bash(git mv:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(git status:*)"
     ]
   }
 }
