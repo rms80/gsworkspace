@@ -10,7 +10,7 @@ export const BUTTON_GAP = 4
 
 // --- Coding Robot dimensions ---
 
-export const CODING_ROBOT_HEADER_HEIGHT = 28
+export const CODING_ROBOT_HEADER_HEIGHT = 24
 export const CODING_ROBOT_INPUT_HEIGHT = 60
 export const CODING_ROBOT_SEND_BUTTON_WIDTH = 50
 export const CODING_ROBOT_ACTIVITY_PANEL_WIDTH = 364

@@ -118,7 +118,7 @@ export default function CodingRobotItemRenderer({
         x={8}
         y={6}
         text={item.label || 'Coding Robot'}
-        fontSize={14}
+        fontSize={13}
         fontStyle="bold"
         fill={theme.headerText}
         width={item.width * 0.4}
@@ -127,7 +127,7 @@ export default function CodingRobotItemRenderer({
       {/* Root directory */}
       <Text
         x={item.width * 0.4 + 8}
-        y={8}
+        y={7}
         text={item.rootDirectory ? (navigator.platform.startsWith('Win') ? item.rootDirectory.replace(/\//g, '\\') : item.rootDirectory) : ''}
         fontSize={11}
         fill={theme.headerText}
@@ -136,17 +136,29 @@ export default function CodingRobotItemRenderer({
         ellipsis={true}
         align="right"
       />
+      {/* Change directory button outline */}
+      <Rect
+        x={item.width - 22}
+        y={3}
+        width={18}
+        height={18}
+        fill="transparent"
+        stroke={theme.headerText}
+        strokeWidth={1}
+        cornerRadius={3}
+        opacity={0.5}
+      />
       {/* Change directory button */}
       <Text
-        x={item.width - 22}
-        y={6}
+        x={item.width - 20}
+        y={7}
         text={'\uD83D\uDCC1'}
-        fontSize={13}
+        fontSize={12}
         cursor="pointer"
         onClick={(e) => {
           e.cancelBubble = true
           const current = item.rootDirectory ?? ''
-          const newDir = window.prompt('Root directory:', current)
+          const newDir = window.prompt('Please enter the Root Directory for your Claude Code project. The project must already be initialized (ie you have run init in the Claude Code CLI in this folder).', current)
           if (newDir !== null && newDir !== current) {
             onUpdateItem(item.id, { rootDirectory: newDir.replace(/\\/g, '/') })
           }
