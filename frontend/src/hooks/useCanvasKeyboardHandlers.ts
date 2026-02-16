@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import Konva from 'konva'
-import { CanvasItem, ImageItem, VideoItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem, TextFileItem, CodingRobotItem } from '../types'
+import { TEXTFILE_HEADER_HEIGHT, CODING_ROBOT_HEADER_HEIGHT, CODING_ROBOT_ACTIVITY_PANEL_WIDTH, CODING_ROBOT_ACTIVITY_PANEL_GAP } from '../constants/canvas'
 
 interface UseKeyboardHandlersProps {
   // Editing state
@@ -408,11 +409,23 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
         for (const item of selectedItems) {
           const w = item.width * ((item as ImageItem).scaleX ?? 1)
-          const h = item.height * ((item as ImageItem).scaleY ?? 1)
+          let h = item.height * ((item as ImageItem).scaleY ?? 1)
+          // TextFile and CodingRobot items have a header rendered above the content area
+          if (item.type === 'text-file' && !(item as TextFileItem).minimized) {
+            h += TEXTFILE_HEADER_HEIGHT
+          }
+          if (item.type === 'coding-robot') {
+            h += CODING_ROBOT_HEADER_HEIGHT
+          }
           minX = Math.min(minX, item.x)
           minY = Math.min(minY, item.y)
           maxX = Math.max(maxX, item.x + w)
           maxY = Math.max(maxY, item.y + h)
+          // CodingRobot activity panel extends to the right of the main item
+          if (item.type === 'coding-robot' && (item as CodingRobotItem).showActivity) {
+            const panelWidth = (item as CodingRobotItem).activityPanelWidth ?? CODING_ROBOT_ACTIVITY_PANEL_WIDTH
+            maxX = Math.max(maxX, item.x + w + CODING_ROBOT_ACTIVITY_PANEL_GAP + panelWidth)
+          }
         }
         const centerX = (minX + maxX) / 2
         const centerY = (minY + maxY) / 2
