@@ -132,9 +132,25 @@ export default function CodingRobotItemRenderer({
         fontSize={11}
         fill={theme.headerText}
         opacity={0.6}
-        width={item.width * 0.6 - 16}
+        width={item.width * 0.6 - 36}
         ellipsis={true}
         align="right"
+      />
+      {/* Change directory button */}
+      <Text
+        x={item.width - 22}
+        y={6}
+        text={'\uD83D\uDCC1'}
+        fontSize={13}
+        cursor="pointer"
+        onClick={(e) => {
+          e.cancelBubble = true
+          const current = item.rootDirectory ?? ''
+          const newDir = window.prompt('Root directory:', current)
+          if (newDir !== null && newDir !== current) {
+            onUpdateItem(item.id, { rootDirectory: newDir.replace(/\\/g, '/') })
+          }
+        }}
       />
       {/* Body area - transparent rect for hit detection, DOM overlay renders on top */}
       <Rect

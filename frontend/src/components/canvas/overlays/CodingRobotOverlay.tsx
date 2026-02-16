@@ -110,13 +110,15 @@ export default function CodingRobotOverlay({
 
   // Auto-scroll to bottom when chat history changes
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = chatEndRef.current?.parentElement
+    if (el) el.scrollTop = el.scrollHeight
   }, [item.chatHistory.length])
 
   // Auto-scroll activity panel when viewing latest step
   useEffect(() => {
     if (viewStepIndex === totalSteps - 1) {
-      activityEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const el = activityEndRef.current?.parentElement
+      if (el) el.scrollTop = el.scrollHeight
     }
   }, [currentMessages.length, viewStepIndex, totalSteps])
 

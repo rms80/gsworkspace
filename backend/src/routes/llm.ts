@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { readFileSync } from 'fs'
+import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
@@ -242,7 +242,18 @@ router.post('/generate-html', async (req, res) => {
   }
 })
 
-router.post('/generate-claude-code', async (req, res) => {
+// Claude Code endpoints require both server and client to be on localhost
+import type { Request, Response, NextFunction } from 'express'
+function requireLocalhost(req: Request, res: Response, next: NextFunction) {
+  const ip = req.ip || req.socket.remoteAddress || ''
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
+  if (!isLocal) {
+    return res.status(403).json({ error: 'Claude Code endpoints are only available from localhost' })
+  }
+  next()
+}
+
+router.post('/generate-claude-code', requireLocalhost, async (req, res) => {
   try {
     const { items, prompt, sessionId, requestId, rootDirectory } = req.body as {
       items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string; rootDirectory?: string
@@ -250,6 +261,16 @@ router.post('/generate-claude-code', async (req, res) => {
 
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
+    }
+
+    // Validate rootDirectory
+    if (rootDirectory) {
+      if (!existsSync(rootDirectory)) {
+        return res.status(400).json({ error: `Directory does not exist: ${rootDirectory}` })
+      }
+      if (!existsSync(join(rootDirectory, '.claude'))) {
+        return res.status(400).json({ error: `Claude is not initialized for this directory. Run 'claude' in ${rootDirectory} from the CLI first.` })
+      }
     }
 
     // Lazy cleanup of old requests
@@ -348,7 +369,7 @@ router.post('/generate-claude-code', async (req, res) => {
 })
 
 // Poll for buffered request state (used after HMR reconnection)
-router.get('/generate-claude-code/poll/:requestId', (req, res) => {
+router.get('/generate-claude-code/poll/:requestId', requireLocalhost, (req, res) => {
   const { requestId } = req.params
   const after = parseInt(req.query.after as string) || 0
 
@@ -368,7 +389,7 @@ router.get('/generate-claude-code/poll/:requestId', (req, res) => {
 })
 
 // Interrupt a running Claude Code query
-router.post('/generate-claude-code/interrupt/:requestId', (req, res) => {
+router.post('/generate-claude-code/interrupt/:requestId', requireLocalhost, (req, res) => {
   const { requestId } = req.params
   const interrupted = interruptQuery(requestId)
   res.json({ interrupted })
