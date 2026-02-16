@@ -120,8 +120,8 @@ AWS_REGION=
 S3_BUCKET_NAME=
 
 # AI APIs
-ANTHROPIC_API_KEY=
-GOOGLE_API_KEY=
+GSWS_API_KEY_ANTHROPIC=
+GSWS_API_KEY_GEMINI=
 
 # Local storage path (for local mode, defaults to ~/.gsworkspace if empty)
 LOCAL_STORAGE_PATH=

@@ -71,8 +71,8 @@ STORAGE_MODE=local
 LOCAL_STORAGE_PATH=
 
 # AI API Keys (optional - leave empty to disable AI features)
-ANTHROPIC_API_KEY=
-GEMINI_API_KEY=
+GSWS_API_KEY_ANTHROPIC=
+GSWS_API_KEY_GEMINI=
 EOF
     echo "Backend .env created."
 fi
@@ -112,6 +112,6 @@ echo
 echo "To start the app, run: ./launch-macos.sh"
 echo
 echo "Optional: Add your API keys to backend/.env"
-echo "  - ANTHROPIC_API_KEY for Claude AI features"
-echo "  - GEMINI_API_KEY for Gemini/Imagen features"
+echo "  - GSWS_API_KEY_ANTHROPIC for Claude AI features"
+echo "  - GSWS_API_KEY_GEMINI for Gemini/Imagen features"
 echo

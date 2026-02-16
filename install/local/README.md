@@ -72,8 +72,8 @@ You can change this by editing `backend/.env` and setting `LOCAL_STORAGE_PATH`.
 To enable AI features (text generation, image generation, HTML generation), add your API keys to `backend/.env`:
 
 ```
-ANTHROPIC_API_KEY=your-key-here
-GEMINI_API_KEY=your-key-here
+GSWS_API_KEY_ANTHROPIC=your-key-here
+GSWS_API_KEY_GEMINI=your-key-here
 ```
 
 - Get an Anthropic API key at: https://console.anthropic.com/

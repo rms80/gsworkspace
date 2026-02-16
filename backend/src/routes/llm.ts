@@ -51,9 +51,9 @@ function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): stri
     // Check for authentication errors
     if ('status' in error && (error as { status: number }).status === 401) {
       if (provider === 'anthropic') {
-        return 'Anthropic API key is missing or invalid. Please check your ANTHROPIC_API_KEY in the backend .env file.'
+        return 'Anthropic API key is missing or invalid. Please check your GSWS_API_KEY_ANTHROPIC in the backend .env file.'
       } else {
-        return 'Google API key is missing or invalid. Please check your GEMINI_API_KEY in the backend .env file.'
+        return 'Google API key is missing or invalid. Please check your GSWS_API_KEY_GEMINI in the backend .env file.'
       }
     }
 
@@ -65,18 +65,18 @@ function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): stri
     // Check for invalid API key in message
     if (message.includes('invalid x-api-key') || message.includes('invalid api key') || message.includes('API_KEY_INVALID')) {
       if (provider === 'anthropic') {
-        return 'Anthropic API key is invalid. Please check your ANTHROPIC_API_KEY in the backend .env file.'
+        return 'Anthropic API key is invalid. Please check your GSWS_API_KEY_ANTHROPIC in the backend .env file.'
       } else {
-        return 'Google API key is invalid. Please check your GEMINI_API_KEY in the backend .env file.'
+        return 'Google API key is invalid. Please check your GSWS_API_KEY_GEMINI in the backend .env file.'
       }
     }
 
     // Check for missing API key
     if (message.includes('API key') && (message.includes('missing') || message.includes('not provided') || message.includes('required'))) {
       if (provider === 'anthropic') {
-        return 'Anthropic API key is not configured. Please set ANTHROPIC_API_KEY in the backend .env file.'
+        return 'Anthropic API key is not configured. Please set GSWS_API_KEY_ANTHROPIC in the backend .env file.'
       } else {
-        return 'Google API key is not configured. Please set GEMINI_API_KEY in the backend .env file.'
+        return 'Google API key is not configured. Please set GSWS_API_KEY_GEMINI in the backend .env file.'
       }
     }
 
@@ -387,21 +387,21 @@ router.post('/quick-query', async (req, res) => {
 
     let result: string
     let model: string
-    if (process.env.ANTHROPIC_API_KEY) {
+    if (process.env.GSWS_API_KEY_ANTHROPIC) {
       model = 'claude-haiku'
       result = await generateText([], prompt, 'claude-haiku')
-    } else if (process.env.GEMINI_API_KEY) {
+    } else if (process.env.GSWS_API_KEY_GEMINI) {
       model = 'gemini-flash'
       result = await generateTextWithGemini([], prompt, 'gemini-flash')
     } else {
-      return res.status(500).json({ error: 'No LLM API key configured on server. Set ANTHROPIC_API_KEY or GEMINI_API_KEY in .env.' })
+      return res.status(500).json({ error: 'No LLM API key configured on server. Set GSWS_API_KEY_ANTHROPIC or GSWS_API_KEY_GEMINI in .env.' })
     }
 
     console.log(`[${new Date().toISOString().replace('T', ' ')}] [QuickQuery] [${model}] result: ${result}`)
     res.json({ result })
   } catch (error) {
     console.error('Error in quick query:', error)
-    const provider = process.env.ANTHROPIC_API_KEY ? 'anthropic' : 'gemini'
+    const provider = process.env.GSWS_API_KEY_ANTHROPIC ? 'anthropic' : 'gemini'
     res.status(500).json({ error: getErrorMessage(error, provider) })
   }
 })

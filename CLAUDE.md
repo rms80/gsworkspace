@@ -75,7 +75,7 @@ backend/
 
 Copy `.env.example` to `.env` in the backend directory and fill in:
 - `AWS_*` credentials and `S3_BUCKET_NAME` for storage
-- `ANTHROPIC_API_KEY` for Claude API access
+- `GSWS_API_KEY_ANTHROPIC` for Claude API access
 
 
 ## Notes to CLAUDE

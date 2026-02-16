@@ -85,8 +85,8 @@ if exist ".env" (
         echo LOCAL_STORAGE_PATH=
         echo.
         echo # AI API Keys ^(optional - leave empty to disable AI features^)
-        echo ANTHROPIC_API_KEY=
-        echo GEMINI_API_KEY=
+        echo GSWS_API_KEY_ANTHROPIC=
+        echo GSWS_API_KEY_GEMINI=
     ) > .env
     echo Backend .env created.
 )
@@ -126,7 +126,7 @@ echo.
 echo To start the app, run: launch-windows.bat
 echo.
 echo Optional: Add your API keys to backend\.env
-echo   - ANTHROPIC_API_KEY for Claude AI features
-echo   - GEMINI_API_KEY for Gemini/Imagen features
+echo   - GSWS_API_KEY_ANTHROPIC for Claude AI features
+echo   - GSWS_API_KEY_GEMINI for Gemini/Imagen features
 echo.
 pause

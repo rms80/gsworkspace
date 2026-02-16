@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { ResolvedContentItem } from './llmTypes.js'
 
 const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+  apiKey: process.env.GSWS_API_KEY_ANTHROPIC,
 })
 
 function truncatePrompt(text: string, maxWords = 50): string {

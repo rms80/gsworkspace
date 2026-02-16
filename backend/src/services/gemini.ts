@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { ResolvedContentItem } from './llmTypes.js'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '')
+const genAI = new GoogleGenerativeAI(process.env.GSWS_API_KEY_GEMINI || '')
 
 function truncatePrompt(text: string, maxWords = 50): string {
   const words = text.split(/\s+/)
