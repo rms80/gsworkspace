@@ -168,7 +168,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const promptContextSummaries = useMemo(() => {
     const map: Record<string, string[]> = {}
     for (const item of items) {
-      if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt') {
+      if (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot') {
         map[item.id] = getPromptContextSummary(items, selectedIds, item.id)
       }
     }
@@ -1886,6 +1886,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 isAnyDragActive={isAnyDragActive}
                 transform={transform}
                 selectedTextContent={selectedTextContent}
+                contextSummaryLines={promptContextSummaries[item.id]}
                 activitySteps={codingRobotActivity.get(item.id) || []}
                 onSendMessage={onSendCodingRobotMessage}
                 onStopMessage={onStopCodingRobotMessage}

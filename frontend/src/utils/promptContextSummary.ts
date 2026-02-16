@@ -7,6 +7,7 @@ const TYPE_LABELS: Record<string, string> = {
   'prompt': 'prompt',
   'image-gen-prompt': 'prompt',
   'html-gen-prompt': 'prompt',
+  'coding-robot': 'coding robot',
   'html': 'html',
   'pdf': 'pdf',
   'text-file': 'text file',

@@ -223,7 +223,7 @@ export async function generateWithClaudeCode(
     } else if (message.type === 'system' && 'subtype' in message) {
       const subtype = (message as Record<string, unknown>).subtype as string
       if (subtype === 'init') {
-        onActivity?.({ type: 'status', content: 'Session initialized' })
+        onActivity?.({ type: 'status', content: `[Prompt]: ${prompt}` })
       } else {
         onActivity?.({ type: 'status', content: subtype })
       }

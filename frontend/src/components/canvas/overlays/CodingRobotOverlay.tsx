@@ -27,6 +27,7 @@ interface CodingRobotOverlayProps {
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
   selectedTextContent: string
+  contextSummaryLines?: string[]
   activitySteps: ActivityMessage[][]
   onSendMessage: (itemId: string, message: string) => void
   onStopMessage?: (itemId: string) => void
@@ -43,6 +44,7 @@ export default function CodingRobotOverlay({
   isAnyDragActive,
   transform,
   selectedTextContent,
+  contextSummaryLines,
   activitySteps,
   onSendMessage,
   onStopMessage,
@@ -443,6 +445,7 @@ export default function CodingRobotOverlay({
             <button
               onClick={handleSend}
               disabled={!canSend}
+              title={contextSummaryLines?.join('\n')}
               style={{
                 width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
                 height: BUTTON_HEIGHT * stageScale,
