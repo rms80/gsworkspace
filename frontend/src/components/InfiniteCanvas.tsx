@@ -1167,7 +1167,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const editingHtmlGenPrompt = htmlGenPromptEditing.getEditingItem() as HTMLGenPromptItem | null
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', flex: 1, backgroundColor: '#555555' }} onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div ref={containerRef} style={{ position: 'relative', flex: 1, overflow: 'hidden', backgroundColor: '#555555' }} onDragOver={handleDragOver} onDrop={handleDrop}>
       <Stage
         ref={stageRef}
         width={stageSize.width}
