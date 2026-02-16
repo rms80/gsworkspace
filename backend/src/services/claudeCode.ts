@@ -36,7 +36,8 @@ export async function generateWithClaudeCode(
   prompt: string,
   sessionId?: string | null,
   onActivity?: (event: ActivityEvent) => void,
-  requestId?: string
+  requestId?: string,
+  rootDirectory?: string
 ): Promise<ClaudeCodeResult> {
   // Build a text prompt with content blocks described inline
   const parts: string[] = []
@@ -63,10 +64,11 @@ export async function generateWithClaudeCode(
 
   console.log('[ClaudeCode] Starting query with prompt length:', fullPrompt.length)
 
-  console.log('[ClaudeCode] Using cwd:', CLAUDE_CODE_CWD)
+  const cwd = rootDirectory || CLAUDE_CODE_CWD
+  console.log('[ClaudeCode] Using cwd:', cwd)
 
   const queryOptions: Record<string, unknown> = {
-    cwd: CLAUDE_CODE_CWD,
+    cwd,
     maxTurns: 50,
     systemPrompt: 'You are a coding assistant integrated into an infinite canvas application. The user sends you text and image content from their canvas along with a request. Respond with helpful, concise results. If the user asks you to create or modify files, do so. Return your final answer as plain text.',
     permissionMode: 'acceptEdits',

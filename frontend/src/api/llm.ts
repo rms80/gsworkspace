@@ -193,13 +193,14 @@ export async function generateWithClaudeCode(
   prompt: string,
   sessionId?: string | null,
   onActivity?: (event: ClaudeCodeActivityEvent) => void,
-  requestId?: string
+  requestId?: string,
+  rootDirectory?: string
 ): Promise<ClaudeCodeResponse> {
   // Always goes through backend (no offline mode for Claude Code)
   const response = await fetch(`${API_BASE}/generate-claude-code`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ items: toBackendItems(items), prompt, sessionId, requestId }),
+    body: JSON.stringify({ items: toBackendItems(items), prompt, sessionId, requestId, rootDirectory }),
   })
 
   if (!response.ok) {

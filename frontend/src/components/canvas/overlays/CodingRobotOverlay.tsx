@@ -181,7 +181,7 @@ export default function CodingRobotOverlay({
     document.addEventListener('mouseup', onMouseUp)
   }, [item.activityPanelWidth, item.id, stageScale, onUpdateItem])
 
-  const statusBarHeight = item.sessionId ? 18 * stageScale : 0
+  const statusBarHeight = 18 * stageScale
   const inputAreaHeight = CODING_ROBOT_INPUT_HEIGHT * stageScale
   const chatAreaHeight = displayHeight - inputAreaHeight - statusBarHeight
 
@@ -223,7 +223,7 @@ export default function CodingRobotOverlay({
         }}
       >
         {/* Session ID status bar */}
-        {item.sessionId && (
+        {(
           <div
             style={{
               height: statusBarHeight,
@@ -239,7 +239,7 @@ export default function CodingRobotOverlay({
             }}
           >
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-              Session: {item.sessionId}
+              Session: {item.sessionId ?? 'not initialized'}
             </span>
             <div ref={menuRef} style={{ position: 'relative', flexShrink: 0, marginRight: `${4 * stageScale}px` }}>
               <button

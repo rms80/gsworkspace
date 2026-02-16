@@ -121,8 +121,20 @@ export default function CodingRobotItemRenderer({
         fontSize={14}
         fontStyle="bold"
         fill={theme.headerText}
-        width={item.width - 16}
+        width={item.width * 0.4}
         ellipsis={true}
+      />
+      {/* Root directory */}
+      <Text
+        x={item.width * 0.4 + 8}
+        y={8}
+        text={item.rootDirectory ? (navigator.platform.startsWith('Win') ? item.rootDirectory.replace(/\//g, '\\') : item.rootDirectory) : ''}
+        fontSize={11}
+        fill={theme.headerText}
+        opacity={0.6}
+        width={item.width * 0.6 - 16}
+        ellipsis={true}
+        align="right"
       />
       {/* Body area - transparent rect for hit detection, DOM overlay renders on top */}
       <Rect

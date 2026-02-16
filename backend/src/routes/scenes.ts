@@ -176,6 +176,7 @@ interface StoredCodingRobotItem extends StoredItemBase {
   label: string
   text: string
   sessionId?: string | null
+  rootDirectory?: string
   chatHistoryFile?: string
   showActivity?: boolean
   activityPanelWidth?: number
@@ -693,6 +694,7 @@ router.post('/:id', async (req, res) => {
           label: item.label,
           text: item.text,
           sessionId: item.sessionId ?? null,
+          rootDirectory: item.rootDirectory || undefined,
           chatHistoryFile: (item.chatHistory && item.chatHistory.length > 0) ? chatHistoryFile : undefined,
           showActivity: item.showActivity || undefined,
           activityPanelWidth: item.activityPanelWidth || undefined,
@@ -1126,6 +1128,7 @@ router.get('/:id', async (req, res) => {
             text: item.text,
             chatHistory,
             sessionId: item.sessionId ?? null,
+            rootDirectory: item.rootDirectory,
             showActivity: item.showActivity,
             activityPanelWidth: item.activityPanelWidth,
             activeRequestId: item.activeRequestId,

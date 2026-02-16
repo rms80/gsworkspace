@@ -244,8 +244,8 @@ router.post('/generate-html', async (req, res) => {
 
 router.post('/generate-claude-code', async (req, res) => {
   try {
-    const { items, prompt, sessionId, requestId } = req.body as {
-      items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string
+    const { items, prompt, sessionId, requestId, rootDirectory } = req.body as {
+      items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string; rootDirectory?: string
     }
 
     if (!prompt) {
@@ -306,7 +306,8 @@ router.post('/generate-claude-code', async (req, res) => {
           }
         }
       },
-      requestId
+      requestId,
+      rootDirectory
     )
 
     // Store result in buffer

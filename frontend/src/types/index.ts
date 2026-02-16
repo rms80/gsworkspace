@@ -131,6 +131,7 @@ export interface CodingRobotItem extends BaseItem {
   height: number
   chatHistory: ChatMessage[]
   sessionId: string | null
+  rootDirectory?: string
   showActivity?: boolean
   activityPanelWidth?: number  // canvas units (unscaled)
   activeRequestId?: string     // backend requestId for SSE reconnection after HMR

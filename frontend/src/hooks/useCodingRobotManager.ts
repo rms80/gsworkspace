@@ -320,7 +320,8 @@ export function useCodingRobotManager({
             return next
           })
         },
-        requestId
+        requestId,
+        robotItem.rootDirectory
       )
 
       // Append assistant response and clear activeRequestId
