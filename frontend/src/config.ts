@@ -31,6 +31,13 @@ export const config = {
      * Strips scripts, iframes, etc. Disable for debugging output issues.
      */
     sanitizeHtml: true,
+
+    /**
+     * Show a wheel-intercepting overlay on embed video (YouTube) iframes.
+     * Captures scroll for canvas zoom and forwards clicks when selected.
+     * Disable to let the iframe handle all events natively.
+     */
+    embedVideoOverlay: false,
   },
 
   /**

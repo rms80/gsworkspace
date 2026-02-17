@@ -118,6 +118,34 @@ export interface CanvasHandle {
   setViewport: (pos: { x: number; y: number }, scale: number) => void
 }
 
+/**
+ * Ref callback for iframes: intercepts Ctrl+Wheel inside the iframe's content document
+ * and forwards it to the Konva stage for canvas zoom instead of browser zoom.
+ */
+function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
+  if (!el || el.dataset.ctrlWheelSetup) return
+  el.dataset.ctrlWheelSetup = 'true'
+  const attach = () => {
+    const doc = el.contentDocument
+    if (!doc) return
+    doc.addEventListener('wheel', (ev: WheelEvent) => {
+      if (!ev.ctrlKey) return
+      ev.preventDefault()
+      const rect = el.getBoundingClientRect()
+      const clientX = rect.left + ev.clientX
+      const clientY = rect.top + ev.clientY
+      const stage = document.querySelector('.konvajs-content')
+      if (stage) {
+        // Dispatch pointermove first so Konva updates its pointer position
+        stage.dispatchEvent(new PointerEvent('pointermove', { clientX, clientY, bubbles: true }))
+        stage.dispatchEvent(new WheelEvent('wheel', { deltaY: ev.deltaY, clientX, clientY, ctrlKey: true, bubbles: true }))
+      }
+    }, { passive: false })
+  }
+  el.addEventListener('load', attach)
+  if (el.contentDocument?.readyState === 'complete') attach()
+}
+
 const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1666,6 +1694,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               }}
             >
               <iframe
+                ref={setupIframeCtrlWheel}
                 srcDoc={item.html}
                 sandbox="allow-same-origin"
                 style={{
@@ -1687,6 +1716,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                       const stage = document.querySelector('.konvajs-content')
                       if (stage) stage.dispatchEvent(new WheelEvent('wheel', ev))
                     }, { passive: false })
+                    // Clear text selection inside the iframe when overlay appears (deselected)
+                    const iframe = el.previousElementSibling as HTMLIFrameElement
+                    try { iframe?.contentWindow?.getSelection()?.removeAllRanges() } catch (_) { /* cross-origin */ }
                   }}
                   onMouseDown={(e) => {
                     if (e.shiftKey) {
@@ -1809,6 +1841,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               }}
             >
               <iframe
+                ref={setupIframeCtrlWheel}
                 srcDoc={srcdoc}
                 data-textfile-id={item.id}
                 style={{
@@ -1831,6 +1864,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                       const stage = document.querySelector('.konvajs-content')
                       if (stage) stage.dispatchEvent(new WheelEvent('wheel', ev))
                     }, { passive: false })
+                    // Clear text selection inside the iframe when overlay appears (deselected)
+                    const iframe = el.previousElementSibling as HTMLIFrameElement
+                    try { iframe?.contentWindow?.getSelection()?.removeAllRanges() } catch (_) { /* cross-origin */ }
                   }}
                   onMouseDown={(e) => {
                     if (e.shiftKey) {
@@ -1853,7 +1889,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         })}
 
       {/* Embed video (YouTube) iframe overlays */}
-      {!isViewportTransforming && items
+      {items
         .filter((item) => item.type === 'embed-video')
         .map((item) => {
           if (item.type !== 'embed-video') return null
@@ -1863,7 +1899,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           const width = transform?.width ?? item.width
           const height = transform?.height ?? item.height
           const isSelected = selectedIds.includes(item.id)
-          const iframeInteractive = isSelected && !isAnyDragActive
           const embedParams = new URLSearchParams({ rel: '0' })
           if (item.startTime) embedParams.set('start', String(item.startTime))
           const embedSrc = `https://www.youtube.com/embed/${item.videoId}?${embedParams}`
@@ -1878,7 +1913,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 height: height * stageScale,
                 overflow: 'hidden',
                 zIndex: Z_IFRAME_OVERLAY,
-                pointerEvents: iframeInteractive ? 'auto' : 'none',
+                visibility: isViewportTransforming ? 'hidden' : 'visible',
+                pointerEvents: (!config.features.embedVideoOverlay && !isSelected) ? 'none' : undefined,
               }}
             >
               <iframe
@@ -1889,10 +1925,48 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   width: width * stageScale,
                   height: height * stageScale,
                   border: 'none',
-                  pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#000',
                 }}
               />
+              {/* Overlay: intercepts wheel for canvas zoom, forwards clicks to iframe.
+                  Controlled by config.features.embedVideoOverlay */}
+              {config.features.embedVideoOverlay && (
+                <div
+                  ref={(el) => {
+                    if (!el || el.dataset.overlaySetup) return
+                    el.dataset.overlaySetup = 'true'
+                    el.addEventListener('wheel', (ev) => {
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      const stage = document.querySelector('.konvajs-content')
+                      if (stage) stage.dispatchEvent(new WheelEvent('wheel', ev))
+                    }, { passive: false })
+                  }}
+                  onMouseDown={(e) => {
+                    if (!isSelected) {
+                      if (e.shiftKey) {
+                        onSelectItems([...selectedIds, item.id])
+                      } else {
+                        onSelectItems([item.id])
+                      }
+                    } else {
+                      // Hide overlay so the user's mouseup reaches the iframe
+                      const overlay = e.currentTarget as HTMLElement
+                      overlay.style.display = 'none'
+                      setTimeout(() => { overlay.style.display = '' }, 2000)
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: isSelected ? `calc(100% - 75px)` : '100%',
+                    pointerEvents: 'auto',
+                    background: 'rgba(0, 0, 255, 0.15)',
+                  }}
+                />
+              )}
               {/* Play triangle overlay when not selected */}
               {!isSelected && (
                 <div
@@ -1951,6 +2025,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onStopMessage={onStopCodingRobotMessage}
                 onClearChat={onClearCodingRobotChat}
                 onUpdateItem={onUpdateItem}
+                onSelectItems={onSelectItems}
+                selectedIds={selectedIds}
               />
             )
           })

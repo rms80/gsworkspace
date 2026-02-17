@@ -34,6 +34,8 @@ interface CodingRobotOverlayProps {
   onStopMessage?: (itemId: string) => void
   onClearChat?: (itemId: string) => void
   onUpdateItem: (id: string, changes: Partial<CodingRobotItem>) => void
+  onSelectItems: (ids: string[]) => void
+  selectedIds: string[]
 }
 
 export default function CodingRobotOverlay({
@@ -52,6 +54,8 @@ export default function CodingRobotOverlay({
   onStopMessage,
   onClearChat,
   onUpdateItem,
+  onSelectItems,
+  selectedIds,
 }: CodingRobotOverlayProps) {
   const mainContainerRef = useRef<HTMLDivElement>(null)
   const activityContainerRef = useRef<HTMLDivElement>(null)
@@ -155,11 +159,11 @@ export default function CodingRobotOverlay({
     }
   }, [stageScale])
 
-  // When not selected, forward wheel events to the Konva stage so canvas zoom works.
-  // Must use native listener with { passive: false } — React registers wheel as passive.
+  // Forward wheel events to the Konva stage: always when not selected,
+  // and on Ctrl+Wheel when selected (to zoom canvas instead of browser zoom).
   useEffect(() => {
     const handler = (e: WheelEvent) => {
-      if (!isSelected) {
+      if (!isSelected || e.ctrlKey) {
         e.preventDefault()
         e.stopPropagation()
         const stageContainer = document.querySelector('.konvajs-content')
@@ -177,6 +181,17 @@ export default function CodingRobotOverlay({
       activityEl?.removeEventListener('wheel', handler)
     }
   }, [isSelected, showActivity])
+
+  // Clear text selection when deselected
+  useEffect(() => {
+    if (!isSelected && mainContainerRef.current) {
+      const sel = window.getSelection()
+      if (sel && (mainContainerRef.current.contains(sel.anchorNode) ||
+          activityContainerRef.current?.contains(sel.anchorNode))) {
+        sel.removeAllRanges()
+      }
+    }
+  }, [isSelected])
 
   const canSend = !isRunning && (!!inputText.trim() || !!selectedTextContent)
 
@@ -266,6 +281,16 @@ export default function CodingRobotOverlay({
     <>
       <div
         ref={mainContainerRef}
+        onMouseDown={(e) => {
+          if (!isSelected) {
+            e.stopPropagation()
+            if (e.shiftKey) {
+              onSelectItems([...selectedIds, item.id])
+            } else {
+              onSelectItems([item.id])
+            }
+          }
+        }}
         style={{
           position: 'absolute',
           left,
