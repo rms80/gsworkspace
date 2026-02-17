@@ -1634,7 +1634,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     </Stage>
 
       {/* HTML iframe overlays - tracks Konva rects during drag/transform */}
-      {!isViewportTransforming && items
+      {/* HTML iframe overlays — use visibility instead of unmount during zoom
+         so the browser preserves iframe scroll handling */}
+      {items
         .filter((item) => item.type === 'html')
         .map((item) => {
           if (item.type !== 'html') return null
@@ -1660,8 +1662,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
                 zIndex: Z_IFRAME_OVERLAY,
-                // Let clicks/wheel pass through to Konva canvas when not selected or dragging
-                pointerEvents: iframeInteractive ? 'auto' : 'none',
+                visibility: isViewportTransforming ? 'hidden' : 'visible',
               }}
             >
               <iframe
@@ -1673,10 +1674,36 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                   border: 'none',
                   transform: `scale(${zoom})`,
                   transformOrigin: 'top left',
-                  pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#fff',
                 }}
               />
+              {!iframeInteractive && (
+                <div
+                  ref={(el) => {
+                    if (!el) return
+                    el.addEventListener('wheel', (ev) => {
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      const stage = document.querySelector('.konvajs-content')
+                      if (stage) stage.dispatchEvent(new WheelEvent('wheel', ev))
+                    }, { passive: false })
+                  }}
+                  onMouseDown={(e) => {
+                    if (e.shiftKey) {
+                      onSelectItems([...selectedIds, item.id])
+                    } else {
+                      onSelectItems([item.id])
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                  }}
+                />
+              )}
             </div>
           )
         })}
@@ -1723,8 +1750,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           )
         })}
 
-      {/* Text file iframe overlays */}
-      {!isViewportTransforming && items
+      {/* Text file iframe overlays — use visibility instead of unmount during zoom
+         so the browser preserves iframe scroll handling */}
+      {items
         .filter((item) => item.type === 'text-file' && !(item as TextFileItem).minimized)
         .map((item) => {
           if (item.type !== 'text-file') return null
@@ -1777,19 +1805,49 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 overflow: 'hidden',
                 borderRadius: '0 0 4px 4px',
                 zIndex: Z_IFRAME_OVERLAY,
-                pointerEvents: iframeInteractive ? 'auto' : 'none',
+                visibility: isViewportTransforming ? 'hidden' : 'visible',
               }}
             >
               <iframe
                 srcDoc={srcdoc}
+                data-textfile-id={item.id}
                 style={{
                   width: width * stageScale,
                   height: height * stageScale,
                   border: 'none',
-                  pointerEvents: iframeInteractive ? 'auto' : 'none',
                   background: '#fff',
                 }}
               />
+              {/* Overlay to capture events when not selected — the iframe itself must never
+                  have pointer-events:none or the browser breaks scroll handling on resize */}
+              {!iframeInteractive && (
+                <div
+                  ref={(el) => {
+                    if (!el) return
+                    // Non-passive wheel listener so we can preventDefault and forward to canvas
+                    el.addEventListener('wheel', (ev) => {
+                      ev.preventDefault()
+                      ev.stopPropagation()
+                      const stage = document.querySelector('.konvajs-content')
+                      if (stage) stage.dispatchEvent(new WheelEvent('wheel', ev))
+                    }, { passive: false })
+                  }}
+                  onMouseDown={(e) => {
+                    if (e.shiftKey) {
+                      onSelectItems([...selectedIds, item.id])
+                    } else {
+                      onSelectItems([item.id])
+                    }
+                  }}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                  }}
+                />
+              )}
             </div>
           )
         })}
