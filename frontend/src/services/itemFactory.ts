@@ -104,7 +104,7 @@ export function createCodingRobotItem(
     height: opts?.height ?? 350,
     chatHistory: [],
     sessionId: null,
-    rootDirectory: 'D:/workspaceapp',
+    rootDirectory: typeof __PROJECT_ROOT__ !== 'undefined' ? __PROJECT_ROOT__ : '',
   }
 }
 
