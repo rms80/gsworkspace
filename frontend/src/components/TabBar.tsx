@@ -287,6 +287,7 @@ function TabBar({
             overflowY: 'auto',
             zIndex: 200,
             color: '#ddd',
+            fontFamily: 'sans-serif',
           }}
         >
           {onPinCurrentScenes && (

@@ -261,12 +261,15 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
         {statusDisplay && (
           <span
             style={{
-              padding: '2px 12px',
+              padding: '0 12px',
+              height: 20,
               backgroundColor: statusDisplay.bg,
               color: statusDisplay.color,
               borderRadius: 3,
               fontSize: 11,
               fontWeight: 500,
+              display: 'inline-flex',
+              alignItems: 'center',
             }}
           >
             {statusDisplay.text}
