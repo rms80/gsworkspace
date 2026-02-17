@@ -1883,6 +1883,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 stagePos={stagePos}
                 isRunning={runningCodingRobotIds.has(item.id)}
                 isReconnecting={reconnectingCodingRobotIds.has(item.id)}
+                isSelected={selectedIds.includes(item.id)}
                 isAnyDragActive={isAnyDragActive}
                 transform={transform}
                 selectedTextContent={selectedTextContent}

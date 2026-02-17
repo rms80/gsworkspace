@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
+import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
 import { CodingRobotItem, ChatMessage, ActivityMessage } from '../../../types'
 import {
   CODING_ROBOT_HEADER_HEIGHT,
@@ -24,6 +24,7 @@ interface CodingRobotOverlayProps {
   stagePos: { x: number; y: number }
   isRunning: boolean
   isReconnecting?: boolean
+  isSelected: boolean
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
   selectedTextContent: string
@@ -41,6 +42,7 @@ export default function CodingRobotOverlay({
   stagePos,
   isRunning,
   isReconnecting,
+  isSelected,
   isAnyDragActive,
   transform,
   selectedTextContent,
@@ -51,10 +53,17 @@ export default function CodingRobotOverlay({
   onClearChat,
   onUpdateItem,
 }: CodingRobotOverlayProps) {
+  const mainContainerRef = useRef<HTMLDivElement>(null)
+  const activityContainerRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
+  const activityScrollRef = useRef<HTMLDivElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const activityEndRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
+  const prevScaleRef = useRef(stageScale)
+  const chatAtBottomRef = useRef(true)
+  const activityAtBottomRef = useRef(true)
   const [copyFeedback, setCopyFeedback] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [inputText, setInputText] = useState(item.text)
@@ -123,6 +132,51 @@ export default function CodingRobotOverlay({
       if (el) el.scrollTop = el.scrollHeight
     }
   }, [currentMessages.length, viewStepIndex, totalSteps])
+
+  // Maintain scroll position ratio when stageScale changes (zoom in/out).
+  // Without this, scrollTop stays at its old pixel value while content rescales,
+  // causing the view to drift away from where it was.
+  useLayoutEffect(() => {
+    if (prevScaleRef.current !== stageScale) {
+      const ratio = stageScale / prevScaleRef.current
+      const pairs: [HTMLDivElement | null, React.RefObject<boolean>][] = [
+        [chatScrollRef.current, chatAtBottomRef],
+        [activityScrollRef.current, activityAtBottomRef],
+      ]
+      for (const [el, atBottom] of pairs) {
+        if (!el) continue
+        if (atBottom.current) {
+          el.scrollTop = el.scrollHeight
+        } else {
+          el.scrollTop = el.scrollTop * ratio
+        }
+      }
+      prevScaleRef.current = stageScale
+    }
+  }, [stageScale])
+
+  // When not selected, forward wheel events to the Konva stage so canvas zoom works.
+  // Must use native listener with { passive: false } — React registers wheel as passive.
+  useEffect(() => {
+    const handler = (e: WheelEvent) => {
+      if (!isSelected) {
+        e.preventDefault()
+        e.stopPropagation()
+        const stageContainer = document.querySelector('.konvajs-content')
+        if (stageContainer) {
+          stageContainer.dispatchEvent(new WheelEvent('wheel', e))
+        }
+      }
+    }
+    const mainEl = mainContainerRef.current
+    const activityEl = activityContainerRef.current
+    mainEl?.addEventListener('wheel', handler, { passive: false })
+    activityEl?.addEventListener('wheel', handler, { passive: false })
+    return () => {
+      mainEl?.removeEventListener('wheel', handler)
+      activityEl?.removeEventListener('wheel', handler)
+    }
+  }, [isSelected, showActivity])
 
   const canSend = !isRunning && (!!inputText.trim() || !!selectedTextContent)
 
@@ -211,6 +265,7 @@ export default function CodingRobotOverlay({
   return (
     <>
       <div
+        ref={mainContainerRef}
         style={{
           position: 'absolute',
           left,
@@ -345,6 +400,11 @@ export default function CodingRobotOverlay({
 
         {/* Chat history area */}
         <div
+          ref={chatScrollRef}
+          onScroll={(e) => {
+            const el = e.currentTarget
+            chatAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 2
+          }}
           style={{
             flex: 1,
             height: chatAreaHeight,
@@ -484,6 +544,7 @@ export default function CodingRobotOverlay({
       {/* Activity panel */}
       {showActivity && (
         <div
+          ref={activityContainerRef}
           style={{
             position: 'absolute',
             left: activityPanelLeft,
@@ -557,11 +618,18 @@ export default function CodingRobotOverlay({
           </div>
 
           {/* Activity messages */}
-          <div style={{
-            flex: 1,
-            overflowY: 'auto',
-            padding: `${4 * stageScale}px`,
-          }}>
+          <div
+            ref={activityScrollRef}
+            onScroll={(e) => {
+              const el = e.currentTarget
+              activityAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 2
+            }}
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: `${4 * stageScale}px`,
+            }}
+          >
             {currentMessages.length === 0 && (
               <div style={{
                 color: '#555',
