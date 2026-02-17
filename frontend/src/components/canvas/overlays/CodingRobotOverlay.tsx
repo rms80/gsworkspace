@@ -284,11 +284,9 @@ export default function CodingRobotOverlay({
         onMouseDown={(e) => {
           if (!isSelected) {
             e.stopPropagation()
-            if (e.shiftKey) {
-              onSelectItems([...selectedIds, item.id])
-            } else {
-              onSelectItems([item.id])
-            }
+            // Add to selection (don't replace) so other selected items
+            // remain as context when clicking Send
+            onSelectItems([...selectedIds, item.id])
           }
         }}
         style={{
