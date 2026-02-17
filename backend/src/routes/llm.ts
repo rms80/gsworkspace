@@ -255,6 +255,12 @@ function requireLocalhost(req: Request, res: Response, next: NextFunction) {
 
 router.post('/generate-claude-code', requireLocalhost, async (req, res) => {
   try {
+    if (process.env.ANTHROPIC_API_KEY && process.env.ALLOW_ANTHROPIC_API_KEY !== 'true') {
+      return res.status(403).json({
+        error: 'ANTHROPIC_API_KEY is set in your environment. CodingRobot will use this key and consume your API credits. To allow this, add ALLOW_ANTHROPIC_API_KEY=true to your backend .env file.'
+      })
+    }
+
     const { items, prompt, sessionId, requestId, rootDirectory } = req.body as {
       items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string; rootDirectory?: string
     }

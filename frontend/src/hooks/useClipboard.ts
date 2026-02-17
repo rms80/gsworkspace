@@ -153,6 +153,10 @@ export function useClipboard({
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
       if (isEditing) return
 
+      // If the user has selected text in the DOM (e.g. in an overlay), let native copy handle it
+      const selection = window.getSelection()
+      if (selection && selection.toString().length > 0) return
+
       const selectedItems = items.filter((item) => selectedIds.includes(item.id))
       if (selectedItems.length !== 1) return
 
@@ -182,6 +186,10 @@ export function useClipboard({
       if (!((e.ctrlKey || e.metaKey) && e.key === 'c')) return
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return
       if (isEditing) return
+
+      // If the user has selected text in the DOM (e.g. in an overlay), let native copy handle it
+      const selection = window.getSelection()
+      if (selection && selection.toString().length > 0) return
 
       const selectedItems = items.filter((item) => selectedIds.includes(item.id))
       if (selectedItems.length !== 1) return

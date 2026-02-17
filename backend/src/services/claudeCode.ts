@@ -144,6 +144,7 @@ export async function generateWithClaudeCode(
 
           onActivity({ type: 'status', content: summary })
         }
+        break
       } else {
         console.error('[ClaudeCode] Error result:', JSON.stringify(message, null, 2))
         // For max_turns, there may still be useful partial output in the last assistant message

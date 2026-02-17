@@ -125,6 +125,14 @@ const llmLimiter = rateLimit({
   message: { error: 'Too many LLM requests. Please try again later.' },
 })
 
+const claudeCodeLimiter = rateLimit({
+  windowMs: RATE_WINDOW,
+  max: parseInt(process.env.RATE_LIMIT_CLAUDE_CODE || '500'),
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many Claude Code requests. Please try again later.' },
+})
+
 const uploadLimiter = rateLimit({
   windowMs: RATE_WINDOW,
   max: parseInt(process.env.RATE_LIMIT_UPLOAD || '60'),
@@ -152,6 +160,7 @@ app.param('workspace', (req, res, next, value) => {
 
 // Rate limiters on workspace-prefixed paths
 app.use('/api/w/:workspace/', generalLimiter)
+app.use('/api/w/:workspace/llm/generate-claude-code', claudeCodeLimiter)
 app.use('/api/w/:workspace/llm', llmLimiter)
 app.use('/api/w/:workspace/items/upload-image', uploadLimiter)
 app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
