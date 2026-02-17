@@ -45,7 +45,8 @@
       "Bash(wmic:*)",
       "Bash(git mv:*)",
       "Bash(grep:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(xargs basename:*)"
     ]
   }
 }
