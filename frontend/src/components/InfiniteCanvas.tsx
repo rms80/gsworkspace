@@ -3,7 +3,7 @@ import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
 import { marked } from 'marked'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, ActivityMessage } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, Model3DItem, ActivityMessage } from '../types'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
@@ -12,6 +12,7 @@ import { ACTIVE_WORKSPACE } from '../api/workspace'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
+import { isModel3DFile, uploadModel3D, getModel3DFormat } from '../api/models3d'
 import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
@@ -31,6 +32,9 @@ import CodingRobotItemRenderer from './canvas/items/CodingRobotItemRenderer'
 import PdfItemRenderer from './canvas/items/PdfItemRenderer'
 import TextFileItemRenderer from './canvas/items/TextFileItemRenderer'
 import EmbedVideoItemRenderer from './canvas/items/EmbedVideoItemRenderer'
+import Model3DItemRenderer from './canvas/items/Model3DItemRenderer'
+import Model3DOverlay from './canvas/overlays/Model3DOverlay'
+import Model3DContextMenu from './canvas/menus/Model3DContextMenu'
 import TextEditingOverlay from './canvas/overlays/TextEditingOverlay'
 import PromptEditingOverlay from './canvas/overlays/PromptEditingOverlay'
 import HtmlLabelEditingOverlay from './canvas/overlays/HtmlLabelEditingOverlay'
@@ -59,7 +63,7 @@ import { useTransformerSync } from '../hooks/useTransformerSync'
 import { useCanvasKeyboardHandlers, keyboardHandlers } from '../hooks/useCanvasKeyboardHandlers'
 import { useBackgroundOperations } from '../contexts/BackgroundOperationsContext'
 import {
-  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT, EMBED_VIDEO_HEADER_HEIGHT,
+  HTML_HEADER_HEIGHT, IMAGE_HEADER_HEIGHT, VIDEO_HEADER_HEIGHT, PDF_HEADER_HEIGHT, PDF_MINIMIZED_HEIGHT, TEXTFILE_HEADER_HEIGHT, EMBED_VIDEO_HEADER_HEIGHT, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT,
   MIN_PROMPT_WIDTH, MIN_PROMPT_HEIGHT, MIN_TEXT_WIDTH,
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
@@ -107,6 +111,8 @@ interface InfiniteCanvasProps {
   onTogglePdfMinimized?: (id: string) => void
   onAddTextFileAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => void
   onToggleTextFileMinimized?: (id: string) => void
+  onAddModel3DAt?: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, format?: string) => void
+  onToggleModel3DMinimized?: (id: string) => void
   onAddEmbedVideoAt?: (x: number, y: number, videoId: string, startTime?: number) => void
 }
 
@@ -146,7 +152,7 @@ function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
   if (el.contentDocument?.readyState === 'complete') attach()
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -162,6 +168,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const textFileTransformerRef = useRef<Konva.Transformer>(null)
   const videoTransformerRef = useRef<Konva.Transformer>(null)
   const embedVideoTransformerRef = useRef<Konva.Transformer>(null)
+  const model3DTransformerRef = useRef<Konva.Transformer>(null)
 
   // Multi-select drag coordination ref
   const multiDragRef = useRef<{
@@ -437,6 +444,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const pdfLabelInputRef = useRef<HTMLInputElement>(null)
   const [textFileItemTransforms, setTextFileItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [embedVideoItemTransforms, setEmbedVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const [model3DItemTransforms, setModel3DItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+  const model3DContextMenuState = useMenuState<{ model3DId: string }>()
+  const [model3DResetKeys, setModel3DResetKeys] = useState<Map<string, number>>(new Map())
   const [editingTextFileLabelId, setEditingTextFileLabelId] = useState<string | null>(null)
   const textFileLabelInputRef = useRef<HTMLInputElement>(null)
   // Cache fetched text file content (keyed by item src URL)
@@ -506,11 +516,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       { type: 'pdf', ref: pdfTransformerRef, filterItem: (item) => item.type === 'pdf' && !item.minimized },
       { type: 'text-file', ref: textFileTransformerRef, filterItem: (item) => item.type === 'text-file' && !item.minimized },
       { type: 'embed-video', ref: embedVideoTransformerRef },
+      { type: 'model3d', ref: model3DTransformerRef, filterItem: (item) => item.type === 'model3d' && !item.minimized },
     ],
   })
 
   // 13. Multi-select drag coordination (Layer-level handlers)
-  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef, embedVideoTransformerRef]
+  const allTransformerRefs = [textTransformerRef, imageTransformerRef, videoTransformerRef, promptTransformerRef, imageGenPromptTransformerRef, htmlGenPromptTransformerRef, htmlTransformerRef, pdfTransformerRef, textFileTransformerRef, embedVideoTransformerRef, model3DTransformerRef]
 
   const handleLayerDragStart = useCallback((e: Konva.KonvaEventObject<DragEvent>) => {
     // Guard: if already tracking a drag (e.g. Transformer started drag on
@@ -609,6 +620,12 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
           return next
         })
+      } else if (item.type === 'model3d' && !item.minimized) {
+        setModel3DItemTransforms((prev) => {
+          const next = new Map(prev)
+          next.set(id, { x: node.x(), y: node.y(), width: item.width, height: item.height })
+          return next
+        })
       } else if (item.type === 'embed-video') {
         const embedHeaderHeight = selectedIds.includes(item.id) ? EMBED_VIDEO_HEADER_HEIGHT / Math.max(1, stageScale) : 0
         setEmbedVideoItemTransforms((prev) => {
@@ -676,6 +693,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       return next
     })
     setEmbedVideoItemTransforms((prev) => {
+      const next = new Map(prev)
+      for (const { id } of otherNodes) next.delete(id)
+      return next
+    })
+    setModel3DItemTransforms((prev) => {
       const next = new Map(prev)
       for (const { id } of otherNodes) next.delete(id)
       return next
@@ -956,6 +978,25 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         reader.readAsDataURL(file)
         offsetIndex++
       }
+      // Handle 3D model files
+      else if (isModel3DFile(file) && onAddModel3DAt) {
+        const itemId = uuidv4()
+        const fileName = file.name
+        const fileSize = file.size
+        const format = getModel3DFormat(fileName)
+        const name = fileName.replace(/\.[^/.]+$/, '')
+        try {
+          startOperation()
+          const result = await uploadModel3D(file, sceneId, itemId)
+          endOperation()
+          onAddModel3DAt(itemId, canvasPos.x + offsetIndex * 20, canvasPos.y + offsetIndex * 20,
+            result.url, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT, name, fileSize, format)
+        } catch (err) {
+          endOperation()
+          console.error('Failed to upload 3D model:', err)
+        }
+        offsetIndex++
+      }
     }
   }
 
@@ -1115,6 +1156,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const handleTogglePdfMinimized = useCallback((id: string) => {
     onTogglePdfMinimized?.(id)
   }, [onTogglePdfMinimized])
+
+  const handleToggleModel3DMinimized = useCallback((id: string) => {
+    onToggleModel3DMinimized?.(id)
+  }, [onToggleModel3DMinimized])
 
   // Text file item label editing handlers
   const handleTextFileLabelDblClick = (id: string) => {
@@ -1435,6 +1480,28 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 setEmbedVideoItemTransforms={setEmbedVideoItemTransforms}
               />
             )
+          } else if (item.type === 'model3d') {
+            return (
+              <Model3DItemRenderer
+                key={item.id}
+                item={item}
+                isSelected={selectedIds.includes(item.id)}
+                onItemClick={handleItemClick}
+                onContextMenu={(e, id) => {
+                  if (rightMouseDidDragRef.current) return
+                  const pos = { x: e.evt.clientX, y: e.evt.clientY }
+                  if (selectedIds.length > 1 && selectedIds.includes(id)) {
+                    multiSelectContextMenuState.openMenu({}, pos)
+                  } else {
+                    model3DContextMenuState.openMenu({ model3DId: id }, pos)
+                  }
+                }}
+                onUpdateItem={handleUpdateItem}
+                onToggleMinimized={handleToggleModel3DMinimized}
+                setModel3DItemTransforms={setModel3DItemTransforms}
+                setIsViewportTransforming={setIsViewportTransforming}
+              />
+            )
           }
           return null
         })}
@@ -1658,6 +1725,19 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right']}
           keepRatio={true}
         />
+        {/* Transformer for 3D models - free resize, no rotation */}
+        <Transformer
+          ref={model3DTransformerRef}
+          rotateEnabled={false}
+          enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'middle-left', 'middle-right', 'top-center', 'bottom-center']}
+          keepRatio={false}
+          boundBoxFunc={(oldBox, newBox) => {
+            if (newBox.width < MIN_PROMPT_WIDTH || newBox.height < MIN_PROMPT_HEIGHT) {
+              return oldBox
+            }
+            return newBox
+          }}
+        />
       </Layer>
     </Stage>
 
@@ -1779,6 +1859,30 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 }}
               />
             </div>
+          )
+        })}
+
+      {/* 3D model overlays */}
+      {!isViewportTransforming && items
+        .filter((item) => item.type === 'model3d' && !(item as Model3DItem).minimized)
+        .map((item) => {
+          if (item.type !== 'model3d') return null
+          return (
+            <Model3DOverlay
+              key={`model3d-${item.id}`}
+              item={item}
+              stageScale={stageScale}
+              stagePos={stagePos}
+              isSelected={selectedIds.includes(item.id)}
+              isAnyDragActive={isAnyDragActive}
+              transform={model3DItemTransforms.get(item.id)}
+              resetKey={model3DResetKeys.get(item.id)}
+              onUpdateItem={handleUpdateItem}
+              onContextMenu={(e, id) => {
+                const pos = { x: e.clientX, y: e.clientY }
+                model3DContextMenuState.openMenu({ model3DId: id }, pos)
+              }}
+            />
           )
         })}
 
@@ -2381,6 +2485,22 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           sceneId={sceneId}
           isOffline={isOffline}
           onClose={pdfContextMenuState.closeMenu}
+        />
+      )}
+
+      {/* 3D Model context menu */}
+      {model3DContextMenuState.menuData && model3DContextMenuState.menuPosition && (
+        <Model3DContextMenu
+          position={model3DContextMenuState.menuPosition}
+          onResetView={() => {
+            const id = model3DContextMenuState.menuData!.model3DId
+            setModel3DResetKeys((prev) => {
+              const next = new Map(prev)
+              next.set(id, (prev.get(id) ?? 0) + 1)
+              return next
+            })
+          }}
+          onClose={model3DContextMenuState.closeMenu}
         />
       )}
 

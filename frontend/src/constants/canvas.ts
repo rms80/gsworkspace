@@ -48,6 +48,18 @@ export function getTextFileFormat(filename: string): string | null {
   return match ? match[1].toLowerCase() : null
 }
 
+// --- 3D model item dimensions ---
+
+export const MODEL3D_HEADER_HEIGHT = 24
+export const MODEL3D_MINIMIZED_WIDTH = 120
+export const MODEL3D_MINIMIZED_HEIGHT = 160
+export const MODEL3D_DEFAULT_WIDTH = 600
+export const MODEL3D_DEFAULT_HEIGHT = 500
+
+// Supported 3D model extensions
+export const MODEL3D_EXTENSIONS = ['glb', 'gltf', 'obj', 'stl', 'fbx'] as const
+export const MODEL3D_EXTENSION_PATTERN = /\.(glb|gltf|obj|stl|fbx)$/i
+
 // --- Embed video item dimensions ---
 
 export const EMBED_VIDEO_HEADER_HEIGHT = 24

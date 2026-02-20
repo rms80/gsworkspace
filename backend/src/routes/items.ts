@@ -249,6 +249,58 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
   }
 })
 
+// MIME types for 3D model formats
+const MODEL3D_MIME_TYPES: Record<string, string> = {
+  glb: 'model/gltf-binary',
+  gltf: 'model/gltf+json',
+  obj: 'text/plain',
+  stl: 'model/stl',
+  fbx: 'application/octet-stream',
+}
+
+// Upload 3D model (multipart/form-data) — stored as-is, no transcoding
+router.post('/upload-model3d', upload.single('model'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ error: 'No model file provided' })
+    }
+
+    const sceneId = req.body.sceneId
+    const itemId = req.body.itemId
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const filename = file.originalname
+
+    // Determine file extension from filename
+    let ext = 'glb'
+    if (filename) {
+      const dotIndex = filename.lastIndexOf('.')
+      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
+    }
+    ext = ext.replace(/[/\\]/g, '')
+
+    const key = `${sceneFolder}/${itemId}.${ext}`
+    const contentType = MODEL3D_MIME_TYPES[ext] || 'application/octet-stream'
+
+    console.log(`Uploading 3D model: ${key}, size: ${file.buffer.length} bytes`)
+    await save(key, file.buffer, contentType)
+    console.log(`3D model uploaded successfully: ${key}`)
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading 3D model:', error)
+    res.status(500).json({ error: 'Failed to upload 3D model' })
+  }
+})
+
 // Crop an image and save the cropped version
 router.post('/crop-image', async (req, res) => {
   try {

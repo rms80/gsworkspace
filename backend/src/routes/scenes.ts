@@ -212,7 +212,18 @@ interface StoredEmbedVideoItem extends StoredItemBase {
   startTime?: number
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem | StoredEmbedVideoItem
+interface StoredModel3DItem extends StoredItemBase {
+  type: 'model3d'
+  file: string
+  name?: string
+  fileSize?: number
+  format: string
+  minimized?: boolean
+  cameraPosition?: [number, number, number]
+  cameraTarget?: [number, number, number]
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem | StoredEmbedVideoItem | StoredModel3DItem
 
 interface StoredScene {
   id: string
@@ -927,6 +938,67 @@ router.post('/:id', async (req, res) => {
           label: item.label,
           ...(item.startTime != null && { startTime: item.startTime }),
         })
+      } else if (item.type === 'model3d') {
+        // 3D models are already uploaded via /upload-model3d, just store the reference
+        const format = item.format || 'glb'
+        const modelFile = `${item.id}.${format}`
+        let modelSaved = false
+
+        if (item.src) {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected 3D model URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              modelSaved = true
+            } else {
+              const modelKey = `${sceneFolder}/${modelFile}`
+              const alreadyExists = await exists(modelKey)
+              if (alreadyExists) {
+                modelSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      buffer = Buffer.from(await response.arrayBuffer())
+                    }
+                  }
+                  if (buffer) {
+                    await save(`${sceneFolder}/${modelFile}`, buffer, 'application/octet-stream')
+                    modelSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch 3D model from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (modelSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'model3d',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: modelFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            format,
+            minimized: item.minimized,
+            ...(item.cameraPosition && { cameraPosition: item.cameraPosition }),
+            ...(item.cameraTarget && { cameraTarget: item.cameraTarget }),
+          })
+        } else {
+          console.error(`Failed to save 3D model ${item.id}, skipping from scene`)
+        }
       }
     }
 
@@ -1179,6 +1251,23 @@ router.get('/:id', async (req, res) => {
             provider: item.provider,
             label: item.label,
             ...(item.startTime != null && { startTime: item.startTime }),
+          }
+        } else if (item.type === 'model3d') {
+          const modelUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'model3d' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: modelUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            format: item.format,
+            minimized: item.minimized,
+            ...(item.cameraPosition && { cameraPosition: item.cameraPosition }),
+            ...(item.cameraTarget && { cameraTarget: item.cameraTarget }),
           }
         } else {
           // For HTML items, load the HTML file

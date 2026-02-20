@@ -4,8 +4,9 @@ import { uploadImage } from '../api/images'
 import { uploadVideo, getVideoDimensionsSafe, getVideoDimensionsFromUrl } from '../api/videos'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { uploadTextFile } from '../api/textfiles'
+import { uploadModel3D, getModel3DFormat } from '../api/models3d'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
-import { PDF_MINIMIZED_HEIGHT, getTextFileFormat } from '../constants/canvas'
+import { PDF_MINIMIZED_HEIGHT, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT, getTextFileFormat } from '../constants/canvas'
 import { ACTIVE_WORKSPACE } from '../api/workspace'
 
 export type VideoPlaceholder = {
@@ -27,12 +28,13 @@ interface UseItemUploadDeps {
   addVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   addPdfAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, thumbnailSrc?: string) => void
   addTextFileAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, fileFormat?: string) => void
+  addModel3DAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, format?: string) => void
 }
 
 export function useItemUpload(deps: UseItemUploadDeps) {
   const {
     activeSceneId, isOffline, startOperation, endOperation,
-    addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt,
+    addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt, addModel3DAt,
   } = deps
 
   const [videoPlaceholders, setVideoPlaceholders] = useState<VideoPlaceholder[]>([])
@@ -169,6 +171,26 @@ export function useItemUpload(deps: UseItemUploadDeps) {
     reader.readAsDataURL(file)
   }, [activeSceneId, addPdfAt, startOperation, endOperation])
 
+  const handleAddModel3D = useCallback(async (file: File) => {
+    if (!activeSceneId) return
+
+    const itemId = uuidv4()
+    const name = file.name.replace(/\.[^/.]+$/, '')
+    const fileSize = file.size
+    const format = getModel3DFormat(file.name)
+
+    try {
+      startOperation()
+      const result = await uploadModel3D(file, activeSceneId, itemId)
+      endOperation()
+      addModel3DAt(itemId, 400 + Math.random() * 200, 300 + Math.random() * 200,
+        result.url, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT, name, fileSize, format)
+    } catch (err) {
+      endOperation()
+      console.error('Failed to upload 3D model:', err)
+    }
+  }, [activeSceneId, addModel3DAt, startOperation, endOperation])
+
   // Upload a video at a specific canvas position (called by InfiniteCanvas drop handler)
   const handleUploadVideoAt = useCallback(async (file: File, x: number, y: number) => {
     try {
@@ -217,6 +239,7 @@ export function useItemUpload(deps: UseItemUploadDeps) {
     handleAddVideo,
     handleAddPdf,
     handleAddTextFile,
+    handleAddModel3D,
     handleUploadVideoAt,
   }
 }
