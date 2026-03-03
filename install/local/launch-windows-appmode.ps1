@@ -4,6 +4,8 @@
 
 $ErrorActionPreference = "Stop"
 
+Add-Type -AssemblyName PresentationFramework
+
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
@@ -38,11 +40,22 @@ if (-not $chrome) {
 
 # --- Start dev servers (hidden) ---
 
-$serverProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
-    -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru
+Write-Host "Project root: $projectRoot"
+Write-Host "Starting dev servers..."
+
+# Start backend and frontend as separate processes to avoid tsx watch stdin issues
+$backendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
+    -WorkingDirectory (Join-Path $projectRoot "backend") -WindowStyle Hidden -PassThru
+Write-Host "Backend started (PID: $($backendProc.Id))"
+
+$frontendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
+    -WorkingDirectory (Join-Path $projectRoot "frontend") -WindowStyle Hidden -PassThru
+Write-Host "Frontend started (PID: $($frontendProc.Id))"
 
 # Give servers a moment to start
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
+
+Write-Host "Finding Chrome at: $chrome"
 
 # --- Launch Chrome in app mode ---
 # --user-data-dir forces a separate Chrome process so we can detect when it exits
@@ -55,9 +68,16 @@ $chromeProc = Start-Process -FilePath $chrome -ArgumentList `
     "--no-first-run" `
     -PassThru
 
+Write-Host "Chrome started (PID: $($chromeProc.Id)). Waiting for it to close..."
+
 # --- Wait for Chrome to close, then clean up ---
 
 $chromeProc.WaitForExit()
 
-# Kill the server process tree (cmd -> concurrently -> node processes)
-& taskkill /t /f /pid $serverProc.Id 2>$null | Out-Null
+Write-Host "Chrome exited. Killing servers..."
+
+# Kill both server process trees
+& taskkill /t /f /pid $backendProc.Id 2>$null | Out-Null
+& taskkill /t /f /pid $frontendProc.Id 2>$null | Out-Null
+
+Write-Host "Done."

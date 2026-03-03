@@ -40,12 +40,16 @@ if (-not $chrome) {
 }
 
 # --- Start dev servers (hidden) ---
+# Start backend and frontend separately to avoid tsx watch stdin issues with hidden windows
 
-$serverProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
-    -WorkingDirectory $projectRoot -WindowStyle Hidden -PassThru
+$backendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
+    -WorkingDirectory (Join-Path $projectRoot "backend") -WindowStyle Hidden -PassThru
+
+$frontendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
+    -WorkingDirectory (Join-Path $projectRoot "frontend") -WindowStyle Hidden -PassThru
 
 # Give servers a moment to start
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 3
 
 # --- Launch Chrome in app mode ---
 # --user-data-dir forces a separate Chrome process so we can detect when it exits
@@ -62,5 +66,6 @@ $chromeProc = Start-Process -FilePath $chrome -ArgumentList `
 
 $chromeProc.WaitForExit()
 
-# Kill the server process tree (cmd -> concurrently -> node processes)
-& taskkill /t /f /pid $serverProc.Id 2>$null | Out-Null
+# Kill both server process trees
+& taskkill /t /f /pid $backendProc.Id 2>$null | Out-Null
+& taskkill /t /f /pid $frontendProc.Id 2>$null | Out-Null
