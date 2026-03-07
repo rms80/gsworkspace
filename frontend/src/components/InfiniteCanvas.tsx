@@ -169,6 +169,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const videoTransformerRef = useRef<Konva.Transformer>(null)
   const embedVideoTransformerRef = useRef<Konva.Transformer>(null)
   const model3DTransformerRef = useRef<Konva.Transformer>(null)
+  const contextMenuItemHandledRef = useRef(false)
 
   // Multi-select drag coordination ref
   const multiDragRef = useRef<{
@@ -1000,28 +1001,47 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     }
   }
 
-  // Handle right-click context menu (suppressed when right-drag panned)
+  // Suppress native context menu — our custom menus open on mouseup instead
+  // (macOS fires contextmenu on mousedown, which conflicts with right-drag panning)
   const handleContextMenu = (e: Konva.KonvaEventObject<PointerEvent>) => {
     e.evt.preventDefault()
+  }
+
+  // Open background/multi-select context menu on right-click mouseup (cross-platform)
+  const rightClickMenuHandlerRef = useRef<((e: MouseEvent) => void) | null>(null)
+  rightClickMenuHandlerRef.current = (e: MouseEvent) => {
+    if (e.button !== 2) return
     if (rightMouseDidDragRef.current) return
+    if (contextMenuItemHandledRef.current) {
+      contextMenuItemHandledRef.current = false
+      return
+    }
 
-    const stage = stageRef.current
-    if (!stage) return
-
-    const pos = { x: e.evt.clientX, y: e.evt.clientY }
-
-    // If multiple items are selected, show the multi-select context menu
+    const pos = { x: e.clientX, y: e.clientY }
     if (selectedIds.length > 1) {
       multiSelectContextMenuState.openMenu({}, pos)
       return
     }
-
-    const canvasPos = screenToCanvas(e.evt.clientX, e.evt.clientY)
+    const canvasPos = screenToCanvas(e.clientX, e.clientY)
     contextMenuState.openMenu(
-      { x: e.evt.clientX, y: e.evt.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
+      { x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
       pos,
     )
   }
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const handleMouseDown = (e: MouseEvent) => {
+      if (e.button === 2) contextMenuItemHandledRef.current = false
+    }
+    const handleMouseUp = (e: MouseEvent) => rightClickMenuHandlerRef.current?.(e)
+    container.addEventListener('mousedown', handleMouseDown, { capture: true })
+    container.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      container.removeEventListener('mousedown', handleMouseDown, { capture: true })
+      container.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   // Handle paste from context menu
   const handleContextMenuPaste = async () => {
@@ -1288,6 +1308,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
+                  contextMenuItemHandledRef.current = true
                   const pos = { x: e.evt.clientX, y: e.evt.clientY }
                   if (selectedIds.length > 1 && selectedIds.includes(id)) {
                     multiSelectContextMenuState.openMenu({}, pos)
@@ -1313,6 +1334,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
+                  contextMenuItemHandledRef.current = true
                   const pos = { x: e.evt.clientX, y: e.evt.clientY }
                   if (selectedIds.length > 1 && selectedIds.includes(id)) {
                     multiSelectContextMenuState.openMenu({}, pos)
@@ -1421,6 +1443,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
+                  contextMenuItemHandledRef.current = true
                   const pos = { x: e.evt.clientX, y: e.evt.clientY }
                   if (selectedIds.length > 1 && selectedIds.includes(id)) {
                     multiSelectContextMenuState.openMenu({}, pos)
@@ -1445,6 +1468,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
+                  contextMenuItemHandledRef.current = true
                   const pos = { x: e.evt.clientX, y: e.evt.clientY }
                   if (selectedIds.length > 1 && selectedIds.includes(id)) {
                     multiSelectContextMenuState.openMenu({}, pos)
@@ -1489,6 +1513,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 onItemClick={handleItemClick}
                 onContextMenu={(e, id) => {
                   if (rightMouseDidDragRef.current) return
+                  contextMenuItemHandledRef.current = true
                   const pos = { x: e.evt.clientX, y: e.evt.clientY }
                   if (selectedIds.length > 1 && selectedIds.includes(id)) {
                     multiSelectContextMenuState.openMenu({}, pos)
@@ -1879,6 +1904,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               resetKey={model3DResetKeys.get(item.id)}
               onUpdateItem={handleUpdateItem}
               onContextMenu={(e, id) => {
+                contextMenuItemHandledRef.current = true
                 const pos = { x: e.clientX, y: e.clientY }
                 model3DContextMenuState.openMenu({ model3DId: id }, pos)
               }}
