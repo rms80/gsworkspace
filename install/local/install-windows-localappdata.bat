@@ -65,6 +65,20 @@ echo ============================================
 echo Creating installation directory...
 echo ============================================
 
+:: Back up existing .env files before removing previous installation
+set "BACKEND_ENV_BACKUP="
+set "FRONTEND_ENV_BACKUP="
+if exist "%INSTALL_DIR%\backend\.env" (
+    echo Preserving existing backend\.env...
+    copy "%INSTALL_DIR%\backend\.env" "%TEMP%\gsworkspace-backend.env.bak" >nul
+    set "BACKEND_ENV_BACKUP=1"
+)
+if exist "%INSTALL_DIR%\frontend\.env.local" (
+    echo Preserving existing frontend\.env.local...
+    copy "%INSTALL_DIR%\frontend\.env.local" "%TEMP%\gsworkspace-frontend.env.bak" >nul
+    set "FRONTEND_ENV_BACKUP=1"
+)
+
 if exist "%INSTALL_DIR%" (
     echo Removing previous installation...
     rmdir /s /q "%INSTALL_DIR%"
@@ -121,6 +135,18 @@ echo.
 echo Dependencies installed.
 echo.
 
+:: ---- Restore backed-up .env files ----
+if defined BACKEND_ENV_BACKUP (
+    echo Restoring preserved backend\.env...
+    copy "%TEMP%\gsworkspace-backend.env.bak" "%INSTALL_DIR%\backend\.env" >nul
+    del "%TEMP%\gsworkspace-backend.env.bak" >nul
+)
+if defined FRONTEND_ENV_BACKUP (
+    echo Restoring preserved frontend\.env.local...
+    copy "%TEMP%\gsworkspace-frontend.env.bak" "%INSTALL_DIR%\frontend\.env.local" >nul
+    del "%TEMP%\gsworkspace-frontend.env.bak" >nul
+)
+
 :: ---- Create backend .env ----
 echo ============================================
 echo Configuring environment...
@@ -129,7 +155,7 @@ echo ============================================
 if not exist "%INSTALL_DIR%\backend\.env" (
     (
         echo # Backend Configuration
-        echo PORT=4000
+        echo PORT=4040
         echo.
         echo # Storage mode: 'local' for local disk storage
         echo STORAGE_MODE=local
@@ -153,10 +179,10 @@ if not exist "%INSTALL_DIR%\frontend\.env.local" (
         echo VITE_PROD_FAVICON=true
         echo.
         echo # Frontend server port
-        echo VITE_PORT=3000
+        echo VITE_PORT=3030
         echo.
         echo # Backend API port
-        echo VITE_API_PORT=4000
+        echo VITE_API_PORT=4040
     ) > "%INSTALL_DIR%\frontend\.env.local"
     echo Created frontend\.env.local
 )
