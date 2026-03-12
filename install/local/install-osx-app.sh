@@ -39,6 +39,15 @@ fi
 NODE_VERSION=$("$NODE_BIN" --version)
 echo "Found Node.js $NODE_VERSION at $NODE_BIN"
 
+# ---- Check for Xcode Command Line Tools ----
+
+if ! xcode-select -p &>/dev/null; then
+    echo "ERROR: Xcode Command Line Tools are not installed."
+    echo "Install with: xcode-select --install"
+    exit 1
+fi
+echo "Found Xcode Command Line Tools"
+
 NPM_BIN="$(dirname "$NODE_BIN")/npm"
 if [ ! -x "$NPM_BIN" ]; then
     NPM_BIN=$(which npm 2>/dev/null)
@@ -268,85 +277,23 @@ cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'
 </plist>
 PLIST
 
-# ---- Create launcher executable ----
+# ---- Compile native launcher ----
 
-# Store the node path discovered at install time
-NODE_DIR="$(dirname "$NODE_BIN")"
-
-cat > "$MACOS_DIR/gsworkspace" << LAUNCHER
-#!/bin/bash
-
-# gsworkspace macOS launcher
-# Starts the backend server, opens Chrome in app mode,
-# and shuts down when the Chrome window is closed.
-
-APP_CONTENTS="\$(cd "\$(dirname "\$0")/.." && pwd)"
-APP_ROOT="\$APP_CONTENTS/Resources/app"
-
-# Add node to PATH — use the path found at install time, plus common locations
-export PATH="$NODE_DIR:/opt/homebrew/bin:/usr/local/bin:\$PATH"
-
-NODE=\$(which node 2>/dev/null)
-if [ -z "\$NODE" ]; then
-    osascript -e 'display alert "Node.js not found" message "gsworkspace requires Node.js. Please install it from https://nodejs.org/" as critical'
+echo "Compiling native launcher..."
+SWIFT_SRC="$SCRIPT_DIR/gsworkspace-launcher.swift"
+if [ ! -f "$SWIFT_SRC" ]; then
+    echo "ERROR: gsworkspace-launcher.swift not found."
     exit 1
 fi
 
-# Environment
-export FRONTEND_STATIC_DIR="\$APP_ROOT/frontend/dist"
-export NODE_ENV=production
-export PORT=4040
-
-# Start backend
-cd "\$APP_ROOT/backend"
-"\$NODE" dist/index.js &
-BACKEND_PID=\$!
-
-# Clean shutdown
-cleanup() {
-    kill \$BACKEND_PID 2>/dev/null
-    wait \$BACKEND_PID 2>/dev/null
-    exit 0
-}
-trap cleanup SIGTERM SIGINT EXIT
-
-# Wait for backend to be ready (up to 15 seconds)
-for i in \$(seq 1 30); do
-    curl -sf http://localhost:4040/api/health >/dev/null 2>&1 && break
-    # Check if backend crashed
-    if ! kill -0 \$BACKEND_PID 2>/dev/null; then
-        osascript -e 'display alert "gsworkspace failed to start" message "The backend server exited unexpectedly." as critical'
-        exit 1
-    fi
-    sleep 0.5
-done
-
-# Find Chrome and open in app mode
-CHROME="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-if [ -x "\$CHROME" ]; then
-    CHROME_DATA_DIR="\$HOME/.gsworkspace/chrome-profile"
-    mkdir -p "\$CHROME_DATA_DIR"
-    "\$CHROME" --app=http://localhost:4040 \
-        --user-data-dir="\$CHROME_DATA_DIR" \
-        --no-first-run \
-        --ignore-gpu-blocklist \
-        --enable-gpu-rasterization \
-        --enable-accelerated-2d-canvas \
-        --enable-zero-copy \
-        --disable-background-timer-throttling \
-        --enable-features=VaapiVideoDecoder \
-        --use-gl=desktop &
-    CHROME_PID=\$!
-    wait \$CHROME_PID
-else
-    # Fall back to default browser
-    open http://localhost:4040
-    # Keep running until user quits the app from the Dock
-    wait \$BACKEND_PID
+swiftc -o "$MACOS_DIR/gsworkspace" "$SWIFT_SRC" -framework Cocoa 2>&1
+if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to compile launcher. Xcode Command Line Tools required."
+    echo "Install with: xcode-select --install"
+    rm -rf "$APP_DIR"
+    exit 1
 fi
-LAUNCHER
-
-chmod +x "$MACOS_DIR/gsworkspace"
+echo "  Launcher compiled."
 
 # ---- Done ----
 
