@@ -18,7 +18,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "Open gsworkspace", action: #selector(openBrowser), keyEquivalent: "o"))
-        menu.addItem(NSMenuItem.separator())
 
         let statusMenuItem = NSMenuItem(title: "Starting server...", action: nil, keyEquivalent: "")
         statusMenuItem.isEnabled = false
