@@ -248,6 +248,12 @@ else
 fi
 echo
 
+# ---- Copy menu bar icon ----
+
+echo "Copying menu bar icon..."
+cp "$SCRIPT_DIR/menubar-icon.png" "$RESOURCES_DIR/menubar-icon.png" 2>/dev/null
+cp "$SCRIPT_DIR/menubar-icon@2x.png" "$RESOURCES_DIR/menubar-icon@2x.png" 2>/dev/null
+
 # ---- Create Info.plist ----
 
 cat > "$CONTENTS_DIR/Info.plist" << 'PLIST'

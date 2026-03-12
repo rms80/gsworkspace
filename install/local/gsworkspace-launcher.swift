@@ -2,10 +2,34 @@ import Cocoa
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var backendProcess: Process?
+    var statusItem: NSStatusItem!
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let bundle = Bundle.main
-        let appRoot = bundle.bundlePath + "/Contents/Resources/app"
+        // Set up menu bar icon
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        if let button = statusItem.button {
+            if let icon = Bundle.main.image(forResource: "menubar-icon") {
+                icon.isTemplate = true
+                button.image = icon
+            } else {
+                button.title = "GS"
+            }
+        }
+
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Open gsworkspace", action: #selector(openBrowser), keyEquivalent: "o"))
+        menu.addItem(NSMenuItem.separator())
+
+        let statusMenuItem = NSMenuItem(title: "Starting server...", action: nil, keyEquivalent: "")
+        statusMenuItem.isEnabled = false
+        statusMenuItem.tag = 1
+        menu.addItem(statusMenuItem)
+
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Quit gsworkspace", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        statusItem.menu = menu
+
+        let appRoot = Bundle.main.bundlePath + "/Contents/Resources/app"
 
         // Find node
         let nodePaths = ["/usr/local/bin/node", "/opt/homebrew/bin/node"]
@@ -57,12 +81,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 Thread.sleep(forTimeInterval: 0.5)
             }
             DispatchQueue.main.async {
+                // Update status menu item
+                if let menu = self?.statusItem.menu,
+                   let item = menu.item(withTag: 1) {
+                    item.title = "Server running on port 4040"
+                }
                 self?.openBrowser()
             }
         }
     }
 
-    func openBrowser() {
+    // Called when user tries to launch the app again while it's already running
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        openBrowser()
+        // Re-hide from Dock (macOS makes accessory apps visible on reopen)
+        sender.setActivationPolicy(.accessory)
+        return false
+    }
+
+    @objc func openBrowser() {
         let chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
         if FileManager.default.isExecutableFile(atPath: chromePath) {
             let chrome = Process()
@@ -90,7 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 let app = NSApplication.shared
-app.setActivationPolicy(.regular)
+app.setActivationPolicy(.accessory)
 let delegate = AppDelegate()
 app.delegate = delegate
 app.run()
