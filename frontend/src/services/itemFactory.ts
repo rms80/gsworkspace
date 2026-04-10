@@ -14,6 +14,8 @@ import type {
   EmbedVideoProvider,
   Model3DItem,
   Model3DFormat,
+  SplatItem,
+  SplatFormat,
 } from '../types'
 
 interface Pos {
@@ -228,6 +230,27 @@ export function createModel3DItem(
     width,
     height,
     format: opts?.format ?? 'glb',
+    ...(opts?.name != null && { name: opts.name }),
+    ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
+  }
+}
+
+export function createSplatItem(
+  id: string,
+  pos: Pos,
+  src: string,
+  width: number,
+  height: number,
+  opts?: { name?: string; fileSize?: number; format?: SplatFormat },
+): SplatItem {
+  return {
+    id,
+    type: 'splat',
+    ...pos,
+    src,
+    width,
+    height,
+    format: opts?.format ?? 'splat',
     ...(opts?.name != null && { name: opts.name }),
     ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
   }

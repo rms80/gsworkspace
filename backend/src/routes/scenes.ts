@@ -223,7 +223,20 @@ interface StoredModel3DItem extends StoredItemBase {
   cameraTarget?: [number, number, number]
 }
 
-type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem | StoredEmbedVideoItem | StoredModel3DItem
+interface StoredSplatItem extends StoredItemBase {
+  type: 'splat'
+  file: string
+  name?: string
+  fileSize?: number
+  format: string
+  minimized?: boolean
+  cameraPosition?: [number, number, number]
+  cameraTarget?: [number, number, number]
+  cameraUp?: [number, number, number]
+  orthographic?: boolean
+}
+
+type StoredItem = StoredTextItem | StoredImageItem | StoredVideoItem | StoredPromptItem | StoredImageGenPromptItem | StoredHtmlItem | StoredHtmlGenPromptItem | StoredCodingRobotItem | StoredPdfItem | StoredTextFileItem | StoredEmbedVideoItem | StoredModel3DItem | StoredSplatItem
 
 interface StoredScene {
   id: string
@@ -999,6 +1012,69 @@ router.post('/:id', async (req, res) => {
         } else {
           console.error(`Failed to save 3D model ${item.id}, skipping from scene`)
         }
+      } else if (item.type === 'splat') {
+        // Splats are already uploaded via /upload-splat, just store the reference
+        const format = item.format || 'splat'
+        const splatFile = `${item.id}.${format}`
+        let splatSaved = false
+
+        if (item.src) {
+          const validation = validateItemSrcUrl(item.src)
+          if (!validation.valid) {
+            console.error(`Rejected splat URL for item ${item.id}: ${validation.reason}`)
+          } else {
+            if (item.src.includes(`/${sceneFolder}/`)) {
+              splatSaved = true
+            } else {
+              const splatKey = `${sceneFolder}/${splatFile}`
+              const alreadyExists = await exists(splatKey)
+              if (alreadyExists) {
+                splatSaved = true
+              } else {
+                try {
+                  let buffer: Buffer | null = null
+                  if (item.src.startsWith('/api/local-files/')) {
+                    const localKey = item.src.slice('/api/local-files/'.length)
+                    buffer = await loadAsBuffer(localKey)
+                  } else if (validation.type === 's3') {
+                    const response = await fetch(item.src)
+                    if (response.ok) {
+                      buffer = Buffer.from(await response.arrayBuffer())
+                    }
+                  }
+                  if (buffer) {
+                    await save(`${sceneFolder}/${splatFile}`, buffer, 'application/octet-stream')
+                    splatSaved = true
+                  }
+                } catch (err) {
+                  console.error(`Failed to fetch splat from ${item.src}:`, err)
+                }
+              }
+            }
+          }
+        }
+
+        if (splatSaved) {
+          storedItems.push({
+            id: item.id,
+            type: 'splat',
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            file: splatFile,
+            name: item.name,
+            fileSize: item.fileSize,
+            format,
+            minimized: item.minimized,
+            ...(item.cameraPosition && { cameraPosition: item.cameraPosition }),
+            ...(item.cameraTarget && { cameraTarget: item.cameraTarget }),
+            ...(item.cameraUp && { cameraUp: item.cameraUp }),
+            ...(item.orthographic && { orthographic: item.orthographic }),
+          })
+        } else {
+          console.error(`Failed to save splat ${item.id}, skipping from scene`)
+        }
       }
     }
 
@@ -1268,6 +1344,25 @@ router.get('/:id', async (req, res) => {
             minimized: item.minimized,
             ...(item.cameraPosition && { cameraPosition: item.cameraPosition }),
             ...(item.cameraTarget && { cameraTarget: item.cameraTarget }),
+          }
+        } else if (item.type === 'splat') {
+          const splatUrl = getPublicUrl(`${sceneFolder}/${item.file}`)
+          return {
+            id: item.id,
+            type: 'splat' as const,
+            x: item.x,
+            y: item.y,
+            width: item.width,
+            height: item.height,
+            src: splatUrl,
+            name: item.name,
+            fileSize: item.fileSize,
+            format: item.format,
+            minimized: item.minimized,
+            ...(item.cameraPosition && { cameraPosition: item.cameraPosition }),
+            ...(item.cameraTarget && { cameraTarget: item.cameraTarget }),
+            ...(item.cameraUp && { cameraUp: item.cameraUp }),
+            ...(item.orthographic && { orthographic: item.orthographic }),
           }
         } else {
           // For HTML items, load the HTML file
