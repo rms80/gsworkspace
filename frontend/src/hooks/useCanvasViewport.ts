@@ -65,6 +65,13 @@ export function useCanvasViewport(
     const handlePanMouseDown = (e: MouseEvent) => {
       // Button 1 = middle, button 2 = right
       if (e.button !== 1 && e.button !== 2) return
+      // Let selected 3D viewers (mesh / splat) exclusively capture middle-mouse drag
+      if (e.button === 1) {
+        const target = e.target as HTMLElement | null
+        if (target && target.closest('[data-exclusive-middle-mouse="true"]')) {
+          return
+        }
+      }
       if (e.button === 1) {
         e.preventDefault()
         e.stopPropagation()

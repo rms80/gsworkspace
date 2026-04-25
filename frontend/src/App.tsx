@@ -22,7 +22,7 @@ import { useViewportManager } from './hooks/useViewportManager'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useAuth } from './hooks/useAuth'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, TextFileFormat, Model3DFormat } from './types'
+import { CanvasItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { deleteActivity } from './utils/activityStorage'
 import { getCodingRobotEnabled } from './utils/experimentalSettings'
@@ -39,12 +39,13 @@ import {
   createTextFileItem,
   createEmbedVideoItem,
   createModel3DItem,
+  createSplatItem,
 } from './services/itemFactory'
 import { fetchYouTubeTitle } from './api/embed'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
 import { uploadImage } from './api/images'
-import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames } from './utils/imageNames'
+import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames, getExistingSplatNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
 import {
@@ -823,6 +824,19 @@ function App() {
     [updateActiveSceneItems, pushChange, items]
   )
 
+  const addSplatAt = useCallback(
+    (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, format?: string) => {
+      const existingNames = getExistingSplatNames(items)
+      const uniqueName = generateUniqueName(name || 'Splat', existingNames)
+
+      const pos = centeredAtPoint(x, y, width)
+      const newItem = createSplatItem(id, pos, src, width, height, { name: uniqueName, fileSize, format: (format || 'splat') as SplatFormat })
+      pushChange(new AddObjectChange(newItem))
+      updateActiveSceneItems((prev) => [...prev, newItem])
+    },
+    [updateActiveSceneItems, pushChange, items]
+  )
+
   const addEmbedVideoAt = useCallback(
     (x: number, y: number, videoId: string, startTime?: number) => {
       const pos = centeredAtPoint(x, y, 560)
@@ -839,14 +853,14 @@ function App() {
     [updateActiveSceneItems, pushChange]
   )
 
-  const { videoPlaceholders, handleAddImage, handleAddVideo, handleAddPdf, handleAddTextFile, handleAddModel3D, handleUploadVideoAt } = useItemUpload({
+  const { videoPlaceholders, handleAddImage, handleAddVideo, handleAddPdf, handleAddTextFile, handleAddModel3D, handleAddSplat, handleUploadVideoAt } = useItemUpload({
     activeSceneId, isOffline, startOperation, endOperation,
-    addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt, addModel3DAt,
+    addImageItem, addVideoItem, addVideoAt, addPdfAt, addTextFileAt, addModel3DAt, addSplatAt,
   })
 
   const { handleEmptyStateDrop } = useFileDrop({
     activeSceneId, isOffline, startOperation, endOperation,
-    addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt, addModel3DAt,
+    addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt, addModel3DAt, addSplatAt,
   })
 
   const updateItem = useCallback(
@@ -864,7 +878,7 @@ function App() {
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt' || item.type === 'coding-robot')
         const hasModel = 'model' in changes &&
           (item.type === 'prompt' || item.type === 'image-gen-prompt' || item.type === 'html-gen-prompt')
-        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file' || item.type === 'model3d')
+        const hasName = 'name' in changes && (item.type === 'image' || item.type === 'video' || item.type === 'pdf' || item.type === 'text-file' || item.type === 'model3d' || item.type === 'splat')
 
         if (hasText && item.type === 'text') {
           // Only record if text actually changed
@@ -937,6 +951,13 @@ function App() {
   const toggleModel3DMinimized = useCallback((id: string) => {
     const item = items.find(i => i.id === id)
     if (!item || item.type !== 'model3d') return
+    const minimized = !(item.minimized ?? false)
+    updateItem(id, { minimized })
+  }, [items, updateItem])
+
+  const toggleSplatMinimized = useCallback((id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item || item.type !== 'splat') return
     const minimized = !(item.minimized ?? false)
     updateItem(id, { minimized })
   }, [items, updateItem])
@@ -1438,6 +1459,7 @@ function App() {
         onAddPdf={handleAddPdf}
         onAddTextFile={handleAddTextFile}
         onAddModel3D={handleAddModel3D}
+        onAddSplat={handleAddSplat}
         onAddPrompt={addPromptItem}
         onAddImageGenPrompt={addImageGenPromptItem}
         onAddHtmlGenPrompt={addHtmlGenPromptItem}
@@ -1555,6 +1577,8 @@ function App() {
           onTogglePdfMinimized={togglePdfMinimized}
           onAddModel3DAt={addModel3DAt}
           onToggleModel3DMinimized={toggleModel3DMinimized}
+          onAddSplatAt={addSplatAt}
+          onToggleSplatMinimized={toggleSplatMinimized}
           onAddTextFileAt={addTextFileAt}
           onToggleTextFileMinimized={toggleTextFileMinimized}
           onAddEmbedVideoAt={addEmbedVideoAt}

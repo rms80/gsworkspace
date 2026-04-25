@@ -301,6 +301,55 @@ router.post('/upload-model3d', upload.single('model'), async (req, res) => {
   }
 })
 
+// MIME types for Gaussian splat formats
+const SPLAT_MIME_TYPES: Record<string, string> = {
+  splat: 'application/octet-stream',
+  ksplat: 'application/octet-stream',
+  ply: 'application/octet-stream',
+}
+
+// Upload Gaussian splat (multipart/form-data) — stored as-is
+router.post('/upload-splat', upload.single('splat'), async (req, res) => {
+  try {
+    const file = req.file
+    if (!file) {
+      return res.status(400).json({ error: 'No splat file provided' })
+    }
+
+    const sceneId = req.body.sceneId
+    const itemId = req.body.itemId
+    if (!sceneId || !itemId) {
+      return res.status(400).json({ error: 'sceneId and itemId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const filename = file.originalname
+
+    let ext = 'splat'
+    if (filename) {
+      const dotIndex = filename.lastIndexOf('.')
+      if (dotIndex >= 0) ext = filename.slice(dotIndex + 1).toLowerCase()
+    }
+    ext = ext.replace(/[/\\]/g, '')
+
+    const key = `${sceneFolder}/${itemId}.${ext}`
+    const contentType = SPLAT_MIME_TYPES[ext] || 'application/octet-stream'
+
+    console.log(`Uploading splat: ${key}, size: ${file.buffer.length} bytes`)
+    await save(key, file.buffer, contentType)
+    console.log(`Splat uploaded successfully: ${key}`)
+
+    const url = getPublicUrl(key)
+    res.json({ success: true, url })
+  } catch (error) {
+    console.error('Error uploading splat:', error)
+    res.status(500).json({ error: 'Failed to upload splat' })
+  }
+})
+
 // Crop an image and save the cropped version
 router.post('/crop-image', async (req, res) => {
   try {

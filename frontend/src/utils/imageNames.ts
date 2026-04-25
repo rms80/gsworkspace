@@ -92,3 +92,12 @@ export function getExistingModel3DNames(items: Array<{ type: string; name?: stri
     .filter((item) => item.type === 'model3d' && item.name)
     .map((item) => item.name as string)
 }
+
+/**
+ * Get all existing Gaussian splat names from a list of canvas items.
+ */
+export function getExistingSplatNames(items: Array<{ type: string; name?: string }>): string[] {
+  return items
+    .filter((item) => item.type === 'splat' && item.name)
+    .map((item) => item.name as string)
+}
