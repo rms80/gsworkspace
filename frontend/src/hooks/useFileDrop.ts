@@ -5,7 +5,9 @@ import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
 import { uploadTextFile } from '../api/textfiles'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { isVideoFile } from '../api/videos'
-import { PDF_MINIMIZED_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from '../constants/canvas'
+import { isModel3DFile, uploadModel3D, getModel3DFormat } from '../api/models3d'
+import { isSplatFile, uploadSplat } from '../api/splats'
+import { PDF_MINIMIZED_HEIGHT, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT, SPLAT_DEFAULT_WIDTH, SPLAT_DEFAULT_HEIGHT, getTextFileFormat, TEXT_FILE_EXTENSION_PATTERN } from '../constants/canvas'
 import { ACTIVE_WORKSPACE } from '../api/workspace'
 
 interface FileDropContext {
@@ -17,11 +19,13 @@ interface FileDropContext {
   handleUploadVideoAt: (file: File, x: number, y: number) => void
   addPdfAt: (id: string, x: number, y: number, src: string, w: number, h: number, name?: string, fileSize?: number, thumbnailSrc?: string) => void
   addTextFileAt: (id: string, x: number, y: number, src: string, w: number, h: number, name?: string, fileSize?: number, fileFormat?: string) => void
+  addModel3DAt: (id: string, x: number, y: number, src: string, w: number, h: number, name?: string, fileSize?: number, format?: string) => void
+  addSplatAt: (id: string, x: number, y: number, src: string, w: number, h: number, name?: string, fileSize?: number, format?: string) => void
 }
 
 export function useFileDrop({
   activeSceneId, isOffline, startOperation, endOperation,
-  addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt,
+  addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt, addModel3DAt, addSplatAt,
 }: FileDropContext) {
   const pendingDropFilesRef = useRef<File[]>([])
 
@@ -112,6 +116,39 @@ export function useFileDrop({
           }
           reader.readAsDataURL(file)
           offsetIndex++
+        } else if (isModel3DFile(file)) {
+          const itemId = uuidv4()
+          const fileName = file.name
+          const fileSize = file.size
+          const format = getModel3DFormat(fileName)
+          const name = fileName.replace(/\.[^/.]+$/, '')
+          try {
+            startOperation()
+            const result = await uploadModel3D(file, activeSceneId!, itemId)
+            endOperation()
+            addModel3DAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20,
+              result.url, MODEL3D_DEFAULT_WIDTH, MODEL3D_DEFAULT_HEIGHT, name, fileSize, format)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload 3D model:', err)
+          }
+          offsetIndex++
+        } else if (isSplatFile(file)) {
+          const itemId = uuidv4()
+          const fileName = file.name
+          const fileSize = file.size
+          const name = fileName.replace(/\.[^/.]+$/, '')
+          try {
+            startOperation()
+            const result = await uploadSplat(file, activeSceneId!, itemId)
+            endOperation()
+            addSplatAt(itemId, centerX + offsetIndex * 20, centerY + offsetIndex * 20,
+              result.url, SPLAT_DEFAULT_WIDTH, SPLAT_DEFAULT_HEIGHT, name, fileSize, result.format)
+          } catch (err) {
+            endOperation()
+            console.error('Failed to upload splat:', err)
+          }
+          offsetIndex++
         } else if (file.type === 'text/plain' || file.type === 'text/csv' || TEXT_FILE_EXTENSION_PATTERN.test(file.name)) {
           const reader = new FileReader()
           const fileName = file.name
@@ -139,12 +176,12 @@ export function useFileDrop({
     }
 
     processFiles()
-  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt])
+  }, [activeSceneId, isOffline, startOperation, endOperation, addImageAt, handleUploadVideoAt, addPdfAt, addTextFileAt, addModel3DAt, addSplatAt])
 
   const handleEmptyStateDrop = useCallback((e: React.DragEvent, addScene: () => Promise<void>) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files)
-    const mediaFiles = files.filter(f => f.type.startsWith('image/') || isVideoFile(f))
+    const mediaFiles = files.filter(f => f.type.startsWith('image/') || isVideoFile(f) || isModel3DFile(f) || isSplatFile(f))
     if (mediaFiles.length === 0) return
 
     // Store files and create a new scene

@@ -8,6 +8,8 @@ interface MenuBarProps {
   onAddVideo: (file: File) => void
   onAddPdf: (file: File) => void
   onAddTextFile: (file: File) => void
+  onAddModel3D: (file: File) => void
+  onAddSplat: (file: File) => void
   onAddPrompt: () => void
   onAddImageGenPrompt: () => void
   onAddHtmlGenPrompt: () => void
@@ -64,6 +66,8 @@ function MenuBar({
   onAddVideo,
   onAddPdf,
   onAddTextFile,
+  onAddModel3D,
+  onAddSplat,
   onAddPrompt,
   onAddImageGenPrompt,
   onAddHtmlGenPrompt,
@@ -143,6 +147,8 @@ function MenuBar({
         ...(config.features.videoSupport ? [{ label: 'Video', type: 'file-input' as const, accept: 'video/*', onFileSelect: onAddVideo }] : []),
         { label: 'PDF', type: 'file-input' as const, accept: '.pdf,application/pdf', onFileSelect: onAddPdf },
         { label: 'Text File', type: 'file-input' as const, accept: '.txt,.csv,.js,.ts,.tsx,.cs,.cpp,.h,.c,.json,.py,.md,.sh,.log,.ini,text/plain,text/csv', onFileSelect: onAddTextFile },
+        { label: '3D Model', type: 'file-input' as const, accept: '.glb,.gltf,.obj,.stl,.fbx', onFileSelect: onAddModel3D },
+        { label: 'Gaussian Splat', type: 'file-input' as const, accept: '.splat,.ksplat,.ply', onFileSelect: onAddSplat },
         { label: 'LLM Prompt', onClick: onAddPrompt },
         { label: 'ImageGen Prompt', onClick: onAddImageGenPrompt },
         { label: 'HTMLGen Prompt', onClick: onAddHtmlGenPrompt },

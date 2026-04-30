@@ -166,6 +166,38 @@ export interface TextFileItem extends BaseItem {
   viewType?: TextFileViewType
 }
 
+export type Model3DFormat = 'glb' | 'gltf' | 'obj' | 'stl' | 'fbx'
+
+export interface Model3DItem extends BaseItem {
+  type: 'model3d'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  format: Model3DFormat
+  minimized?: boolean
+  cameraPosition?: [number, number, number]
+  cameraTarget?: [number, number, number]
+}
+
+export type SplatFormat = 'splat' | 'ksplat' | 'ply'
+
+export interface SplatItem extends BaseItem {
+  type: 'splat'
+  src: string
+  name?: string
+  width: number
+  height: number
+  fileSize?: number
+  format: SplatFormat
+  minimized?: boolean
+  cameraPosition?: [number, number, number]
+  cameraTarget?: [number, number, number]
+  cameraUp?: [number, number, number]
+  orthographic?: boolean
+}
+
 export type EmbedVideoProvider = 'youtube'
 
 export interface EmbedVideoItem extends BaseItem {
@@ -178,7 +210,7 @@ export interface EmbedVideoItem extends BaseItem {
   startTime?: number  // seconds offset for playback start
 }
 
-export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem | PdfItem | TextFileItem | EmbedVideoItem
+export type CanvasItem = TextItem | ImageItem | VideoItem | PromptItem | ImageGenPromptItem | HtmlItem | HTMLGenPromptItem | CodingRobotItem | PdfItem | TextFileItem | EmbedVideoItem | Model3DItem | SplatItem
 
 export interface SelectionRect {
   x: number

@@ -48,6 +48,30 @@ export function getTextFileFormat(filename: string): string | null {
   return match ? match[1].toLowerCase() : null
 }
 
+// --- 3D model item dimensions ---
+
+export const MODEL3D_HEADER_HEIGHT = 24
+export const MODEL3D_MINIMIZED_WIDTH = 120
+export const MODEL3D_MINIMIZED_HEIGHT = 160
+export const MODEL3D_DEFAULT_WIDTH = 600
+export const MODEL3D_DEFAULT_HEIGHT = 500
+
+// Supported 3D model extensions
+export const MODEL3D_EXTENSIONS = ['glb', 'gltf', 'obj', 'stl', 'fbx'] as const
+export const MODEL3D_EXTENSION_PATTERN = /\.(glb|gltf|obj|stl|fbx)$/i
+
+// --- Gaussian splat item dimensions ---
+
+export const SPLAT_HEADER_HEIGHT = 24
+export const SPLAT_MINIMIZED_WIDTH = 120
+export const SPLAT_MINIMIZED_HEIGHT = 160
+export const SPLAT_DEFAULT_WIDTH = 600
+export const SPLAT_DEFAULT_HEIGHT = 500
+
+// Supported Gaussian splat extensions
+export const SPLAT_EXTENSIONS = ['splat', 'ksplat', 'ply'] as const
+export const SPLAT_EXTENSION_PATTERN = /\.(splat|ksplat|ply)$/i
+
 // --- Embed video item dimensions ---
 
 export const EMBED_VIDEO_HEADER_HEIGHT = 24

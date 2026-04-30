@@ -57,7 +57,7 @@ Start-Sleep -Seconds 3
 
 $chromeDataDir = Join-Path $env:TEMP "gsworkspace-chrome-profile"
 $chromeProc = Start-Process -FilePath $chrome -ArgumentList `
-    "--app=http://localhost:3000", `
+    "--app=http://localhost:3030", `
     "--user-data-dir=`"$chromeDataDir`"", `
     "--no-first-run" `
     -PassThru

@@ -12,6 +12,10 @@ import type {
   TextFileFormat,
   EmbedVideoItem,
   EmbedVideoProvider,
+  Model3DItem,
+  Model3DFormat,
+  SplatItem,
+  SplatFormat,
 } from '../types'
 
 interface Pos {
@@ -205,6 +209,48 @@ export function createTextFileItem(
     height,
     fileFormat: opts?.fileFormat ?? 'txt',
     fontMono: true,
+    ...(opts?.name != null && { name: opts.name }),
+    ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
+  }
+}
+
+export function createModel3DItem(
+  id: string,
+  pos: Pos,
+  src: string,
+  width: number,
+  height: number,
+  opts?: { name?: string; fileSize?: number; format?: Model3DFormat },
+): Model3DItem {
+  return {
+    id,
+    type: 'model3d',
+    ...pos,
+    src,
+    width,
+    height,
+    format: opts?.format ?? 'glb',
+    ...(opts?.name != null && { name: opts.name }),
+    ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
+  }
+}
+
+export function createSplatItem(
+  id: string,
+  pos: Pos,
+  src: string,
+  width: number,
+  height: number,
+  opts?: { name?: string; fileSize?: number; format?: SplatFormat },
+): SplatItem {
+  return {
+    id,
+    type: 'splat',
+    ...pos,
+    src,
+    width,
+    height,
+    format: opts?.format ?? 'splat',
     ...(opts?.name != null && { name: opts.name }),
     ...(opts?.fileSize != null && { fileSize: opts.fileSize }),
   }

@@ -4,6 +4,7 @@ import helmet from 'helmet'
 import cookieSession from 'cookie-session'
 import crypto from 'crypto'
 import rateLimit from 'express-rate-limit'
+import path from 'path'
 import dotenv from 'dotenv'
 import itemsRouter from './routes/items.js'
 import llmRouter from './routes/llm.js'
@@ -30,7 +31,10 @@ const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
   return crypto.randomBytes(32).toString('hex')
 })()
 
-app.use(helmet())
+app.use(helmet({
+  contentSecurityPolicy: process.env.FRONTEND_STATIC_DIR ? false : undefined,
+  crossOriginEmbedderPolicy: process.env.FRONTEND_STATIC_DIR ? false : undefined,
+}))
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (e.g., server-to-server, curl)
@@ -178,6 +182,13 @@ app.use('/api/workspaces', generalLimiter)
 app.post('/api/workspaces', workspaceCreateLimiter)
 app.use('/api/workspaces', workspacesRouter)
 
+// Serve frontend static files when running as a standalone app
+const frontendStaticDir = process.env.FRONTEND_STATIC_DIR
+if (frontendStaticDir) {
+  const resolved = path.resolve(frontendStaticDir)
+  app.use(express.static(resolved))
+}
+
 app.get('/api/health', (_req, res) => {
   const storageMode = getStorageMode()
   const response: {
@@ -200,6 +211,14 @@ app.get('/api/health', (_req, res) => {
 
   res.json(response)
 })
+
+// SPA fallback — serve index.html for non-API routes (must be after all other routes)
+if (frontendStaticDir) {
+  const resolved = path.resolve(frontendStaticDir)
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(resolved, 'index.html'))
+  })
+}
 
 // Initialize storage and start server
 async function start() {
