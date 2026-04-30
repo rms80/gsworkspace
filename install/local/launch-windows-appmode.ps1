@@ -9,6 +9,14 @@ Add-Type -AssemblyName PresentationFramework
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $projectRoot = Resolve-Path (Join-Path $scriptDir "..\..")
 
+# Log everything to a file so failures are diagnosable when running hidden.
+$logFile = Join-Path $projectRoot "appmode-launcher.log"
+"=== Launcher started at $(Get-Date) ===" | Out-File -FilePath $logFile -Encoding utf8
+function Log($msg) {
+    "$([DateTime]::Now.ToString('HH:mm:ss.fff')) $msg" | Out-File -FilePath $logFile -Append -Encoding utf8
+}
+Log "Project root: $projectRoot"
+
 # --- Pre-flight checks ---
 
 if (-not (Test-Path (Join-Path $projectRoot "backend\.env"))) {
@@ -40,22 +48,55 @@ if (-not $chrome) {
 
 # --- Start dev servers (hidden) ---
 
-Write-Host "Project root: $projectRoot"
-Write-Host "Starting dev servers..."
+Log "Starting dev servers..."
 
 # Start backend and frontend as separate processes to avoid tsx watch stdin issues
 $backendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
     -WorkingDirectory (Join-Path $projectRoot "backend") -WindowStyle Hidden -PassThru
-Write-Host "Backend started (PID: $($backendProc.Id))"
+Log "Backend started (PID: $($backendProc.Id))"
 
 $frontendProc = Start-Process -FilePath "cmd" -ArgumentList "/c", "npm run dev" `
     -WorkingDirectory (Join-Path $projectRoot "frontend") -WindowStyle Hidden -PassThru
-Write-Host "Frontend started (PID: $($frontendProc.Id))"
+Log "Frontend started (PID: $($frontendProc.Id))"
 
-# Give servers a moment to start
-Start-Sleep -Seconds 3
+# --- Wait for the frontend to actually respond before launching Chrome ---
+# Cold starts (antivirus scanning, slow disk) can easily exceed a fixed sleep,
+# producing a white "site can't be reached" Chrome window.
 
-Write-Host "Finding Chrome at: $chrome"
+$frontendUrl = "http://localhost:3000"
+$timeoutSec = 60
+$deadline = (Get-Date).AddSeconds($timeoutSec)
+$ready = $false
+while ((Get-Date) -lt $deadline) {
+    if ($backendProc.HasExited) {
+        Log "Backend process exited prematurely (code $($backendProc.ExitCode))"
+        break
+    }
+    if ($frontendProc.HasExited) {
+        Log "Frontend process exited prematurely (code $($frontendProc.ExitCode))"
+        break
+    }
+    try {
+        $r = Invoke-WebRequest -Uri $frontendUrl -TimeoutSec 2 -UseBasicParsing
+        if ($r.StatusCode -eq 200) { $ready = $true; break }
+    } catch {
+        # Not ready yet — keep polling.
+    }
+    Start-Sleep -Milliseconds 500
+}
+
+if (-not $ready) {
+    Log "Frontend did not respond on $frontendUrl within ${timeoutSec}s"
+    & taskkill /t /f /pid $backendProc.Id 2>$null | Out-Null
+    & taskkill /t /f /pid $frontendProc.Id 2>$null | Out-Null
+    [System.Windows.MessageBox]::Show(
+        "The dev servers did not come up within ${timeoutSec}s.`n`nSee log:`n$logFile",
+        "gsworkspace", "OK", "Error"
+    ) | Out-Null
+    exit 1
+}
+
+Log "Frontend is responding. Launching Chrome at: $chrome"
 
 # --- Launch Chrome in app mode ---
 # --user-data-dir forces a separate Chrome process so we can detect when it exits
@@ -63,21 +104,21 @@ Write-Host "Finding Chrome at: $chrome"
 
 $chromeDataDir = Join-Path $env:TEMP "gsworkspace-chrome-profile"
 $chromeProc = Start-Process -FilePath $chrome -ArgumentList `
-    "--app=http://localhost:3000", `
+    "--app=$frontendUrl", `
     "--user-data-dir=`"$chromeDataDir`"", `
     "--no-first-run" `
     -PassThru
 
-Write-Host "Chrome started (PID: $($chromeProc.Id)). Waiting for it to close..."
+Log "Chrome started (PID: $($chromeProc.Id)). Waiting for it to close..."
 
 # --- Wait for Chrome to close, then clean up ---
 
 $chromeProc.WaitForExit()
 
-Write-Host "Chrome exited. Killing servers..."
+Log "Chrome exited. Killing servers..."
 
 # Kill both server process trees
 & taskkill /t /f /pid $backendProc.Id 2>$null | Out-Null
 & taskkill /t /f /pid $frontendProc.Id 2>$null | Out-Null
 
-Write-Host "Done."
+Log "Done."
