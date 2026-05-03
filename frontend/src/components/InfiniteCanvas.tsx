@@ -1048,25 +1048,35 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   }
 
   // Open background/multi-select context menu on right-click mouseup (cross-platform)
+  // Deferred with setTimeout(0) because on Windows, browser event order is
+  // mousedown → mouseup → contextmenu.  Konva item handlers fire on the
+  // contextmenu event and set contextMenuItemHandledRef, but if we check the
+  // flag synchronously in mouseup it hasn't been set yet.  Deferring lets
+  // the contextmenu event (and Konva's onContextMenu) run first.
   const rightClickMenuHandlerRef = useRef<((e: MouseEvent) => void) | null>(null)
   rightClickMenuHandlerRef.current = (e: MouseEvent) => {
     if (e.button !== 2) return
     if (rightMouseDidDragRef.current) return
-    if (contextMenuItemHandledRef.current) {
-      contextMenuItemHandledRef.current = false
-      return
-    }
 
-    const pos = { x: e.clientX, y: e.clientY }
-    if (selectedIds.length > 1) {
-      multiSelectContextMenuState.openMenu({}, pos)
-      return
-    }
-    const canvasPos = screenToCanvas(e.clientX, e.clientY)
-    contextMenuState.openMenu(
-      { x: e.clientX, y: e.clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
-      pos,
-    )
+    const clientX = e.clientX
+    const clientY = e.clientY
+    setTimeout(() => {
+      if (contextMenuItemHandledRef.current) {
+        contextMenuItemHandledRef.current = false
+        return
+      }
+
+      const pos = { x: clientX, y: clientY }
+      if (selectedIds.length > 1) {
+        multiSelectContextMenuState.openMenu({}, pos)
+        return
+      }
+      const canvasPos = screenToCanvas(clientX, clientY)
+      contextMenuState.openMenu(
+        { x: clientX, y: clientY, canvasX: canvasPos.x, canvasY: canvasPos.y },
+        pos,
+      )
+    }, 0)
   }
   useEffect(() => {
     const container = containerRef.current
