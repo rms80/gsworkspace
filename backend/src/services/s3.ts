@@ -147,6 +147,40 @@ export async function listFromS3(prefix: string): Promise<string[]> {
   }
 }
 
+export async function listFromS3WithSizes(prefix: string): Promise<Array<{ key: string; size: number }>> {
+  if (s3Client) {
+    const response = await s3Client.send(
+      new ListObjectsV2Command({
+        Bucket: BUCKET_NAME,
+        Prefix: prefix,
+      })
+    )
+    return (response.Contents || [])
+      .filter((item) => item.Key)
+      .map((item) => ({ key: item.Key!, size: item.Size ?? 0 }))
+  } else {
+    // Use S3 REST API for listing (public bucket)
+    const url = `https://${BUCKET_NAME}.s3.${REGION}.amazonaws.com/?list-type=2&prefix=${encodeURIComponent(prefix)}`
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`S3 LIST failed: ${response.status} ${response.statusText}`)
+    }
+    const xml = await response.text()
+    // Parse <Contents>…</Contents> blocks, pulling Key and Size from each
+    const results: Array<{ key: string; size: number }> = []
+    const contentsRegex = /<Contents>([\s\S]*?)<\/Contents>/g
+    let block
+    while ((block = contentsRegex.exec(xml)) !== null) {
+      const keyMatch = /<Key>([^<]+)<\/Key>/.exec(block[1])
+      const sizeMatch = /<Size>(\d+)<\/Size>/.exec(block[1])
+      if (keyMatch) {
+        results.push({ key: keyMatch[1], size: sizeMatch ? parseInt(sizeMatch[1], 10) : 0 })
+      }
+    }
+    return results
+  }
+}
+
 export async function deleteFromS3(key: string): Promise<void> {
   if (s3Client) {
     await s3Client.send(

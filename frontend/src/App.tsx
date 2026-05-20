@@ -684,6 +684,17 @@ function App() {
     }
   }, [activeSceneId, deleteViewport])
 
+  // Server-side Compact wipes history.json; mirror that in-memory so undo
+  // can't reintroduce items pointing at media files that were just deleted.
+  const handleSceneCompacted = useCallback((id: string) => {
+    setHistoryMap((prev) => {
+      const newMap = new Map(prev)
+      newMap.set(id, new HistoryStack())
+      return newMap
+    })
+    lastSavedHistoryRef.current.delete(id)
+  }, [])
+
   // Item management (operates on active scene)
   const addTextItem = useCallback((x?: number, y?: number) => {
     const pos = resolvePosition(canvasRef.current, 200, 100, x, y)
@@ -1548,6 +1559,7 @@ function App() {
         onRenameScene={renameScene}
         onCloseScene={closeScene}
         onDeleteScene={handleDeleteScene}
+        onSceneCompacted={handleSceneCompacted}
         onOpenScenes={handleOpenScenes}
         onPinCurrentScenes={storageMode !== 'offline' ? handlePinCurrentScenes : undefined}
       />

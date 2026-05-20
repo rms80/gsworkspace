@@ -5,6 +5,7 @@ import {
   load,
   loadAsBuffer,
   list,
+  listWithSizes,
   del,
   exists,
   getPublicUrl,
@@ -1428,6 +1429,109 @@ router.get('/', async (req, res) => {
   } catch (error) {
     console.error('Error listing scenes:', error)
     res.status(500).json({ error: 'Failed to list scenes' })
+  }
+})
+
+/**
+ * Scan a scene folder for data files that aren't referenced by scene.json.
+ * Reference detection: a candidate filename appearing as a substring of
+ * scene.json (works for both stored filenames and embedded URLs).
+ *
+ * Note: history.json is intentionally NOT consulted. History embeds full
+ * serialized items (including media URLs) for every deleted object, so any
+ * recently-deleted item's file would otherwise appear "referenced" and never
+ * be reclaimable. After Compact, undoing a delete will surface a broken
+ * media reference — accepted as the cost of reclaiming space.
+ */
+async function findUnreferencedFiles(
+  sceneFolder: string
+): Promise<Array<{ key: string; filename: string; size: number }>> {
+  // Always-kept operational files (never candidates for deletion)
+  const ALWAYS_KEEP = new Set(['scene.json', 'history.json'])
+
+  const entries = await listWithSizes(`${sceneFolder}/`)
+
+  const sceneJson = (await load(`${sceneFolder}/scene.json`)) || ''
+
+  const unreferenced: Array<{ key: string; filename: string; size: number }> = []
+  for (const entry of entries) {
+    // Get just the filename portion of the key
+    const filename = entry.key.slice(sceneFolder.length + 1)
+    // Skip nested files (shouldn't exist, but be safe)
+    if (filename.includes('/')) continue
+    if (ALWAYS_KEEP.has(filename)) continue
+    if (sceneJson.includes(filename)) continue
+    unreferenced.push({ key: entry.key, filename, size: entry.size })
+  }
+  return unreferenced
+}
+
+// List unreferenced data files in a scene folder
+router.get('/:id/unreferenced', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
+
+    // Verify scene exists
+    const sceneJson = await load(`${sceneFolder}/scene.json`)
+    if (!sceneJson) {
+      return res.status(404).json({ error: 'Scene not found' })
+    }
+
+    const files = await findUnreferencedFiles(sceneFolder)
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
+    res.json({ files, totalBytes })
+  } catch (error) {
+    console.error('Error scanning for unreferenced files:', error)
+    res.status(500).json({ error: 'Failed to scan scene folder' })
+  }
+})
+
+// Delete unreferenced files from a scene folder, and clear the undo history.
+// History is wiped because its delete-records embed full item data (including
+// media URLs); leaving history would let undo restore items pointing at files
+// we just deleted.
+//
+// Re-scans server-side and only deletes files still confirmed as unreferenced
+// (defends against races where scene.json changed between scan and compact).
+router.post('/:id/compact', async (req, res) => {
+  try {
+    const { id } = req.params
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${id}`
+
+    // Verify scene exists
+    const sceneJson = await load(`${sceneFolder}/scene.json`)
+    if (!sceneJson) {
+      return res.status(404).json({ error: 'Scene not found' })
+    }
+
+    const files = await findUnreferencedFiles(sceneFolder)
+    const deletedKeys: string[] = []
+    let bytesDeleted = 0
+
+    await Promise.all(
+      files.map(async (f) => {
+        try {
+          await del(f.key)
+          deletedKeys.push(f.key)
+          bytesDeleted += f.size
+        } catch (err) {
+          console.error(`Failed to delete ${f.key}:`, err)
+        }
+      })
+    )
+
+    // Clear undo history so it can't reintroduce items pointing at deleted media
+    try {
+      await del(`${sceneFolder}/history.json`)
+    } catch (err) {
+      console.error('Failed to clear history.json during compact:', err)
+    }
+
+    res.json({ deletedCount: deletedKeys.length, bytesDeleted })
+  } catch (error) {
+    console.error('Error compacting scene:', error)
+    res.status(500).json({ error: 'Failed to compact scene' })
   }
 })
 

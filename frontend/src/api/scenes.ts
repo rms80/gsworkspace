@@ -52,6 +52,44 @@ export async function getContentUrl(
 }
 
 /**
+ * List unreferenced data files in a scene folder.
+ * Returns files that exist on the server but aren't referenced by scene.json
+ * or history.json (typically leftovers from deleted items).
+ */
+export interface UnreferencedFile {
+  key: string
+  filename: string
+  size: number
+}
+
+export interface UnreferencedFilesResult {
+  files: UnreferencedFile[]
+  totalBytes: number
+}
+
+export async function listUnreferencedFiles(sceneId: string): Promise<UnreferencedFilesResult> {
+  validateUuid(sceneId, 'scene ID')
+  const response = await fetch(`${API_BASE}/${sceneId}/unreferenced`)
+  if (!response.ok) {
+    throw new Error(`Failed to scan scene: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+/**
+ * Delete unreferenced data files from a scene folder. Server re-scans before
+ * deleting to avoid races with concurrent saves.
+ */
+export async function compactScene(sceneId: string): Promise<{ deletedCount: number; bytesDeleted: number }> {
+  validateUuid(sceneId, 'scene ID')
+  const response = await fetch(`${API_BASE}/${sceneId}/compact`, { method: 'POST' })
+  if (!response.ok) {
+    throw new Error(`Failed to compact scene: ${response.statusText}`)
+  }
+  return response.json()
+}
+
+/**
  * Get the actual data for a content item in a scene.
  * Returns the file as a Blob, avoiding the need for proxy endpoints.
  */

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Scene } from '../types'
-import { listScenes } from '../api/scenes'
+import { listScenes, listUnreferencedFiles, compactScene, isOfflineMode } from '../api/scenes'
 import type { SceneMetadata } from '../api/scenes'
 
 interface TabBarProps {
@@ -11,6 +11,7 @@ interface TabBarProps {
   onRenameScene: (id: string, name: string) => void
   onCloseScene: (id: string) => void
   onDeleteScene: (id: string) => void
+  onSceneCompacted?: (id: string) => void
   onOpenScenes?: (sceneIds: string[]) => void
   onPinCurrentScenes?: () => void
 }
@@ -22,6 +23,13 @@ interface ContextMenuState {
   sceneName: string
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
 function TabBar({
   scenes,
   activeSceneId,
@@ -30,12 +38,21 @@ function TabBar({
   onRenameScene,
   onCloseScene,
   onDeleteScene,
+  onSceneCompacted,
   onOpenScenes,
   onPinCurrentScenes,
 }: TabBarProps) {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
   const [renameDialog, setRenameDialog] = useState<{ sceneId: string; currentName: string } | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [compactDialog, setCompactDialog] = useState<
+    | { state: 'scanning'; sceneId: string; sceneName: string }
+    | { state: 'confirm'; sceneId: string; sceneName: string; fileCount: number; totalBytes: number }
+    | { state: 'compacting'; sceneId: string; sceneName: string }
+    | { state: 'error'; sceneName: string; message: string }
+    | { state: 'done'; sceneName: string; deletedCount: number; bytesDeleted: number }
+    | null
+  >(null)
   const [sceneDropdownOpen, setSceneDropdownOpen] = useState(false)
   const [dropdownScenes, setDropdownScenes] = useState<SceneMetadata[]>([])
   const [dropdownLoading, setDropdownLoading] = useState(false)
@@ -160,6 +177,55 @@ function TabBar({
       onDeleteScene(contextMenu.sceneId)
     }
     setContextMenu(null)
+  }
+
+  const handleCompactClick = async () => {
+    if (!contextMenu) return
+    const { sceneId, sceneName } = contextMenu
+    setContextMenu(null)
+    setCompactDialog({ state: 'scanning', sceneId, sceneName })
+    try {
+      const result = await listUnreferencedFiles(sceneId)
+      setCompactDialog({
+        state: 'confirm',
+        sceneId,
+        sceneName,
+        fileCount: result.files.length,
+        totalBytes: result.totalBytes,
+      })
+    } catch (err) {
+      setCompactDialog({
+        state: 'error',
+        sceneName,
+        message: err instanceof Error ? err.message : 'Scan failed',
+      })
+    }
+  }
+
+  const handleCompactConfirm = async () => {
+    if (!compactDialog || compactDialog.state !== 'confirm') return
+    const { sceneId, sceneName } = compactDialog
+    setCompactDialog({ state: 'compacting', sceneId, sceneName })
+    try {
+      const result = await compactScene(sceneId)
+      onSceneCompacted?.(sceneId)
+      setCompactDialog({
+        state: 'done',
+        sceneName,
+        deletedCount: result.deletedCount,
+        bytesDeleted: result.bytesDeleted,
+      })
+    } catch (err) {
+      setCompactDialog({
+        state: 'error',
+        sceneName,
+        message: err instanceof Error ? err.message : 'Compact failed',
+      })
+    }
+  }
+
+  const handleCompactClose = () => {
+    setCompactDialog(null)
   }
 
   const handleClose = (e: React.MouseEvent, sceneId: string) => {
@@ -393,6 +459,26 @@ function TabBar({
           >
             Rename
           </button>
+          {!isOfflineMode() && (
+            <button
+              onClick={handleCompactClick}
+              style={{
+                display: 'block',
+                width: '100%',
+                padding: '8px 16px',
+                border: 'none',
+                background: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: 14,
+                color: '#ddd',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Compact
+            </button>
+          )}
           <button
             onClick={handleDeleteClick}
             style={{
@@ -411,6 +497,136 @@ function TabBar({
           >
             Delete
           </button>
+        </div>
+      )}
+
+      {/* Compact Dialog */}
+      {compactDialog && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1001,
+          }}
+          onClick={compactDialog.state === 'scanning' || compactDialog.state === 'compacting' ? undefined : handleCompactClose}
+        >
+          <div
+            style={{
+              background: 'white',
+              padding: 20,
+              borderRadius: 8,
+              boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+              minWidth: 360,
+              maxWidth: 480,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 16px 0', fontSize: 16 }}>Compact Scene</h3>
+            {compactDialog.state === 'scanning' && (
+              <div style={{ fontSize: 14, color: '#555' }}>
+                Scanning &ldquo;{compactDialog.sceneName}&rdquo; for unreferenced files...
+              </div>
+            )}
+            {compactDialog.state === 'confirm' && (
+              <>
+                {compactDialog.fileCount === 0 ? (
+                  <div style={{ fontSize: 14, color: '#555' }}>
+                    No unreferenced files found in &ldquo;{compactDialog.sceneName}&rdquo;.
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 14, color: '#333' }}>
+                    Found <strong>{compactDialog.fileCount}</strong> unreferenced file{compactDialog.fileCount === 1 ? '' : 's'}
+                    {' '}totaling <strong>{formatBytes(compactDialog.totalBytes)}</strong> in &ldquo;{compactDialog.sceneName}&rdquo;.
+                    <div style={{ marginTop: 12 }}>
+                      This will permanently delete these files <strong>and clear the scene&rsquo;s undo history</strong>.
+                      This cannot be undone.
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                  <button
+                    onClick={handleCompactClose}
+                    style={{
+                      padding: '8px 16px',
+                      border: '1px solid #ccc',
+                      borderRadius: 4,
+                      background: '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {compactDialog.fileCount === 0 ? 'Close' : 'Cancel'}
+                  </button>
+                  {compactDialog.fileCount > 0 && (
+                    <button
+                      onClick={handleCompactConfirm}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: 4,
+                        background: '#d94a4a',
+                        color: 'white',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+            {compactDialog.state === 'compacting' && (
+              <div style={{ fontSize: 14, color: '#555' }}>Deleting files...</div>
+            )}
+            {compactDialog.state === 'done' && (
+              <>
+                <div style={{ fontSize: 14, color: '#333' }}>
+                  Deleted <strong>{compactDialog.deletedCount}</strong> file{compactDialog.deletedCount === 1 ? '' : 's'}
+                  {' '}({formatBytes(compactDialog.bytesDeleted)} freed).
+                </div>
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handleCompactClose}
+                    style={{
+                      padding: '8px 16px',
+                      border: 'none',
+                      borderRadius: 4,
+                      background: '#4a90d9',
+                      color: 'white',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    OK
+                  </button>
+                </div>
+              </>
+            )}
+            {compactDialog.state === 'error' && (
+              <>
+                <div style={{ fontSize: 14, color: '#c33' }}>{compactDialog.message}</div>
+                <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={handleCompactClose}
+                    style={{
+                      padding: '8px 16px',
+                      border: '1px solid #ccc',
+                      borderRadius: 4,
+                      background: '#fff',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

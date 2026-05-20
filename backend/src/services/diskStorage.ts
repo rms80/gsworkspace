@@ -128,6 +128,52 @@ export async function listFromDisk(prefix: string): Promise<string[]> {
   return results
 }
 
+export async function listFromDiskWithSizes(prefix: string): Promise<Array<{ key: string; size: number }>> {
+  const storagePath = getStoragePath()
+  const prefixPath = resolvePath(prefix)
+  validatePath(prefixPath)
+
+  const results: Array<{ key: string; size: number }> = []
+
+  async function walk(dir: string): Promise<void> {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true })
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name)
+
+        if (entry.isDirectory()) {
+          await walk(fullPath)
+        } else {
+          const relativePath = path.relative(storagePath, fullPath)
+          const key = relativePath.split(path.sep).join('/')
+
+          if (key.startsWith(prefix)) {
+            const stat = await fs.stat(fullPath)
+            results.push({ key, size: stat.size })
+          }
+        }
+      }
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return
+      }
+      throw error
+    }
+  }
+
+  let walkDir = prefixPath
+  while (!fsSync.existsSync(walkDir) && walkDir !== storagePath) {
+    walkDir = path.dirname(walkDir)
+  }
+
+  if (fsSync.existsSync(walkDir)) {
+    await walk(walkDir)
+  }
+
+  return results
+}
+
 export async function deleteFromDisk(key: string): Promise<void> {
   const filePath = resolvePath(key)
   validatePath(filePath)

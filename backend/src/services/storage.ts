@@ -14,6 +14,7 @@ export interface StorageService {
   load(key: string): Promise<string | null>
   loadAsBuffer(key: string): Promise<Buffer | null>
   list(prefix: string): Promise<string[]>
+  listWithSizes(prefix: string): Promise<Array<{ key: string; size: number }>>
   delete(key: string): Promise<void>
   exists(key: string): Promise<boolean>
   getPublicUrl(key: string): string
@@ -121,6 +122,9 @@ const s3Storage: StorageService = {
   async list(prefix: string): Promise<string[]> {
     return s3.listFromS3(prefix)
   },
+  async listWithSizes(prefix: string): Promise<Array<{ key: string; size: number }>> {
+    return s3.listFromS3WithSizes(prefix)
+  },
   async delete(key: string): Promise<void> {
     return s3.deleteFromS3(key)
   },
@@ -145,6 +149,9 @@ const diskStorage: StorageService = {
   },
   async list(prefix: string): Promise<string[]> {
     return disk.listFromDisk(prefix)
+  },
+  async listWithSizes(prefix: string): Promise<Array<{ key: string; size: number }>> {
+    return disk.listFromDiskWithSizes(prefix)
   },
   async delete(key: string): Promise<void> {
     return disk.deleteFromDisk(key)
@@ -181,6 +188,12 @@ export async function loadAsBuffer(key: string): Promise<Buffer | null> {
 
 export async function list(prefix: string): Promise<string[]> {
   return getStorageService().list(prefix)
+}
+
+export async function listWithSizes(
+  prefix: string
+): Promise<Array<{ key: string; size: number }>> {
+  return getStorageService().listWithSizes(prefix)
 }
 
 export async function del(key: string): Promise<void> {
