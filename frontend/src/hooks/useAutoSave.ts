@@ -26,6 +26,7 @@ export function useAutoSave({
   setIsSaving, setConflict,
 }: UseAutoSaveDeps) {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const [saveErrorMessage, setSaveErrorMessage] = useState<string | null>(null)
   const saveTimeoutRef = useRef<number | null>(null)
   const historySaveTimeoutRef = useRef<number | null>(null)
 
@@ -77,8 +78,10 @@ export function useAutoSave({
         lastKnownServerModifiedAtRef.current.set(activeScene.id, activeScene.modifiedAt)
         persistedSceneIdsRef.current.add(activeScene.id) // Mark as persisted
         setSaveStatus('saved')
+        setSaveErrorMessage(null)
       } catch (error) {
         console.error('Failed to auto-save scene:', error)
+        setSaveErrorMessage(error instanceof Error ? error.message : String(error))
         setSaveStatus('error')
       } finally {
         setIsSaving(false)
@@ -131,5 +134,5 @@ export function useAutoSave({
     }
   }, [historyMap, historyVersion, activeSceneId, isLoading])
 
-  return { saveStatus, setSaveStatus }
+  return { saveStatus, setSaveStatus, saveErrorMessage }
 }

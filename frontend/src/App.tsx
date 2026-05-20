@@ -167,7 +167,7 @@ function App() {
     isSaving,
   })
 
-  const { saveStatus, setSaveStatus } = useAutoSave({
+  const { saveStatus, setSaveStatus, saveErrorMessage } = useAutoSave({
     activeScene, activeSceneId, isLoading, isOffline,
     historyMap, historyVersion,
     lastSavedRef, lastSavedHistoryRef, lastKnownServerModifiedAtRef, persistedSceneIdsRef,
@@ -1621,6 +1621,7 @@ function App() {
         onToggleDebug={() => setDebugPanelOpen((prev) => !prev)}
         debugOpen={debugPanelOpen}
         saveStatus={saveStatus}
+        saveErrorMessage={saveErrorMessage}
         isOffline={isOffline}
         onSetOfflineMode={handleSetOfflineMode}
         backgroundOperationsCount={backgroundOpsCount}

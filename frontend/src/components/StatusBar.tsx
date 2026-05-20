@@ -7,6 +7,7 @@ interface StatusBarProps {
   onToggleDebug: () => void
   debugOpen: boolean
   saveStatus: SaveStatus
+  saveErrorMessage?: string | null
   isOffline: boolean
   onSetOfflineMode?: (offline: boolean) => void
   backgroundOperationsCount: number
@@ -28,7 +29,7 @@ export const STATUS_BAR_HEIGHT = 28
 
 type ServerStatus = 'connected' | 'misconfigured' | 'disconnected' | null
 
-function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange, serverName, workspaceName }: StatusBarProps) {
+function StatusBar({ onToggleDebug, debugOpen, saveStatus, saveErrorMessage, isOffline, backgroundOperationsCount, storageMode, onOpenSettings, onStorageModeSync, onStorageModeChange, serverName, workspaceName }: StatusBarProps) {
   const [serverStatus, setServerStatus] = useState<ServerStatus>(null)
   const [configWarning, setConfigWarning] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -270,7 +271,9 @@ function StatusBar({ onToggleDebug, debugOpen, saveStatus, isOffline, background
               fontWeight: 500,
               display: 'inline-flex',
               alignItems: 'center',
+              cursor: saveStatus === 'error' && saveErrorMessage ? 'help' : 'default',
             }}
+            title={saveStatus === 'error' && saveErrorMessage ? saveErrorMessage : undefined}
           >
             {statusDisplay.text}
           </span>

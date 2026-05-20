@@ -9,13 +9,22 @@ const API_BASE = `/api/w/${ACTIVE_WORKSPACE}/scenes`
 export class ApiStorageProvider implements StorageProvider {
   async saveScene(scene: Scene): Promise<void> {
     validateUuid(scene.id, 'scene ID')
+    const body = JSON.stringify(scene)
     const response = await fetch(`${API_BASE}/${scene.id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(scene),
+      body,
     })
     if (!response.ok) {
-      throw new Error(`Failed to save scene: ${response.statusText}`)
+      // Status 413: include payload size in the message, since the body parser
+      // may reject the request before our handler can format a JSON error.
+      if (response.status === 413) {
+        const mb = (body.length / (1024 * 1024)).toFixed(1)
+        throw new Error(`Scene too large to save (${mb} MB). The server rejected the upload — embedded media (videos/images as data URLs) is likely the cause.`)
+      }
+      const detail = await response.text().catch(() => '')
+      const trimmed = detail.trim().slice(0, 300)
+      throw new Error(`Failed to save scene: ${response.status} ${response.statusText}${trimmed ? ` — ${trimmed}` : ''}`)
     }
   }
 
