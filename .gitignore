@@ -29,3 +29,6 @@ npm-debug.log*
 # Testing
 coverage/
 nul
+
+# Generated AWS policy files (contain bucket name)
+infra/aws/*.applied.json

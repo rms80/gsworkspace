@@ -46,7 +46,8 @@
       "Bash(git mv:*)",
       "Bash(grep:*)",
       "Bash(git status:*)",
-      "Bash(xargs basename:*)"
+      "Bash(xargs basename:*)",
+      "WebFetch(domain:projects.markkellogg.org)"
     ]
   }
 }
