@@ -1,45 +1,15 @@
 import { Router } from 'express'
-import { readFileSync, existsSync } from 'fs'
+import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
 import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
-import { generateWithClaudeCode, interruptQuery } from '../services/claudeCode.js'
 import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData, resolveTextFileData } from '../services/llmTypes.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const router = Router({ mergeParams: true })
-
-// ── In-memory request buffer for SSE reconnection after HMR ──
-
-interface BufferedEvent {
-  event: string
-  [key: string]: unknown
-}
-
-interface RequestState {
-  events: BufferedEvent[]
-  result?: { result: string; sessionId: string | null }
-  error?: string
-  status: 'running' | 'completed' | 'error'
-  createdAt: number
-}
-
-const activeRequests = new Map<string, RequestState>()
-
-const REQUEST_TTL_MS = 10 * 60 * 1000 // 10 minutes
-
-/** Remove entries older than REQUEST_TTL_MS */
-function cleanupOldRequests() {
-  const now = Date.now()
-  for (const [id, state] of activeRequests) {
-    if (now - state.createdAt > REQUEST_TTL_MS) {
-      activeRequests.delete(id)
-    }
-  }
-}
 
 /**
  * Extract a user-friendly error message from various error types
@@ -240,165 +210,6 @@ router.post('/generate-html', async (req, res) => {
     const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
     res.status(500).json({ error: getErrorMessage(error, provider) })
   }
-})
-
-// Claude Code endpoints require both server and client to be on localhost
-import type { Request, Response, NextFunction } from 'express'
-function requireLocalhost(req: Request, res: Response, next: NextFunction) {
-  const ip = req.ip || req.socket.remoteAddress || ''
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1'
-  if (!isLocal) {
-    return res.status(403).json({ error: 'Claude Code endpoints are only available from localhost' })
-  }
-  next()
-}
-
-router.post('/generate-claude-code', requireLocalhost, async (req, res) => {
-  try {
-    if (process.env.ANTHROPIC_API_KEY && process.env.ALLOW_ANTHROPIC_API_KEY !== 'true') {
-      return res.status(403).json({
-        error: 'ANTHROPIC_API_KEY is set in your environment. CodingRobot will use this key and consume your API credits. To allow this, add ALLOW_ANTHROPIC_API_KEY=true to your backend .env file.'
-      })
-    }
-
-    const { items, prompt, sessionId, requestId, rootDirectory } = req.body as {
-      items: LLMRequestItem[]; prompt: string; sessionId?: string | null; requestId?: string; rootDirectory?: string
-    }
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Prompt is required' })
-    }
-
-    // Validate rootDirectory
-    if (rootDirectory) {
-      if (!existsSync(rootDirectory)) {
-        return res.status(400).json({ error: `Directory does not exist: ${rootDirectory}` })
-      }
-      if (!existsSync(join(rootDirectory, '.claude'))) {
-        return res.status(400).json({ error: `Claude is not initialized for this directory. Run 'claude' in ${rootDirectory} from the CLI first.` })
-      }
-    }
-
-    // Lazy cleanup of old requests
-    cleanupOldRequests()
-
-    // Initialize request buffer if requestId provided
-    let reqState: RequestState | undefined
-    if (requestId) {
-      reqState = { events: [], status: 'running', createdAt: Date.now() }
-      activeRequests.set(requestId, reqState)
-    }
-
-    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
-
-    // Set up SSE headers
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-    res.setHeader('X-Accel-Buffering', 'no')
-    res.flushHeaders()
-
-    let activityCounter = 0
-    let clientDisconnected = false
-
-    res.on('close', () => {
-      clientDisconnected = true
-    })
-
-    const { result, sessionId: newSessionId } = await generateWithClaudeCode(
-      resolved,
-      prompt,
-      sessionId,
-      (event) => {
-        activityCounter++
-        const eventData = {
-          event: 'activity',
-          id: `act-${activityCounter}`,
-          type: event.type,
-          content: event.content,
-          timestamp: new Date().toISOString(),
-        }
-
-        // Always buffer if requestId was provided
-        if (reqState) {
-          reqState.events.push(eventData)
-        }
-
-        // Write to SSE stream if client is still connected
-        if (!clientDisconnected) {
-          try {
-            res.write(`data: ${JSON.stringify(eventData)}\n\n`)
-          } catch {
-            clientDisconnected = true
-          }
-        }
-      },
-      requestId,
-      rootDirectory
-    )
-
-    // Store result in buffer
-    if (reqState) {
-      reqState.result = { result, sessionId: newSessionId }
-      reqState.status = 'completed'
-    }
-
-    // Send the final result if client is still connected
-    if (!clientDisconnected) {
-      const resultData = JSON.stringify({ event: 'result', result, sessionId: newSessionId })
-      res.write(`data: ${resultData}\n\n`)
-      res.end()
-    }
-  } catch (error) {
-    console.error('Error generating with Claude Code:', error)
-    const message = error instanceof Error ? error.message : 'Claude Code request failed.'
-
-    // Update buffer state on error
-    const requestId = req.body?.requestId
-    if (requestId) {
-      const reqState = activeRequests.get(requestId)
-      if (reqState) {
-        reqState.error = message
-        reqState.status = 'error'
-      }
-    }
-
-    // If headers already sent (SSE started), send error as SSE event
-    if (res.headersSent) {
-      const errorData = JSON.stringify({ event: 'error', error: message })
-      try { res.write(`data: ${errorData}\n\n`) } catch { /* client gone */ }
-      try { res.end() } catch { /* client gone */ }
-    } else {
-      res.status(500).json({ error: message })
-    }
-  }
-})
-
-// Poll for buffered request state (used after HMR reconnection)
-router.get('/generate-claude-code/poll/:requestId', requireLocalhost, (req, res) => {
-  const { requestId } = req.params
-  const after = parseInt(req.query.after as string) || 0
-
-  const state = activeRequests.get(requestId)
-  if (!state) {
-    return res.status(404).json({ error: 'Request not found or expired' })
-  }
-
-  const events = state.events.slice(after)
-
-  res.json({
-    status: state.status,
-    events,
-    result: state.result,
-    error: state.error,
-  })
-})
-
-// Interrupt a running Claude Code query
-router.post('/generate-claude-code/interrupt/:requestId', requireLocalhost, (req, res) => {
-  const { requestId } = req.params
-  const interrupted = interruptQuery(requestId)
-  res.json({ interrupted })
 })
 
 /**

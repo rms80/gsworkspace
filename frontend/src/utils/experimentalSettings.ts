@@ -1,34 +1,10 @@
-const STORAGE_KEY = 'gsworkspace-experimental'
-
-interface ExperimentalSettings {
-  codingRobotEnabled: boolean
-}
-
-function getSettings(): ExperimentalSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw)
-      return {
-        codingRobotEnabled: typeof parsed.codingRobotEnabled === 'boolean' ? parsed.codingRobotEnabled : false,
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return { codingRobotEnabled: false }
-}
-
-function saveSettings(settings: ExperimentalSettings) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
-}
-
+// CodingRobot is disabled — the Claude Agent SDK integration it depended on
+// has changed and is no longer viable. The canvas item type, renderers, and
+// storage are preserved, but there is no UI path to enable it.
 export function getCodingRobotEnabled(): boolean {
-  return getSettings().codingRobotEnabled
+  return false
 }
 
-export function setCodingRobotEnabled(enabled: boolean) {
-  const settings = getSettings()
-  settings.codingRobotEnabled = enabled
-  saveSettings(settings)
+export function setCodingRobotEnabled(_enabled: boolean) {
+  // no-op
 }
