@@ -58,7 +58,7 @@ const router = Router({ mergeParams: true })
 // Upload image
 router.post('/upload-image', async (req, res) => {
   try {
-    const { imageData, sceneId, itemId, filename } = req.body
+    const { imageData, sceneId, itemId, filename, isCrop } = req.body
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
     }
@@ -77,10 +77,15 @@ router.post('/upload-image', async (req, res) => {
 
     // Save directly to scene folder with itemId
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
-    const key = `${sceneFolder}/${itemId}.${ext}`
+    // When isCrop, write to the .crop.<ext> file the rest of the server expects
+    // (crop-image produces this same naming).
+    const key = isCrop
+      ? `${sceneFolder}/${itemId}.crop.${ext}`
+      : `${sceneFolder}/${itemId}.${ext}`
 
-    // imageData is base64, convert to buffer
-    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+    // Strip the `data:...;base64,` prefix leniently — some clients may not
+    // know the exact MIME type (e.g. blobs extracted from a zip).
+    const base64Data = imageData.replace(/^data:[^,]*;base64,/, '')
     await save(key, Buffer.from(base64Data, 'base64'), `image/${ext}`)
 
     // Return the appropriate URL based on storage mode
@@ -107,8 +112,7 @@ router.post('/upload-pdf', async (req, res) => {
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const key = `${sceneFolder}/${itemId}.pdf`
 
-    // pdfData is base64, convert to buffer
-    const base64Data = pdfData.replace(/^data:application\/pdf;base64,/, '')
+    const base64Data = pdfData.replace(/^data:[^,]*;base64,/, '')
     await save(key, Buffer.from(base64Data, 'base64'), 'application/pdf')
 
     const url = getPublicUrl(key)
@@ -134,8 +138,7 @@ router.post('/upload-textfile', async (req, res) => {
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const key = `${sceneFolder}/${itemId}.${ext}`
 
-    // textData is base64 data URL, convert to buffer
-    const base64Data = textData.replace(/^data:[^;]+;base64,/, '')
+    const base64Data = textData.replace(/^data:[^,]*;base64,/, '')
     const contentType = TEXT_FILE_MIME_TYPES[ext] || 'text/plain'
     await save(key, Buffer.from(base64Data, 'base64'), contentType)
 
@@ -161,7 +164,7 @@ router.post('/upload-pdf-thumbnail', async (req, res) => {
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const key = `${sceneFolder}/${itemId}.thumb.png`
 
-    const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+    const base64Data = imageData.replace(/^data:[^,]*;base64,/, '')
     await save(key, Buffer.from(base64Data, 'base64'), 'image/png')
 
     const url = getPublicUrl(key)
@@ -199,6 +202,8 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
     if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
       return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
     }
+    // Multipart form fields arrive as strings
+    const isCrop = req.body.isCrop === 'true' || req.body.isCrop === true
 
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const filename = file.originalname
@@ -212,7 +217,9 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
     // Sanitize extension: strip any path separators
     ext = ext.replace(/[/\\]/g, '')
 
-    const needsTranscode = !BROWSER_NATIVE_EXTENSIONS.has(ext)
+    // crop-video always outputs .crop.mp4, so the crop slot is always mp4 and
+    // never needs transcoding on upload.
+    const needsTranscode = !isCrop && !BROWSER_NATIVE_EXTENSIONS.has(ext)
 
     if (needsTranscode) {
       // Write buffer to temp file, transcode to MP4, then save
@@ -230,10 +237,12 @@ router.post('/upload-video', upload.single('video'), async (req, res) => {
       cleanup()
       res.json({ success: true, url, transcoded: true })
     } else {
-      // Browser-native format — save as-is
+      // Browser-native format (or pre-rendered crop) — save as-is
       const contentType = file.mimetype
-      // Save directly to scene folder with itemId
-      const key = `${sceneFolder}/${itemId}.${ext}`
+      const cropExt = isCrop ? 'mp4' : ext
+      const key = isCrop
+        ? `${sceneFolder}/${itemId}.crop.${cropExt}`
+        : `${sceneFolder}/${itemId}.${ext}`
 
       console.log(`Uploading video: ${key}, size: ${file.buffer.length} bytes`)
       await save(key, file.buffer, contentType || 'video/mp4')

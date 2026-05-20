@@ -18,7 +18,8 @@ export async function uploadVideo(
   file: File,
   sceneId: string,
   itemId: string,
-  isOffline: boolean = false
+  isOffline: boolean = false,
+  isCrop: boolean = false,
 ): Promise<UploadVideoResult> {
   if (isOffline) {
     // In offline mode, create a blob URL for local playback
@@ -29,6 +30,7 @@ export async function uploadVideo(
   formData.append('video', file)
   formData.append('sceneId', sceneId)
   formData.append('itemId', itemId)
+  if (isCrop) formData.append('isCrop', 'true')
 
   const response = await fetch(`${API_BASE}/upload-video`, {
     method: 'POST',

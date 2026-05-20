@@ -44,14 +44,15 @@ export async function uploadImage(
   dataUrl: string,
   sceneId: string,
   itemId: string,
-  filename: string = 'image.png'
+  filename: string = 'image.png',
+  isCrop: boolean = false,
 ): Promise<string> {
   validateUuid(sceneId, 'scene ID')
   validateUuid(itemId, 'item ID')
   const response = await fetch(`${API_BASE}/upload-image`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageData: dataUrl, sceneId, itemId, filename }),
+    body: JSON.stringify({ imageData: dataUrl, sceneId, itemId, filename, isCrop }),
   })
   if (!response.ok) {
     throw new Error(`Failed to upload image: ${response.statusText}`)
