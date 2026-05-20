@@ -5,6 +5,7 @@ import MenuBar from './components/MenuBar'
 import TabBar from './components/TabBar'
 import OpenSceneDialog from './components/OpenSceneDialog'
 import ConflictDialog from './components/ConflictDialog'
+import ImportProgressDialog from './components/ImportProgressDialog'
 import NewWorkspaceDialog from './components/NewWorkspaceDialog'
 import SwitchWorkspaceDialog from './components/SwitchWorkspaceDialog'
 import SettingsDialog from './components/SettingsDialog'
@@ -43,7 +44,7 @@ import {
 } from './services/itemFactory'
 import { fetchYouTubeTitle } from './api/embed'
 import { exportSceneToZip } from './utils/sceneExport'
-import { importSceneFromZip, importSceneFromDirectory } from './utils/sceneImport'
+import { importSceneFromZip, importSceneFromDirectory, ImportProgress } from './utils/sceneImport'
 import { uploadImage } from './api/images'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames, getExistingSplatNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
@@ -87,6 +88,7 @@ function App() {
   const [runningImageGenPromptIds, setRunningImageGenPromptIds] = useState<Set<string>>(new Set())
   const [runningHtmlGenPromptIds, setRunningHtmlGenPromptIds] = useState<Set<string>>(new Set())
   const [isOffline, setIsOffline] = useState(isOfflineMode())
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
   const [storageMode, setStorageModeState] = useState<StorageMode>(getStorageMode())
   const [historyMap, setHistoryMap] = useState<Map<string, HistoryStack>>(new Map())
   const [selectionMap, setSelectionMap] = useState<Map<string, string[]>>(new Map())
@@ -1129,8 +1131,12 @@ function App() {
 
   // Import scene from ZIP file
   const handleImportFromZip = useCallback(async (file: File) => {
+    setImportProgress({ current: 0, total: 0, message: 'Starting...' })
     try {
-      const { scene, history } = await importSceneFromZip(file)
+      const { scene, history } = await importSceneFromZip(file, {
+        isOffline,
+        onProgress: setImportProgress,
+      })
 
       // Add the imported scene
       setOpenScenes((prev) => [...prev, scene])
@@ -1156,13 +1162,19 @@ function App() {
     } catch (error) {
       console.error('Failed to import scene from ZIP:', error)
       alert('Failed to import scene. Make sure the file is a valid scene archive.')
+    } finally {
+      setImportProgress(null)
     }
-  }, [])
+  }, [isOffline])
 
   // Import scene from folder
   const handleImportFromFolder = useCallback(async (files: FileList) => {
+    setImportProgress({ current: 0, total: 0, message: 'Starting...' })
     try {
-      const { scene, history } = await importSceneFromDirectory(files)
+      const { scene, history } = await importSceneFromDirectory(files, {
+        isOffline,
+        onProgress: setImportProgress,
+      })
 
       // Add the imported scene
       setOpenScenes((prev) => [...prev, scene])
@@ -1188,8 +1200,10 @@ function App() {
     } catch (error) {
       console.error('Failed to import scene from folder:', error)
       alert('Failed to import scene. Make sure the folder contains a valid scene.json file.')
+    } finally {
+      setImportProgress(null)
     }
-  }, [])
+  }, [isOffline])
 
   const handlePinCurrentScenes = useCallback(async () => {
     const sceneIds = openScenes.map((s) => s.id)
@@ -1616,6 +1630,10 @@ function App() {
         onStorageModeChange={handleStorageModeChange}
         serverName={serverName}
         workspaceName={ACTIVE_WORKSPACE}
+      />
+      <ImportProgressDialog
+        isOpen={importProgress !== null}
+        progress={importProgress}
       />
       <OpenSceneDialog
         isOpen={openSceneDialogOpen}

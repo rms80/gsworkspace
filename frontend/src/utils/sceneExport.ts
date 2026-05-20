@@ -1,5 +1,5 @@
 import JSZip from 'jszip'
-import { Scene, ImageItem, VideoItem } from '../types'
+import { Scene, ImageItem, VideoItem, PdfItem, TextFileItem, Model3DItem, SplatItem } from '../types'
 import { SerializedHistory } from '../history'
 import { getContentData } from '../api/scenes'
 
@@ -33,14 +33,14 @@ declare global {
  * Fetches an image and returns it as a Blob
  * Handles both data URLs and S3 URLs (via getContentData API)
  */
-async function fetchImageAsBlob(sceneId: string, itemId: string, src: string): Promise<Blob> {
+async function fetchImageAsBlob(sceneId: string, itemId: string, src: string, isEdit: boolean = false): Promise<Blob> {
   if (src.startsWith('data:') || src.startsWith('blob:')) {
     // Convert data URL or blob URL to blob
     const response = await fetch(src)
     return response.blob()
   } else {
     // Use getContentData API for S3 URLs
-    return getContentData(sceneId, itemId, 'image', false)
+    return getContentData(sceneId, itemId, 'image', isEdit)
   }
 }
 
@@ -56,6 +56,40 @@ async function fetchVideoAsBlob(sceneId: string, itemId: string, src: string, is
     // Use getContentData API for S3 URLs
     return getContentData(sceneId, itemId, 'video', isEdit)
   }
+}
+
+/**
+ * Fetches a PDF and returns it as a Blob
+ */
+async function fetchPdfAsBlob(sceneId: string, itemId: string, src: string): Promise<Blob> {
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    const response = await fetch(src)
+    return response.blob()
+  }
+  return getContentData(sceneId, itemId, 'pdf', false)
+}
+
+/**
+ * Fetches a text file and returns it as a Blob
+ */
+async function fetchTextFileAsBlob(sceneId: string, itemId: string, src: string): Promise<Blob> {
+  if (src.startsWith('data:') || src.startsWith('blob:')) {
+    const response = await fetch(src)
+    return response.blob()
+  }
+  return getContentData(sceneId, itemId, 'text-file', false)
+}
+
+/**
+ * Fetches a generic file directly from its URL.
+ * Used for content types not served via getContentData (3D models, splats).
+ */
+async function fetchUrlAsBlob(src: string): Promise<Blob> {
+  const response = await fetch(src)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${src}: ${response.status} ${response.statusText}`)
+  }
+  return response.blob()
 }
 
 /**
@@ -148,7 +182,7 @@ export async function exportScene(
       // If there's a cropped version, save it too
       if (item.cropSrc) {
         // Cropped images are stored with isEdit=true
-        const cropBlob = await fetchImageAsBlob(scene.id, item.id, item.cropSrc)
+        const cropBlob = await fetchImageAsBlob(scene.id, item.id, item.cropSrc, true)
         const cropExt = getImageExtension(item.cropSrc, cropBlob)
         const cropFilename = `${item.id}_crop.${cropExt}`
         zip.file(`images/${cropFilename}`, cropBlob)
@@ -160,25 +194,122 @@ export async function exportScene(
     }
   }
 
-  // Process videos and add to ZIP
+  // Process videos and add to ZIP. Always export the source; if an edited
+  // version exists (cropSrc), export it too as a sibling file so edits round-trip.
   const videoItems = exportScene.items.filter(
     (item): item is VideoItem => item.type === 'video'
   )
 
   for (const item of videoItems) {
     try {
-      // Determine if we should fetch the edited/cropped version
-      const hasEdits = !!(item.cropSrc || item.cropRect || item.speedFactor || item.removeAudio || item.trim)
-      const blob = await fetchVideoAsBlob(scene.id, item.id, item.src, hasEdits)
-      const ext = getVideoExtension(item.src, blob)
-      const filename = `${item.id}.${ext}`
-      zip.file(`videos/${filename}`, blob)
+      // Source video
+      const srcBlob = await fetchVideoAsBlob(scene.id, item.id, item.src, false)
+      const srcExt = getVideoExtension(item.src, srcBlob)
+      const srcFilename = `${item.id}.${srcExt}`
+      zip.file(`videos/${srcFilename}`, srcBlob)
+      item.src = `videos/${srcFilename}`
 
-      // Update the item's src to use relative path
-      item.src = `videos/${filename}`
+      // Edited/cropped version, if present. crop-video always emits mp4.
+      if (item.cropSrc) {
+        try {
+          const cropBlob = await fetchVideoAsBlob(scene.id, item.id, item.cropSrc, true)
+          const cropExt = getVideoExtension(item.cropSrc, cropBlob)
+          const cropFilename = `${item.id}_crop.${cropExt}`
+          zip.file(`videos/${cropFilename}`, cropBlob)
+          item.cropSrc = `videos/${cropFilename}`
+        } catch (cropError) {
+          console.error(`Failed to export edited video ${item.id}:`, cropError)
+          // Strip cropSrc so the importer doesn't try to resolve a missing file
+          delete item.cropSrc
+        }
+      }
     } catch (error) {
       console.error(`Failed to export video ${item.id}:`, error)
       // Keep the original src if we fail to fetch
+    }
+  }
+
+  // Process PDFs and add to ZIP
+  const pdfItems = exportScene.items.filter(
+    (item): item is PdfItem => item.type === 'pdf'
+  )
+
+  for (const item of pdfItems) {
+    try {
+      const blob = await fetchPdfAsBlob(scene.id, item.id, item.src)
+      const filename = `${item.id}.pdf`
+      zip.file(`pdfs/${filename}`, blob)
+      item.src = `pdfs/${filename}`
+
+      if (item.thumbnailSrc) {
+        try {
+          const thumbBlob = item.thumbnailSrc.startsWith('data:') || item.thumbnailSrc.startsWith('blob:')
+            ? await (await fetch(item.thumbnailSrc)).blob()
+            : await fetchUrlAsBlob(item.thumbnailSrc)
+          const thumbFilename = `${item.id}_thumb.png`
+          zip.file(`pdfs/${thumbFilename}`, thumbBlob)
+          item.thumbnailSrc = `pdfs/${thumbFilename}`
+        } catch (thumbError) {
+          console.error(`Failed to export PDF thumbnail ${item.id}:`, thumbError)
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to export PDF ${item.id}:`, error)
+    }
+  }
+
+  // Process text files and add to ZIP
+  const textFileItems = exportScene.items.filter(
+    (item): item is TextFileItem => item.type === 'text-file'
+  )
+
+  for (const item of textFileItems) {
+    try {
+      const blob = await fetchTextFileAsBlob(scene.id, item.id, item.src)
+      const ext = item.fileFormat || 'txt'
+      const filename = `${item.id}.${ext}`
+      zip.file(`textfiles/${filename}`, blob)
+      item.src = `textfiles/${filename}`
+    } catch (error) {
+      console.error(`Failed to export text file ${item.id}:`, error)
+    }
+  }
+
+  // Process 3D models and add to ZIP
+  const model3dItems = exportScene.items.filter(
+    (item): item is Model3DItem => item.type === 'model3d'
+  )
+
+  for (const item of model3dItems) {
+    try {
+      const blob = item.src.startsWith('data:') || item.src.startsWith('blob:')
+        ? await (await fetch(item.src)).blob()
+        : await fetchUrlAsBlob(item.src)
+      const ext = item.format || 'glb'
+      const filename = `${item.id}.${ext}`
+      zip.file(`models/${filename}`, blob)
+      item.src = `models/${filename}`
+    } catch (error) {
+      console.error(`Failed to export 3D model ${item.id}:`, error)
+    }
+  }
+
+  // Process Gaussian splats and add to ZIP
+  const splatItems = exportScene.items.filter(
+    (item): item is SplatItem => item.type === 'splat'
+  )
+
+  for (const item of splatItems) {
+    try {
+      const blob = item.src.startsWith('data:') || item.src.startsWith('blob:')
+        ? await (await fetch(item.src)).blob()
+        : await fetchUrlAsBlob(item.src)
+      const ext = item.format || 'ksplat'
+      const filename = `${item.id}.${ext}`
+      zip.file(`splats/${filename}`, blob)
+      item.src = `splats/${filename}`
+    } catch (error) {
+      console.error(`Failed to export splat ${item.id}:`, error)
     }
   }
 
