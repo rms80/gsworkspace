@@ -183,6 +183,14 @@ if not exist "%INSTALL_DIR%\frontend\.env.local" (
         echo.
         echo # Backend API port
         echo VITE_API_PORT=4040
+        echo.
+        echo # Remote access ^(e.g. over Tailscale^): set to true to expose the
+        echo # frontend beyond localhost. The machine's own hostname is allowed
+        echo # automatically; list extra hostnames in VITE_ALLOWED_HOSTS
+        echo # ^(comma-separated, or "*" for any^). A leading dot matches
+        echo # subdomains - e.g. ".ts.net" allows any Tailscale MagicDNS name.
+        echo VITE_EXPOSE=false
+        echo VITE_ALLOWED_HOSTS=
     ) > "%INSTALL_DIR%\frontend\.env.local"
     echo Created frontend\.env.local
 )

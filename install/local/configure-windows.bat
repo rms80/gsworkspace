@@ -113,6 +113,14 @@ if exist ".env.local" (
         echo.
         echo # Backend API port - must match PORT in backend/.env ^(default: 4000^)
         echo VITE_API_PORT=4000
+        echo.
+        echo # Remote access ^(e.g. over Tailscale^): set to true to expose the
+        echo # frontend beyond localhost. The machine's own hostname is allowed
+        echo # automatically; list extra hostnames in VITE_ALLOWED_HOSTS
+        echo # ^(comma-separated, or "*" for any^). A leading dot matches
+        echo # subdomains - e.g. ".ts.net" allows any Tailscale MagicDNS name.
+        echo VITE_EXPOSE=false
+        echo VITE_ALLOWED_HOSTS=
     ) > .env.local
     echo Frontend .env.local created.
 )

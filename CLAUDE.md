@@ -96,6 +96,7 @@ Copy `.env.example` to `.env` in the backend directory and fill in:
 ## Claude Memory
 
 ### Project Patterns
+- `install\win_server\` — Windows system-tray daemon (`GsworkspaceServer.cs`, a .NET 10 *file-based app* — no .csproj) that runs the backend/frontend Node servers hidden, launched via `Start Gsworkspace Server.vbs`. Needs the .NET 10 SDK. `dotnet publish` of a file-based app defaults to native AOT, which WinForms rejects — pass `-p:PublishAot=false -p:PublishTrimmed=false`.
 - Backend routes are mounted at `/api/w/:workspace/...` — don't forget the workspace prefix
 - Video, GIF, and HTML items use DOM overlays positioned over the Konva canvas, with Konva rects for hit detection
 - `videoItemTransforms` / `gifItemTransforms` state tracks live position during drag for overlay sync
