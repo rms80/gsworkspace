@@ -22,6 +22,16 @@ dotenv.config()
 const app = express()
 const PORT = process.env.PORT || 4000
 
+// When this backend runs behind a reverse proxy (e.g. a dev server proxying
+// /api, or an HTTPS terminator for remote access), the proxy adds an
+// X-Forwarded-For header. Without trusting the proxy, express-rate-limit throws
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and keys every client by the proxy's IP,
+// which would break the auth login rate limiter. Trust loopback by default
+// (proxies on the same host; loopback isn't spoofable from the network).
+// Override with TRUST_PROXY (a hop count, "true", or a CIDR) for other setups.
+const trustProxy = process.env.TRUST_PROXY ?? 'loopback'
+app.set('trust proxy', trustProxy === 'true' ? true : /^\d+$/.test(trustProxy) ? parseInt(trustProxy, 10) : trustProxy)
+
 const SERVER_NAME = process.env.SERVER_NAME || 'gsworkspace'
 const AUTH_PASSWORD = process.env.AUTH_PASSWORD || ''
 const SESSION_SECRET = process.env.SESSION_SECRET || (() => {
@@ -35,23 +45,48 @@ app.use(helmet({
   contentSecurityPolicy: process.env.FRONTEND_STATIC_DIR ? false : undefined,
   crossOriginEmbedderPolicy: process.env.FRONTEND_STATIC_DIR ? false : undefined,
 }))
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (e.g., server-to-server, curl)
-    if (!origin) return callback(null, true)
+app.use(cors((req, callback) => {
+  const origin = req.headers.origin
+  const corsOptions = { origin: false as boolean, credentials: true }
+  const allow = () => {
+    corsOptions.origin = true
+    callback(null, corsOptions)
+  }
 
-    // Allow any localhost origin (dev)
-    if (origin.startsWith('http://localhost:') || origin === 'http://localhost') {
-      return callback(null, true)
+  // Requests with no Origin header: server-to-server, curl, and same-origin
+  // GET requests (which browsers send without an Origin).
+  if (!origin) return allow()
+
+  // Any localhost origin (local development).
+  if (origin.startsWith('http://localhost:') || origin === 'http://localhost') return allow()
+
+  try {
+    const url = new URL(origin)
+
+    // Same-origin: when this backend also serves the frontend
+    // (FRONTEND_STATIC_DIR), same-origin POSTs still carry an Origin header.
+    // Note this can't match when a reverse proxy rewrites the Host header
+    // (e.g. a dev-server /api proxy with changeOrigin) — use ALLOWED_ORIGINS
+    // for those deployments.
+    if (req.headers.host && url.host === req.headers.host) return allow()
+
+    // Explicit allow-list from ALLOWED_ORIGINS (comma-separated). Each entry is
+    // either a full origin matched exactly (e.g. https://app.example.com), or a
+    // leading-dot host suffix matching that domain and its subdomains
+    // (e.g. .example.com), mirroring the frontend's VITE_ALLOWED_HOSTS.
+    const allowed = process.env.ALLOWED_ORIGINS?.split(',').map((o) => o.trim()).filter(Boolean) || []
+    for (const entry of allowed) {
+      if (entry.startsWith('.')) {
+        if (url.hostname === entry.slice(1) || url.hostname.endsWith(entry)) return allow()
+      } else if (entry === origin) {
+        return allow()
+      }
     }
+  } catch {
+    // Malformed Origin — fall through to rejection.
+  }
 
-    // Check allowed origins from env
-    const allowed = process.env.ALLOWED_ORIGINS?.split(',') || []
-    if (allowed.includes(origin)) return callback(null, true)
-
-    callback(new Error('Not allowed by CORS'))
-  },
-  credentials: true,
+  callback(new Error('Not allowed by CORS'))
 }))
 app.use(express.json({ limit: '50mb' }))
 
