@@ -911,7 +911,7 @@ router.post('/video-gif-preview', async (req, res) => {
       width, height, frames: pages ?? 1, duration: source.duration, fileSize: gif.length,
     })
   } catch (error) {
-    if (!res.headersSent && !res.destroyed) {
+    if (!res.writableEnded && !res.destroyed) {
       console.error('Error rendering GIF preview:', error)
       res.status(500).json({ error: 'Failed to render GIF preview' })
     }

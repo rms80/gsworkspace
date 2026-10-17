@@ -14,6 +14,7 @@ import configRouter from './routes/config.js'
 import embedRouter from './routes/embed.js'
 import workspacesRouter from './routes/workspaces.js'
 import videoToolsRouter from './routes/videoTools.js'
+import { keepAlive } from './middleware/keepAlive.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
 import { getS3ConfigStatus } from './services/s3.js'
@@ -197,9 +198,10 @@ app.use('/api/w/:workspace/items/upload-image', uploadLimiter)
 app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
 
 // App routers mounted under workspace prefix
-app.use('/api/w/:workspace/items', itemsRouter)
-app.use('/api/w/:workspace/video-tools', videoToolsRouter)
-app.use('/api/w/:workspace/llm', llmRouter)
+// Slow requests (uploads, video processing, LLM calls) send keep-alive bytes so proxies don't drop them
+app.use('/api/w/:workspace/items', keepAlive(), itemsRouter)
+app.use('/api/w/:workspace/video-tools', keepAlive(), videoToolsRouter)
+app.use('/api/w/:workspace/llm', keepAlive(), llmRouter)
 app.use('/api/w/:workspace/scenes', scenesRouter)
 app.use('/api/w/:workspace/embed', embedRouter)
 
