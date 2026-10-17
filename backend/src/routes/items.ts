@@ -1,5 +1,6 @@
 import { Router } from 'express'
-import { save, loadAsBuffer, getPublicUrl } from '../services/storage.js'
+import { save, loadAsBuffer, getPublicUrl, list, del } from '../services/storage.js'
+import { applyVideoEdits, probeVideo } from '../services/videoProcessing.js'
 import { v4 as uuidv4, validate as uuidValidate } from 'uuid'
 import sharp from 'sharp'
 import ffmpeg from 'fluent-ffmpeg'
@@ -579,6 +580,147 @@ router.post('/resize-image', async (req, res) => {
   }
 })
 
+// --- Create GIF from image frames ---
+
+const GIF_PREVIEW_PREFIX = 'temp/gif-previews/'
+const GIF_PREVIEW_MAX_DIMENSION = 640
+const GIF_PREVIEW_MAX_AGE_MS = 60 * 60 * 1000
+const GIF_MAX_DIMENSION = 4096
+const GIF_MAX_FRAMES = 500
+const GIF_MIN_DELAY_MS = 20
+const GIF_MAX_DELAY_MS = 60000
+const GIF_PREVIEW_ID_RE = /^\d+-[0-9a-f-]{36}$/
+
+// Prepared frames (cropped + fitted PNGs), so preview updates that only change timing are fast.
+// Image files are immutable per item id, so entries never go stale. Map order gives LRU eviction.
+const gifFrameCache = new Map<string, Buffer>()
+const GIF_FRAME_CACHE_MAX = 64
+
+interface GifFrameInput {
+  imageId: string
+  cropRect?: CropRectInput
+}
+
+/** Loads an image (first frame for animated sources), applies its crop and fits it into width×height */
+async function prepareGifFrame(sceneFolder: string, frame: GifFrameInput, width: number, height: number): Promise<Buffer> {
+  const cacheKey = JSON.stringify([sceneFolder, frame.imageId, frame.cropRect ?? null, width, height])
+  const cached = gifFrameCache.get(cacheKey)
+  if (cached) {
+    gifFrameCache.delete(cacheKey)
+    gifFrameCache.set(cacheKey, cached)
+    return cached
+  }
+
+  const source = await loadSourceImage(sceneFolder, frame.imageId)
+  if (!source) throw Object.assign(new Error(`Source image not found: ${frame.imageId}`), { status: 404 })
+
+  let pipeline = sharp(source.buffer)
+  if (frame.cropRect) {
+    const { x, y, width: cw, height: ch } = frame.cropRect
+    pipeline = pipeline.extract({ left: Math.round(x), top: Math.round(y), width: Math.round(cw), height: Math.round(ch) })
+  }
+  const buffer = await pipeline
+    .resize(width, height, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .ensureAlpha()
+    .png()
+    .toBuffer()
+
+  gifFrameCache.set(cacheKey, buffer)
+  while (gifFrameCache.size > GIF_FRAME_CACHE_MAX) {
+    gifFrameCache.delete(gifFrameCache.keys().next().value!)
+  }
+  return buffer
+}
+
+/** Deletes GIF previews older than GIF_PREVIEW_MAX_AGE_MS (abandoned sessions). Best effort. */
+async function cleanupOldGifPreviews(): Promise<void> {
+  try {
+    const cutoff = Date.now() - GIF_PREVIEW_MAX_AGE_MS
+    for (const key of await list(GIF_PREVIEW_PREFIX)) {
+      const created = parseInt(key.slice(GIF_PREVIEW_PREFIX.length), 10)
+      if (Number.isFinite(created) && created < cutoff) await del(key)
+    }
+  } catch (err) {
+    console.error('Failed to clean up old GIF previews:', err)
+  }
+}
+
+// Build an animated GIF from image items, one frame per image with its own display time.
+// Frames use each image's crop and are fitted (letterboxed, transparent) into width×height.
+// preview=true writes a small temporary preview (returns previewId); otherwise the GIF is saved
+// as the original file of a new image item (newImageId).
+router.post('/create-gif', async (req, res) => {
+  try {
+    const { sceneId, frames, delays, width, height, preview, newImageId } = req.body
+    if (!sceneId || !uuidValidate(sceneId)) {
+      return res.status(400).json({ error: 'A valid sceneId is required' })
+    }
+    if (!Array.isArray(frames) || frames.length === 0 || frames.length > GIF_MAX_FRAMES ||
+        !frames.every((f: GifFrameInput) => f && typeof f.imageId === 'string' && uuidValidate(f.imageId) &&
+          (f.cropRect === undefined || isValidCropRect(f.cropRect)))) {
+      return res.status(400).json({ error: `frames must be 1 to ${GIF_MAX_FRAMES} images with valid IDs` })
+    }
+    if (!Array.isArray(delays) || delays.length !== frames.length ||
+        !delays.every((d: unknown) => Number.isInteger(d) && (d as number) >= GIF_MIN_DELAY_MS && (d as number) <= GIF_MAX_DELAY_MS)) {
+      return res.status(400).json({ error: `delays must give each frame a whole number of ms from ${GIF_MIN_DELAY_MS} to ${GIF_MAX_DELAY_MS}` })
+    }
+    if (!Number.isInteger(width) || !Number.isInteger(height) ||
+        width < 1 || height < 1 || width > GIF_MAX_DIMENSION || height > GIF_MAX_DIMENSION) {
+      return res.status(400).json({ error: `width and height must be whole numbers from 1 to ${GIF_MAX_DIMENSION}` })
+    }
+    if (!preview && (!newImageId || !uuidValidate(newImageId))) {
+      return res.status(400).json({ error: 'A valid newImageId is required' })
+    }
+
+    // Previews are scaled down so they regenerate quickly
+    const previewScale = preview ? Math.min(1, GIF_PREVIEW_MAX_DIMENSION / Math.max(width, height)) : 1
+    const outW = Math.max(1, Math.round(width * previewScale))
+    const outH = Math.max(1, Math.round(height * previewScale))
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const frameBuffers = await Promise.all(
+      (frames as GifFrameInput[]).map((f) => prepareGifFrame(sceneFolder, f, outW, outH))
+    )
+    const gif = await sharp(frameBuffers, { join: { animated: true } })
+      .gif({ delay: delays, loop: 0 })
+      .toBuffer()
+
+    if (preview) {
+      await cleanupOldGifPreviews()
+      const previewId = `${Date.now()}-${uuidv4()}`
+      const key = `${GIF_PREVIEW_PREFIX}${previewId}.gif`
+      await save(key, gif, 'image/gif')
+      return res.json({ success: true, url: getPublicUrl(key), previewId })
+    }
+
+    const key = `${sceneFolder}/${newImageId}.gif`
+    await save(key, gif, 'image/gif')
+    res.json({ success: true, url: getPublicUrl(key), width: outW, height: outH, fileSize: gif.length })
+  } catch (error) {
+    const status = (error as { status?: number }).status
+    if (status === 404) {
+      return res.status(404).json({ error: (error as Error).message })
+    }
+    console.error('Error creating GIF:', error)
+    res.status(500).json({ error: 'Failed to create GIF' })
+  }
+})
+
+// Discard a temporary GIF preview
+router.post('/discard-gif-preview', async (req, res) => {
+  try {
+    const { previewId } = req.body
+    if (typeof previewId !== 'string' || !GIF_PREVIEW_ID_RE.test(previewId)) {
+      return res.status(400).json({ error: 'Invalid previewId' })
+    }
+    await del(`${GIF_PREVIEW_PREFIX}${previewId}.gif`)
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error discarding GIF preview:', error)
+    res.status(500).json({ error: 'Failed to discard GIF preview' })
+  }
+})
+
 // Process a video (crop, speed change, trim) and save
 router.post('/crop-video', async (req, res) => {
   const tempDir = os.tmpdir()
@@ -625,163 +767,7 @@ router.post('/crop-video', async (req, res) => {
     const arrayBuffer = await response.arrayBuffer()
     fs.writeFileSync(inputPath, Buffer.from(arrayBuffer))
 
-    const effectiveSpeed = speed && speed !== 1 ? speed : null
-
-    // Use multi-pass approach when we have trim combined with crop or speed
-    // This avoids synchronization issues between input seeking and video filters
-    // Pass 1: crop + trim -> intermediate file (or output if no speed)
-    // Pass 2: speed change -> output file (only if speed is needed)
-    const needsTrimPass = hasTrim && (effectiveSpeed || cropRect)
-    const needsSpeedPass = hasTrim && effectiveSpeed
-
-    if (needsTrimPass) {
-      // PASS 1: Crop and trim
-      // Output to intermediate if we need speed pass, otherwise directly to output
-      const pass1Output = needsSpeedPass ? intermediatePath : outputPath
-
-      await new Promise<void>((resolve, reject) => {
-        const cmd = ffmpeg(inputPath)
-
-        // Apply trim as input options
-        if (trim.start > 0) {
-          cmd.inputOptions(['-ss', String(trim.start)])
-        }
-        if (trim.end > 0) {
-          const duration = trim.end - (trim.start || 0)
-          if (duration > 0) {
-            cmd.inputOptions(['-t', String(duration)])
-          }
-        }
-
-        // Apply crop filter
-        if (cropRect) {
-          let { x, y, width, height } = cropRect
-          x = Math.round(x)
-          y = Math.round(y)
-          width = Math.round(width / 2) * 2
-          height = Math.round(height / 2) * 2
-          cmd.videoFilter([`crop=${width}:${height}:${x}:${y}`])
-        }
-
-        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
-
-        if (removeAudio) {
-          cmd.noAudio()
-        } else {
-          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
-        }
-
-        cmd.output(pass1Output)
-          .on('end', () => resolve())
-          .on('error', (err) => reject(err))
-          .run()
-      })
-
-      // PASS 2: Apply speed change (only if needed)
-      if (needsSpeedPass) {
-        await new Promise<void>((resolve, reject) => {
-          const cmd = ffmpeg(intermediatePath)
-
-          // Video speed filter
-          cmd.videoFilter([`setpts=PTS/${effectiveSpeed}`])
-
-          // Audio speed filter (atempo only supports 0.5-2.0, chain for extreme values)
-          if (!removeAudio) {
-            const audioFilters: string[] = []
-            let remainingSpeed = effectiveSpeed
-            while (remainingSpeed > 2.0) {
-              audioFilters.push('atempo=2.0')
-              remainingSpeed /= 2.0
-            }
-            while (remainingSpeed < 0.5) {
-              audioFilters.push('atempo=0.5')
-              remainingSpeed /= 0.5
-            }
-            audioFilters.push(`atempo=${remainingSpeed}`)
-            cmd.audioFilter(audioFilters)
-            cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
-          } else {
-            cmd.noAudio()
-          }
-
-          cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
-          cmd.output(outputPath)
-            .on('end', () => resolve())
-            .on('error', (err) => reject(err))
-            .run()
-        })
-      }
-    } else {
-      // Single pass: no trim, or no speed change
-      const videoFilters: string[] = []
-      const audioFilters: string[] = []
-
-      // Add crop filter if cropRect provided
-      if (cropRect) {
-        let { x, y, width, height } = cropRect
-        x = Math.round(x)
-        y = Math.round(y)
-        width = Math.round(width / 2) * 2
-        height = Math.round(height / 2) * 2
-        videoFilters.push(`crop=${width}:${height}:${x}:${y}`)
-      }
-
-      // Add speed filter if speed provided and not 1
-      if (effectiveSpeed) {
-        videoFilters.push(`setpts=PTS/${effectiveSpeed}`)
-
-        let remainingSpeed = effectiveSpeed
-        while (remainingSpeed > 2.0) {
-          audioFilters.push('atempo=2.0')
-          remainingSpeed /= 2.0
-        }
-        while (remainingSpeed < 0.5) {
-          audioFilters.push('atempo=0.5')
-          remainingSpeed /= 0.5
-        }
-        audioFilters.push(`atempo=${remainingSpeed}`)
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        const cmd = ffmpeg(inputPath)
-
-        // Apply trim as input options for efficiency (seeks before decoding)
-        if (hasTrim) {
-          if (trim.start > 0) {
-            cmd.inputOptions(['-ss', String(trim.start)])
-          }
-          if (trim.end > 0) {
-            const duration = trim.end - (trim.start || 0)
-            if (duration > 0) {
-              cmd.inputOptions(['-t', String(duration)])
-            }
-          }
-        }
-
-        if (videoFilters.length > 0) {
-          cmd.videoFilter(videoFilters)
-        }
-
-        cmd.outputOptions(['-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-movflags', '+faststart'])
-
-        // Handle audio: remove, re-encode for speed change, or copy
-        if (removeAudio) {
-          cmd.noAudio()
-        } else if (audioFilters.length > 0 || hasTrim) {
-          if (audioFilters.length > 0) {
-            cmd.audioFilter(audioFilters)
-          }
-          cmd.outputOptions(['-c:a', 'aac', '-b:a', '128k'])
-        } else {
-          cmd.outputOptions(['-c:a', 'copy'])
-        }
-
-        cmd.output(outputPath)
-          .on('end', () => resolve())
-          .on('error', (err) => reject(err))
-          .run()
-      })
-    }
+    await applyVideoEdits(inputPath, outputPath, intermediatePath, { cropRect, speed, removeAudio, trim })
 
     // Read processed video
     const processedBuffer = fs.readFileSync(outputPath)
@@ -799,6 +785,169 @@ router.post('/crop-video', async (req, res) => {
   }
 })
 
+interface GifOptionsInput {
+  fps?: number
+  scale?: number
+  nearest?: boolean
+}
+
+/** Validates optional video → GIF settings; returns an error message, or null when valid */
+function validateGifOptions(gifOptions: GifOptionsInput | undefined): string | null {
+  const fps = gifOptions?.fps
+  const scale = gifOptions?.scale
+  if (fps !== undefined && !(Number.isFinite(fps) && fps >= 1 && fps <= 50)) {
+    return 'gifOptions.fps must be from 1 to 50'
+  }
+  if (scale !== undefined && !(Number.isFinite(scale) && scale >= 0.05 && scale <= 8)) {
+    return 'gifOptions.scale must be from 0.05 to 8'
+  }
+  return null
+}
+
+/**
+ * Video → GIF: palette-preserving conversion, optionally resampled to a frame rate and scaled.
+ * Calls onCommand with the ffmpeg command so callers can kill it.
+ */
+function encodeGif(
+  inputFile: string,
+  outputFile: string,
+  gifOptions: GifOptionsInput | undefined,
+  onCommand?: (command: ffmpeg.FfmpegCommand) => void,
+): Promise<void> {
+  const preFilters: string[] = []
+  if (gifOptions?.fps !== undefined) preFilters.push(`fps=${gifOptions.fps}`)
+  const scale = gifOptions?.scale
+  if (scale !== undefined && scale !== 1) {
+    // Nearest-neighbour only applies when scaling up; scaling down is always smooth
+    const flags = scale > 1 && gifOptions?.nearest ? 'neighbor' : 'lanczos'
+    preFilters.push(`scale=w='max(1,round(iw*${scale}))':h='max(1,round(ih*${scale}))':flags=${flags}`)
+  }
+  return new Promise<void>((resolve, reject) => {
+    const command = ffmpeg(inputFile)
+      .complexFilter([
+        `[0:v]${preFilters.length > 0 ? preFilters.join(',') + ',' : ''}split[s0][s1]`,
+        '[s0]palettegen[p]',
+        '[s1][p]paletteuse',
+      ])
+      .output(outputFile)
+      .on('end', () => resolve())
+      .on('error', (err) => reject(err))
+    onCommand?.(command)
+    command.run()
+  })
+}
+
+// Downloaded video sources for Convert to GIF previews, reused while the settings change.
+// Map order gives LRU eviction; entries also expire so edits made later are picked up.
+const GIF_PREVIEW_SOURCE_TTL_MS = 5 * 60 * 1000
+const GIF_PREVIEW_SOURCE_MAX = 4
+const gifPreviewSources = new Map<string, { file: string; duration: number; usedAt: number }>()
+
+function pruneGifPreviewSources(): void {
+  const cutoff = Date.now() - GIF_PREVIEW_SOURCE_TTL_MS
+  for (const [key, source] of gifPreviewSources) {
+    if (source.usedAt < cutoff || gifPreviewSources.size > GIF_PREVIEW_SOURCE_MAX) {
+      try { fs.unlinkSync(source.file) } catch { /* ignore */ }
+      gifPreviewSources.delete(key)
+    }
+  }
+}
+
+// Render a video → GIF conversion at full quality as a temporary preview (returns previewId).
+// /commit-gif-preview then saves it as a new image item, so creating doesn't re-encode.
+router.post('/video-gif-preview', async (req, res) => {
+  let command: ffmpeg.FfmpegCommand | null = null
+  // Stop encoding if the client gives up (settings changed, or the panel closed)
+  res.on('close', () => {
+    if (!res.writableFinished) command?.kill('SIGKILL')
+  })
+  const outputFile = path.join(os.tmpdir(), `video-gif-preview-${uuidv4()}.gif`)
+
+  try {
+    const { sceneId, itemId, isEdit, extension, gifOptions } = req.body
+    if (!sceneId || !itemId || !extension) {
+      return res.status(400).json({ error: 'sceneId, itemId and extension are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(itemId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or item ID format' })
+    }
+    if (!/^[a-z0-9]{1,5}$/i.test(extension)) {
+      return res.status(400).json({ error: 'Invalid extension' })
+    }
+    const optionsError = validateGifOptions(gifOptions)
+    if (optionsError) return res.status(400).json({ error: optionsError })
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const sourceKey = `${sceneFolder}/${itemId}${isEdit ? '.crop' : ''}.${extension}`
+
+    pruneGifPreviewSources()
+    let source = gifPreviewSources.get(sourceKey)
+    if (source) {
+      gifPreviewSources.delete(sourceKey)
+    } else {
+      const sourceBuffer = await loadAsBuffer(sourceKey)
+      if (!sourceBuffer) {
+        return res.status(404).json({ error: 'Source file not found' })
+      }
+      const file = path.join(os.tmpdir(), `video-gif-source-${uuidv4()}.${extension}`)
+      fs.writeFileSync(file, sourceBuffer)
+      const { duration } = await probeVideo(file)
+      source = { file, duration, usedAt: 0 }
+    }
+    source.usedAt = Date.now()
+    gifPreviewSources.set(sourceKey, source)
+
+    await encodeGif(source.file, outputFile, gifOptions, (c) => { command = c })
+    if (res.destroyed) return
+
+    const gif = fs.readFileSync(outputFile)
+    const { width, height, pages } = await sharp(gif).metadata()
+    await cleanupOldGifPreviews()
+    const previewId = `${Date.now()}-${uuidv4()}`
+    const key = `${GIF_PREVIEW_PREFIX}${previewId}.gif`
+    await save(key, gif, 'image/gif')
+    res.json({
+      success: true, url: getPublicUrl(key), previewId,
+      width, height, frames: pages ?? 1, duration: source.duration, fileSize: gif.length,
+    })
+  } catch (error) {
+    if (!res.headersSent && !res.destroyed) {
+      console.error('Error rendering GIF preview:', error)
+      res.status(500).json({ error: 'Failed to render GIF preview' })
+    }
+  } finally {
+    try { fs.unlinkSync(outputFile) } catch { /* ignore */ }
+  }
+})
+
+// Save a temporary GIF preview as the original file of a new image item, removing the preview
+router.post('/commit-gif-preview', async (req, res) => {
+  try {
+    const { sceneId, previewId } = req.body
+    if (!sceneId || !uuidValidate(sceneId)) {
+      return res.status(400).json({ error: 'A valid sceneId is required' })
+    }
+    if (typeof previewId !== 'string' || !GIF_PREVIEW_ID_RE.test(previewId)) {
+      return res.status(400).json({ error: 'Invalid previewId' })
+    }
+    const previewKey = `${GIF_PREVIEW_PREFIX}${previewId}.gif`
+    const gif = await loadAsBuffer(previewKey)
+    if (!gif) {
+      return res.status(404).json({ error: 'Preview not found' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const newItemId = uuidv4()
+    const key = `${sceneFolder}/${newItemId}.gif`
+    await save(key, gif, 'image/gif')
+    await del(previewKey)
+    res.json({ success: true, url: getPublicUrl(key), newItemId, fileSize: gif.length })
+  } catch (error) {
+    console.error('Error committing GIF preview:', error)
+    res.status(500).json({ error: 'Failed to save GIF' })
+  }
+})
+
 // Convert media between video and GIF formats
 router.post('/convert-media', async (req, res) => {
   const tempDir = os.tmpdir()
@@ -812,7 +961,7 @@ router.post('/convert-media', async (req, res) => {
   }
 
   try {
-    const { sceneId, itemId, targetFormat, isEdit, extension } = req.body
+    const { sceneId, itemId, targetFormat, isEdit, extension, gifOptions } = req.body
     if (!sceneId || !itemId) {
       return res.status(400).json({ error: 'sceneId and itemId are required' })
     }
@@ -825,6 +974,9 @@ router.post('/convert-media', async (req, res) => {
     if (!extension) {
       return res.status(400).json({ error: 'extension is required' })
     }
+    // Optional video → GIF settings: frame rate, uniform scale, nearest-neighbour upscaling
+    const optionsError = validateGifOptions(gifOptions)
+    if (optionsError) return res.status(400).json({ error: optionsError })
 
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
     const sourceKey = `${sceneFolder}/${itemId}${isEdit ? '.crop' : ''}.${extension}`
@@ -843,19 +995,7 @@ router.post('/convert-media', async (req, res) => {
     fs.writeFileSync(inputFile, sourceBuffer)
 
     if (targetFormat === 'gif') {
-      // Video → GIF: palette-preserving conversion
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputFile)
-          .complexFilter([
-            '[0:v]split[s0][s1]',
-            '[s0]palettegen[p]',
-            '[s1][p]paletteuse',
-          ])
-          .output(outputFile)
-          .on('end', () => resolve())
-          .on('error', (err) => reject(err))
-          .run()
-      })
+      await encodeGif(inputFile, outputFile, gifOptions)
     } else {
       // GIF → MP4: H.264 encode
       await new Promise<void>((resolve, reject) => {

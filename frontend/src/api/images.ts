@@ -90,6 +90,57 @@ export async function resizeImage(
   return response.json()
 }
 
+export interface GifFrame {
+  imageId: string
+  cropRect?: { x: number; y: number; width: number; height: number }
+}
+
+interface CreateGifParams {
+  sceneId: string
+  frames: GifFrame[]
+  /** Display time of each frame in ms */
+  delays: number[]
+  width: number
+  height: number
+}
+
+async function postCreateGif(body: object): Promise<Response> {
+  const response = await fetch(`${API_BASE}/create-gif`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null)
+    throw new Error(detail?.error ?? `Failed to create GIF: ${response.statusText}`)
+  }
+  return response
+}
+
+/** Create a temporary, reduced-size preview of an animated GIF built from image frames */
+export async function createGifPreview(params: CreateGifParams): Promise<{ url: string; previewId: string }> {
+  validateUuid(params.sceneId, 'scene ID')
+  return (await postCreateGif({ ...params, preview: true })).json()
+}
+
+/** Create an animated GIF from image frames, saved as the original file of a new image item */
+export async function createGif(
+  params: CreateGifParams & { newImageId: string }
+): Promise<{ url: string; width: number; height: number; fileSize: number }> {
+  validateUuid(params.sceneId, 'scene ID')
+  validateUuid(params.newImageId, 'new image ID')
+  return (await postCreateGif(params)).json()
+}
+
+/** Delete a temporary GIF preview */
+export async function discardGifPreview(previewId: string): Promise<void> {
+  await fetch(`${API_BASE}/discard-gif-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ previewId }),
+  })
+}
+
 export async function uploadImage(
   dataUrl: string,
   sceneId: string,

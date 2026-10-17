@@ -2,6 +2,7 @@ import { VideoItem } from '../../../types'
 import { Z_MENU } from '../../../constants/canvas'
 import { getContentUrl } from '../../../api/scenes'
 import { downloadVideo, exportVideo, getVideoExtension } from '../../../utils/downloadItem'
+import { hasVideoEdits } from '../../../utils/videoBake'
 
 interface VideoContextMenuProps {
   position: { x: number; y: number }
@@ -12,6 +13,8 @@ interface VideoContextMenuProps {
   onCrop: (videoId: string) => void
   onDuplicate: (videoItem: VideoItem) => void
   onConvertToGif: (videoItem: VideoItem) => void
+  onBakeEdits?: (videoId: string) => void
+  onSetResolution?: (videoId: string) => void
   onClose: () => void
 }
 
@@ -24,6 +27,8 @@ export default function VideoContextMenu({
   onCrop,
   onDuplicate,
   onConvertToGif,
+  onBakeEdits,
+  onSetResolution,
   onClose,
 }: VideoContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -47,6 +52,18 @@ export default function VideoContextMenu({
   const handleConvertToGif = () => {
     if (!videoItem) { onClose(); return }
     onConvertToGif(videoItem)
+    onClose()
+  }
+
+  const handleBakeEdits = () => {
+    if (!videoItem) { onClose(); return }
+    onBakeEdits?.(videoItem.id)
+    onClose()
+  }
+
+  const handleSetResolution = () => {
+    if (!videoItem) { onClose(); return }
+    onSetResolution?.(videoItem.id)
     onClose()
   }
 
@@ -194,6 +211,42 @@ export default function VideoContextMenu({
           Remove Edits
         </button>
       )}
+      {videoItem && hasVideoEdits(videoItem) && onBakeEdits && (
+        <button
+          onClick={isOffline ? undefined : handleBakeEdits}
+          style={{
+            ...buttonStyle,
+            opacity: isOffline ? 0.5 : 1,
+            cursor: isOffline ? 'not-allowed' : 'pointer',
+          }}
+          disabled={isOffline}
+          onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+          title={isOffline ? 'Bake Edits unavailable in offline mode' : 'Render the edits into the video itself'}
+        >
+          Bake Edits
+        </button>
+      )}
+      {onSetResolution && (() => {
+        const hasEdits = !!videoItem && hasVideoEdits(videoItem)
+        const disabled = isOffline || hasEdits
+        return (
+          <button
+            onClick={disabled ? undefined : handleSetResolution}
+            style={{
+              ...buttonStyle,
+              opacity: disabled ? 0.5 : 1,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+            }}
+            disabled={disabled}
+            onMouseEnter={(e) => !disabled && (e.currentTarget.style.background = '#4a4a4a')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            title={isOffline ? 'Set Resolution unavailable in offline mode' : hasEdits ? 'Remove or bake the edits first' : undefined}
+          >
+            Set Resolution
+          </button>
+        )
+      })()}
       <button
         onClick={handleResetTransform}
         style={buttonStyle}

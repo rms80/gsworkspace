@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { CanvasItem, ImageItem } from '../../../types'
+import { CanvasItem, ImageItem, VideoItem } from '../../../types'
 import { ResolutionMode, MAX_RESOLUTION_DIMENSION } from '../../../hooks/useResolutionMode'
 
 interface SetResolutionOverlayProps {
@@ -13,7 +13,7 @@ const WIDTH_PRESETS = [16, 32, 64, 128, 256, 320, 512, 640, 720, 768, 800, 1024,
 const HEIGHT_PRESETS = [16, 32, 64, 128, 240, 256, 360, 480, 512, 576, 600, 720, 768, 900, 1024, 1080, 1200, 1440, 1600, 2048, 2160, 4096]
 
 /** Screen rect of an image item's displayed content */
-function screenRect(item: ImageItem, stageScale: number, stagePos: { x: number; y: number }) {
+function screenRect(item: ImageItem | VideoItem, stageScale: number, stagePos: { x: number; y: number }) {
   return {
     left: item.x * stageScale + stagePos.x,
     top: item.y * stageScale + stagePos.y,
@@ -23,7 +23,7 @@ function screenRect(item: ImageItem, stageScale: number, stagePos: { x: number; 
 }
 
 /**
- * Set Resolution UI: a panel under the first image with aspect-locked width/height fields,
+ * Set Resolution UI (images and videos): a panel under the first item with aspect-locked width/height fields,
  * width/height presets and a nearest-filtering toggle. With several images, each shows a
  * badge with its current and resulting resolution.
  */
@@ -42,8 +42,8 @@ export default function SetResolutionOverlay({ resolution, items, stageScale, st
   }, [refTarget?.width, refTarget?.height, focused])
 
   if (!session) return null
-  const imageItems = session.ids.map((id) => items.find((i) => i.id === id && i.type === 'image') as ImageItem | undefined)
-  const refItem = imageItems[0]
+  const mediaItems = session.ids.map((id) => items.find((i) => i.id === id && (i.type === 'image' || i.type === 'video')) as ImageItem | VideoItem | undefined)
+  const refItem = mediaItems[0]
   if (!refItem) return null
 
   const handleInput = (mode: 'width' | 'height', value: string) => {
@@ -89,7 +89,7 @@ export default function SetResolutionOverlay({ resolution, items, stageScale, st
   return (
     <>
       {/* Per-image resolution badges */}
-      {session.ids.length > 1 && imageItems.map((item, i) => {
+      {session.ids.length > 1 && mediaItems.map((item, i) => {
         if (!item) return null
         const r = screenRect(item, stageScale, stagePos)
         const from = session.sizes[i]

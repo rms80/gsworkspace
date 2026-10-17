@@ -163,17 +163,25 @@ export interface ConvertMediaResult {
  * @param isEdit - Whether to use the edited (.crop) version of the source
  * @param extension - The source file extension (e.g., 'mp4', 'gif', 'webm')
  */
+/** Video → GIF settings: output frame rate, uniform scale factor, nearest-neighbour sampling when scaling up */
+export interface GifConversionOptions {
+  fps: number
+  scale: number
+  nearest: boolean
+}
+
 export async function convertMedia(
   sceneId: string,
   itemId: string,
   targetFormat: 'gif' | 'mp4',
   isEdit: boolean,
-  extension: string
+  extension: string,
+  gifOptions?: GifConversionOptions
 ): Promise<ConvertMediaResult> {
   const response = await fetch(`${API_BASE}/convert-media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sceneId, itemId, targetFormat, isEdit, extension }),
+    body: JSON.stringify({ sceneId, itemId, targetFormat, isEdit, extension, gifOptions }),
   })
   if (!response.ok) {
     let errorDetail = response.statusText
@@ -182,6 +190,67 @@ export async function convertMedia(
       errorDetail = errorJson.error || errorDetail
     } catch { /* ignore parse error */ }
     throw new Error(`Failed to convert media: ${errorDetail}`)
+  }
+  return response.json()
+}
+
+export interface VideoGifPreview {
+  url: string
+  previewId: string
+  width: number
+  height: number
+  frames: number
+  /** Source video duration, in seconds */
+  duration: number
+  fileSize: number
+}
+
+/**
+ * Render a video → GIF conversion at full quality as a temporary preview. Aborting the request
+ * stops the render. Save it with commitGifPreview, or remove it with discardGifPreview.
+ */
+export async function renderVideoGifPreview(
+  sceneId: string,
+  itemId: string,
+  isEdit: boolean,
+  extension: string,
+  gifOptions: GifConversionOptions,
+  signal?: AbortSignal
+): Promise<VideoGifPreview> {
+  const response = await fetch(`${API_BASE}/video-gif-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId, itemId, isEdit, extension, gifOptions }),
+    signal,
+  })
+  if (!response.ok) {
+    let errorDetail = response.statusText
+    try {
+      const errorJson = await response.json()
+      errorDetail = errorJson.error || errorDetail
+    } catch { /* ignore parse error */ }
+    throw new Error(errorDetail)
+  }
+  return response.json()
+}
+
+/** Save a temporary GIF preview as the file of a new image item */
+export async function commitGifPreview(
+  sceneId: string,
+  previewId: string
+): Promise<{ url: string; newItemId: string; fileSize: number }> {
+  const response = await fetch(`${API_BASE}/commit-gif-preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId, previewId }),
+  })
+  if (!response.ok) {
+    let errorDetail = response.statusText
+    try {
+      const errorJson = await response.json()
+      errorDetail = errorJson.error || errorDetail
+    } catch { /* ignore parse error */ }
+    throw new Error(`Failed to save GIF: ${errorDetail}`)
   }
   return response.json()
 }

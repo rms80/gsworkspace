@@ -19,6 +19,10 @@ interface MultiSelectContextMenuProps {
   onDuplicateImages?: (imageIds: string[]) => void
   /** Called with the selected image ids, in selection order */
   onSetResolution?: (imageIds: string[]) => void
+  /** Called with the selected image ids, in selection order (frame order) */
+  onCreateGif?: (imageIds: string[]) => void
+  /** Called with the selected video ids, in selection order (clip order) */
+  onCreateVideo?: (videoIds: string[]) => void
   isOffline?: boolean
 }
 
@@ -34,6 +38,8 @@ export default function MultiSelectContextMenu({
   onRemoveCrop,
   onDuplicateImages,
   onSetResolution,
+  onCreateGif,
+  onCreateVideo,
   isOffline = false,
 }: MultiSelectContextMenuProps) {
   const DOWNLOADABLE_TYPES = ['image', 'video', 'text-file', 'pdf']
@@ -146,6 +152,19 @@ export default function MultiSelectContextMenu({
     onClose()
   }
 
+  const showCreateGif = !!onCreateGif && selectedImageIds.length >= 2
+  const handleCreateGif = () => {
+    onCreateGif?.(selectedImageIds)
+    onClose()
+  }
+
+  const selectedVideoIds = selectedIds.filter(id => items.find(i => i.id === id)?.type === 'video')
+  const showCreateVideo = !!onCreateVideo && selectedVideoIds.length >= 2
+  const handleCreateVideo = () => {
+    onCreateVideo?.(selectedVideoIds)
+    onClose()
+  }
+
   return (
     <div
       style={{
@@ -174,7 +193,7 @@ export default function MultiSelectContextMenu({
           <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
         </>
       )}
-      {(canMultiCrop || canBakeCrop || canRemoveCrop || showSetResolution) && (
+      {(canMultiCrop || canBakeCrop || canRemoveCrop || showSetResolution || showCreateGif || showCreateVideo) && (
         <>
           {canMultiCrop && (
             <button
@@ -216,6 +235,30 @@ export default function MultiSelectContextMenu({
               title={resolutionBlocked ? 'Some selected images are cropped - remove or bake their crops first' : undefined}
             >
               Set Resolution
+            </button>
+          )}
+          {showCreateGif && (
+            <button
+              onClick={isOffline ? undefined : handleCreateGif}
+              disabled={isOffline}
+              style={isOffline ? disabledStyle : buttonStyle}
+              onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              title={isOffline ? 'Create GIF unavailable in offline mode' : undefined}
+            >
+              Create GIF
+            </button>
+          )}
+          {showCreateVideo && (
+            <button
+              onClick={isOffline ? undefined : handleCreateVideo}
+              disabled={isOffline}
+              style={isOffline ? disabledStyle : buttonStyle}
+              onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              title={isOffline ? 'Create Video unavailable in offline mode' : undefined}
+            >
+              Create Video
             </button>
           )}
           <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />

@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import Konva from 'konva'
 import { CanvasItem, SelectionRect, TextItem } from '../types'
 import { PDF_MINIMIZED_WIDTH, PDF_MINIMIZED_HEIGHT, TEXTFILE_MINIMIZED_WIDTH, TEXTFILE_MINIMIZED_HEIGHT } from '../constants/canvas'
+import { sortByReadingOrder } from '../utils/readingOrder'
 
 interface UseCanvasSelectionParams {
   items: CanvasItem[]
@@ -135,7 +136,9 @@ export function useCanvasSelection({
       return
     }
 
-    const foundIds = items
+    // Marqueed items are ordered by layout (reading order), not scene order, since the selection
+    // order matters to operations like Create GIF (frame order) and MultiCrop (reference image)
+    const foundIds = sortByReadingOrder(items
       .filter((item) => {
         const isMinimizedPdf = item.type === 'pdf' && item.minimized
         const isMinimizedTextFile = item.type === 'text-file' && item.minimized
@@ -160,12 +163,12 @@ export function useCanvasSelection({
           item.y < selectionRect.y + selectionRect.height &&
           itemBottom > selectionRect.y
         )
-      })
+      }))
       .map((item) => item.id)
 
     const base = marqueeBaseSelectionRef.current
     if (marqueeModifierRef.current === 'shift') {
-      // Add marqueed items to existing selection
+      // Add marqueed items after the existing selection
       onSelectItems([...new Set([...base, ...foundIds])])
     } else if (marqueeModifierRef.current === 'ctrl') {
       // Subtract marqueed items from existing selection

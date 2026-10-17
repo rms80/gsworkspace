@@ -9,6 +9,7 @@ import { uploadTextFile } from '../api/textfiles'
 import { generateUniqueName, getExistingImageNames, getExistingTextFileNames } from '../utils/imageNames'
 import DOMPurify from 'dompurify'
 import { convertItemsToSpatialJson, replaceImagePlaceholders } from '../utils/spatialJson'
+import { sortByReadingOrder } from '../utils/readingOrder'
 import { playNotificationSound } from '../utils/sound'
 import { config } from '../config'
 import { TEXTFILE_HEADER_HEIGHT } from '../constants/canvas'
@@ -88,7 +89,7 @@ export function usePromptExecution({
     setRunningPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
+    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
@@ -317,7 +318,7 @@ export function usePromptExecution({
     setRunningImageGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
+    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
@@ -458,7 +459,7 @@ export function usePromptExecution({
     setRunningHtmlGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId)
+    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
 
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
     const { spatialData, imageMap } = convertItemsToSpatialJson(selectedItems)
@@ -541,7 +542,7 @@ export function usePromptExecution({
     save: boolean,
   ) => {
     // Gather all selected items as context
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id)))
 
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
       if (item.type === 'text') {
@@ -710,7 +711,7 @@ export function usePromptExecution({
     outputPos: { x: number; y: number },
     save: boolean,
   ) => {
-    const selectedItems = items.filter((item) => selectedIds.includes(item.id))
+    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id)))
 
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
       if (item.type === 'text') {

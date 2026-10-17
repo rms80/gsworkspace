@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { CanvasItem } from '../types'
+import { CanvasItem, ImageItem, VideoItem } from '../types'
+import { hasVideoEdits } from '../utils/videoBake'
 
 interface UseResolutionModeParams {
   items: CanvasItem[]
   loadedImages: Map<string, HTMLImageElement>
-  onSetImageResolutions?: (targets: { id: string; width: number; height: number }[], nearest: boolean) => void
+  onSetResolutions?: (targets: { id: string; width: number; height: number }[], nearest: boolean) => void
 }
 
 export interface Size {
@@ -13,10 +14,12 @@ export interface Size {
 }
 
 export interface ResolutionSession {
-  /** Image ids in selection order; ids[0] is the reference shown in the panel */
+  /** Image/video ids in selection order; ids[0] is the reference shown in the panel */
   ids: string[]
-  /** Current pixel resolution of each image */
+  /** Current pixel resolution of each item */
   sizes: Size[]
+  /** Per item: whether it's a video (H.264 needs even dimensions, lower size limit) */
+  isVideo: boolean[]
   /** Which dimension was set last; the other follows each image's aspect ratio */
   mode: 'width' | 'height'
   value: number
@@ -38,37 +41,48 @@ export interface ResolutionMode {
 
 export const MAX_RESOLUTION_DIMENSION = 16384
 const MAX_RESOLUTION_PIXELS = 100_000_000
+const MAX_VIDEO_DIMENSION = 8192
 
-/** Target size for an image, keeping its aspect ratio */
-export function targetSize(size: Size, mode: 'width' | 'height', value: number): Size {
+/** Target size for an item, keeping its aspect ratio. Videos are rounded to even dimensions. */
+export function targetSize(size: Size, mode: 'width' | 'height', value: number, even = false): Size {
+  const round = even ? (n: number) => Math.max(2, Math.round(n / 2) * 2) : (n: number) => Math.max(1, Math.round(n))
   return mode === 'width'
-    ? { width: value, height: Math.max(1, Math.round((value * size.height) / size.width)) }
-    : { width: Math.max(1, Math.round((value * size.width) / size.height)), height: value }
+    ? { width: round(value), height: round((value * size.height) / size.width) }
+    : { width: round((value * size.width) / size.height), height: round(value) }
 }
 
-export function useResolutionMode({ items, loadedImages, onSetImageResolutions }: UseResolutionModeParams): ResolutionMode {
+export function useResolutionMode({ items, loadedImages, onSetResolutions }: UseResolutionModeParams): ResolutionMode {
   const [session, setSession] = useState<ResolutionSession | null>(null)
 
-  const targets = session ? session.sizes.map((s) => targetSize(s, session.mode, session.value)) : []
-  const error = targets.some((t) =>
-    t.width > MAX_RESOLUTION_DIMENSION || t.height > MAX_RESOLUTION_DIMENSION || t.width * t.height > MAX_RESOLUTION_PIXELS
+  const targets = session ? session.sizes.map((s, i) => targetSize(s, session.mode, session.value, session.isVideo[i])) : []
+  const error = session && targets.some((t, i) => session.isVideo[i]
+    ? t.width > MAX_VIDEO_DIMENSION || t.height > MAX_VIDEO_DIMENSION
+    : t.width > MAX_RESOLUTION_DIMENSION || t.height > MAX_RESOLUTION_DIMENSION || t.width * t.height > MAX_RESOLUTION_PIXELS
   )
-    ? `Max ${MAX_RESOLUTION_DIMENSION}px per side, ${MAX_RESOLUTION_PIXELS / 1_000_000}M pixels total`
+    ? session.isVideo.some(Boolean)
+      ? `Max ${MAX_VIDEO_DIMENSION}px per side for video`
+      : `Max ${MAX_RESOLUTION_DIMENSION}px per side, ${MAX_RESOLUTION_PIXELS / 1_000_000}M pixels total`
     : null
 
   const start = (ids: string[]) => {
-    const images = ids
+    // Uncropped images and unedited videos (resizing is baked into the pixels)
+    const media = ids
       .map((id) => items.find((i) => i.id === id))
-      .filter((i) => i?.type === 'image' && !i.cropRect) as Extract<CanvasItem, { type: 'image' }>[]
-    const sizes = images.map((img) => {
-      const el = loadedImages.get(img.src)
+      .filter((i): i is ImageItem | VideoItem =>
+        (i?.type === 'image' && !i.cropRect) || (i?.type === 'video' && !hasVideoEdits(i)))
+    const sizes = media.map((item) => {
+      if (item.type === 'video') {
+        return { width: item.originalWidth ?? item.width, height: item.originalHeight ?? item.height }
+      }
+      const el = loadedImages.get(item.src)
       return el ? { width: el.naturalWidth, height: el.naturalHeight } : null
     })
-    if (images.length === 0 || sizes.some((s) => !s)) return
+    if (media.length === 0 || sizes.some((s) => !s)) return
     const known = sizes as Size[]
     setSession({
-      ids: images.map((i) => i.id),
+      ids: media.map((i) => i.id),
       sizes: known,
+      isVideo: media.map((i) => i.type === 'video'),
       mode: 'width',
       value: known[0].width,
       nearest: false,
@@ -92,7 +106,7 @@ export function useResolutionMode({ items, loadedImages, onSetImageResolutions }
       .map((id, i) => ({ id, ...targets[i], current: session.sizes[i] }))
       .filter((t) => t.width !== t.current.width || t.height !== t.current.height)
       .map(({ id, width, height }) => ({ id, width, height }))
-    if (changed.length > 0) onSetImageResolutions?.(changed, session.nearest)
+    if (changed.length > 0) onSetResolutions?.(changed, session.nearest)
     setSession(null)
   }
 
@@ -110,7 +124,7 @@ export function useResolutionMode({ items, loadedImages, onSetImageResolutions }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [session, error, onSetImageResolutions])
+  }, [session, error, onSetResolutions])
 
   return { session, targets, error, start, setDimension, setNearest, apply, cancel }
 }

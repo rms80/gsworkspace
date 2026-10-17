@@ -483,6 +483,11 @@ export default function VideoCropOverlay({
 
   const startDrag = (e: React.MouseEvent, type: 'body' | 'handle', handlePos?: HandlePosition) => {
     e.stopPropagation()
+    // Prevent the browser starting a text/element selection - it highlights the crop region and
+    // can turn into a native drag that swallows the mousemove events
+    e.preventDefault()
+    // preventDefault also stops focus moving, so commit any field being edited
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
     dragStateRef.current = {
       type,
       handlePos,
@@ -654,7 +659,10 @@ export default function VideoCropOverlay({
         height: screenFullH,
         pointerEvents: 'auto',
         zIndex: 1000,
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
+      onDragStart={(e) => e.preventDefault()}
     >
       {/* Video at low opacity */}
       <video

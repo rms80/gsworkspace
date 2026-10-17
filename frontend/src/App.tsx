@@ -23,8 +23,8 @@ import { useViewportManager } from './hooks/useViewportManager'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useAuth } from './hooks/useAuth'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, ImageItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
-import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
+import { CanvasItem, ImageItem, VideoItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
+import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode, getContentUrl } from './api/scenes'
 import { deleteActivity } from './utils/activityStorage'
 import { getCodingRobotEnabled } from './utils/experimentalSettings'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
@@ -48,6 +48,10 @@ import { importSceneFromZip, importSceneFromDirectory, ImportProgress } from './
 import { uploadImage, cropImage } from './api/images'
 import { bakeCrop, bakeResize } from './utils/imageBake'
 import { duplicateImage } from './utils/sceneOperations'
+import { bakeVideo, bakeVideoResize, duplicateVideo, hasVideoEdits, videoEditsOf } from './utils/videoBake'
+import { cropVideo } from './api/videos'
+import { getVideoExtension } from './utils/downloadItem'
+import { sortByReadingOrder } from './utils/readingOrder'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames, getExistingSplatNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
@@ -68,6 +72,8 @@ import {
   ChangeRecord,
 } from './history'
 import type { TransformEntry } from './history'
+
+type MediaItem = ImageItem | VideoItem
 
 function createScene(name: string): Scene {
   const now = new Date().toISOString()
@@ -1081,11 +1087,8 @@ function App() {
 
     if (selectedItems.length < 2) return
 
-    // Sort items by Y position, then by X position (top to bottom, left to right)
-    const sortedItems = selectedItems.sort((a, b) => {
-      const yDiff = a.y - b.y
-      return yDiff !== 0 ? yDiff : a.x - b.x
-    })
+    // Reading order: rows top to bottom, left to right within a row
+    const sortedItems = sortByReadingOrder(selectedItems)
 
     // Combine text from all items, separated by two newlines (blank line between)
     const combinedText = sortedItems.map(item => (item as any).text).join('\n\n')
@@ -1128,17 +1131,17 @@ function App() {
     })
   }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
 
-  // Replace images with baked versions (see utils/imageBake). Each baked image replaces its
-  // original item in place under a new id; all replacements are one undo step.
+  // Replace images/videos with baked versions (see utils/imageBake, utils/videoBake). Each baked
+  // item replaces its original in place under a new id; all replacements are one undo step.
   const replaceWithBaked = useCallback(async (
-    targets: ImageItem[],
-    bake: (item: ImageItem, sceneId: string) => Promise<ImageItem>,
+    targets: MediaItem[],
+    bake: (item: MediaItem, sceneId: string) => Promise<MediaItem>,
     operationName: string
   ) => {
     if (!activeSceneId || targets.length === 0) return
     const sceneId = activeSceneId
 
-    const replacements = new Map<string, ImageItem>()
+    const replacements = new Map<string, MediaItem>()
     const failed: string[] = []
     startOperation()
     try {
@@ -1146,7 +1149,7 @@ function App() {
         try {
           replacements.set(item.id, await bake(item, sceneId))
         } catch (err) {
-          console.error(`Failed to ${operationName} for image ${item.id}:`, err)
+          console.error(`Failed to ${operationName} for ${item.type} ${item.id}:`, err)
           failed.push(item.name ?? item.id)
         }
       }))
@@ -1177,30 +1180,40 @@ function App() {
   // Bake the crop of each given image into a new uncropped image
   const bakeCrops = useCallback((ids: string[]) => {
     const targets = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image' && !!i.cropRect)
-    return replaceWithBaked(targets, (item, sceneId) => bakeCrop(item, sceneId, isOffline), 'bake crop')
+    return replaceWithBaked(targets, (item, sceneId) => bakeCrop(item as ImageItem, sceneId, isOffline), 'bake crop')
   }, [items, isOffline, replaceWithBaked])
 
-  // Resize each given (uncropped) image to its target resolution, baked into a new image
-  const setImageResolutions = useCallback((targets: { id: string; width: number; height: number }[], nearest: boolean) => {
+  // Bake the edits (trim, crop, speed, audio) of each given video into a new unedited video
+  const bakeVideoEditsOf = useCallback((ids: string[]) => {
+    const targets = items.filter((i): i is VideoItem => ids.includes(i.id) && i.type === 'video' && hasVideoEdits(i))
+    return replaceWithBaked(targets, (item, sceneId) => bakeVideo(item as VideoItem, sceneId), 'bake edits')
+  }, [items, replaceWithBaked])
+
+  // Resize each given image (uncropped) or video (unedited) to its target resolution, baked into
+  // a new image/video
+  const setResolutions = useCallback((targets: { id: string; width: number; height: number }[], nearest: boolean) => {
     const sizes = new Map(targets.map((t) => [t.id, t]))
-    const images = items.filter((i): i is ImageItem => sizes.has(i.id) && i.type === 'image' && !i.cropRect)
-    return replaceWithBaked(images, (item, sceneId) => {
+    const media = items.filter((i): i is MediaItem =>
+      sizes.has(i.id) && ((i.type === 'image' && !i.cropRect) || (i.type === 'video' && !hasVideoEdits(i))))
+    return replaceWithBaked(media, (item, sceneId) => {
       const { width, height } = sizes.get(item.id)!
-      return bakeResize(item, sceneId, isOffline, width, height, nearest)
+      return item.type === 'image'
+        ? bakeResize(item, sceneId, isOffline, width, height, nearest)
+        : bakeVideoResize(item, sceneId, width, height, nearest)
     }, 'set resolution')
   }, [items, isOffline, replaceWithBaked])
 
-  // Duplicate images with everything carried over (crop, size, scale, rotation...). Copies keep
-  // their relative layout, are placed below and to the right of the originals, and become the
-  // selection. Adding the copies and the selection change are one undo step.
-  const duplicateImages = useCallback(async (ids: string[]) => {
+  // Duplicate images/videos with everything carried over (crop and other edits, size, scale,
+  // rotation...). Copies keep their relative layout, are placed below and to the right of the
+  // originals, and become the selection. Adding the copies and the selection change are one undo step.
+  const duplicateItems = useCallback(async (ids: string[]) => {
     if (!activeSceneId || isOffline) return
     const sceneId = activeSceneId
-    const sources = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image')
+    const sources = items.filter((i): i is MediaItem => ids.includes(i.id) && (i.type === 'image' || i.type === 'video'))
     if (sources.length === 0) return
 
-    // Below the originals' bounding box with a gap of a quarter image height, shifted right by
-    // half an image width (using the average displayed image size)
+    // Below the originals' bounding box with a gap of a quarter item height, shifted right by
+    // half an item width (using the average displayed size)
     const visualWidths = sources.map((i) => i.width * (i.scaleX ?? 1))
     const visualHeights = sources.map((i) => i.height * (i.scaleY ?? 1))
     const avgWidth = visualWidths.reduce((a, b) => a + b, 0) / sources.length
@@ -1211,25 +1224,29 @@ function App() {
     const offsetY = bottom - top + avgHeight * 0.25
 
     startOperation()
-    let results: PromiseSettledResult<ImageItem>[]
+    let results: PromiseSettledResult<MediaItem>[]
     try {
-      results = await Promise.allSettled(sources.map((item) => duplicateImage(sceneId, item, offsetX, offsetY)))
+      results = await Promise.allSettled(sources.map((item): Promise<MediaItem> => item.type === 'image'
+        ? duplicateImage(sceneId, item, offsetX, offsetY)
+        : duplicateVideo(sceneId, item, offsetX, offsetY)))
     } finally {
       endOperation()
     }
     const copies = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
     results.forEach((r) => {
-      if (r.status === 'rejected') console.error('Failed to duplicate image:', r.reason)
+      if (r.status === 'rejected') console.error('Failed to duplicate item:', r.reason)
     })
     if (copies.length < sources.length) {
-      alert(`Failed to duplicate ${sources.length - copies.length} of ${sources.length} image(s).`)
+      alert(`Failed to duplicate ${sources.length - copies.length} of ${sources.length} item(s).`)
     }
     if (copies.length === 0) return
 
-    const existingNames = getExistingImageNames(items)
+    const existingImageNames = getExistingImageNames(items)
+    const existingVideoNames = getExistingVideoNames(items)
     for (const copy of copies) {
-      copy.name = generateUniqueName(copy.name || 'Image', existingNames)
-      existingNames.push(copy.name)
+      const existing = copy.type === 'image' ? existingImageNames : existingVideoNames
+      copy.name = generateUniqueName(copy.name || (copy.type === 'image' ? 'Image' : 'Video'), existing)
+      existing.push(copy.name)
     }
 
     const oldSelection = selectionMap.get(sceneId) ?? []
@@ -1241,17 +1258,25 @@ function App() {
     updateActiveSceneItems((prev) => [...prev, ...copies])
     setSelectionMap((prev) => new Map(prev).set(sceneId, newSelection))
 
-    // Regenerate the server-side crop file for cropped copies (display doesn't depend on it)
+    // Render the server-side edited file where the copy doesn't have one yet (display of image
+    // crops doesn't depend on it; video speed/trim/audio edits do)
+    const setCropSrc = (id: string, url: string, fileSize: number) => {
+      const cropSrc = `${url}${url.includes('?') ? '&' : '?'}t=${Date.now()}`
+      updateActiveSceneItems((prev) => prev.map((i) =>
+        i.id === id && (i.type === 'image' || i.type === 'video') ? { ...i, cropSrc, cropSrcFileSize: fileSize } : i
+      ))
+    }
     for (const copy of copies) {
-      if (!copy.cropRect) continue
-      cropImage(sceneId, copy.id, copy.cropRect)
-        .then((result) => {
-          const cropSrc = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`
-          updateActiveSceneItems((prev) => prev.map((i) =>
-            i.id === copy.id && i.type === 'image' ? { ...i, cropSrc, cropSrcFileSize: result.fileSize } : i
-          ))
-        })
-        .catch((err) => console.error('Failed to create server-side crop for duplicate:', err))
+      if (copy.type === 'image' && copy.cropRect) {
+        cropImage(sceneId, copy.id, copy.cropRect)
+          .then((result) => setCropSrc(copy.id, result.url, result.fileSize))
+          .catch((err) => console.error('Failed to create server-side crop for duplicate:', err))
+      } else if (copy.type === 'video' && !copy.cropSrc && hasVideoEdits(copy)) {
+        const edits = videoEditsOf(copy)
+        cropVideo(sceneId, copy.id, edits.cropRect, edits.speed, edits.removeAudio, edits.trim, getVideoExtension(copy.src))
+          .then(async (result) => setCropSrc(copy.id, await getContentUrl(sceneId, copy.id, 'video', 'mp4', true), result.fileSize))
+          .catch((err) => console.error('Failed to process edits for duplicated video:', err))
+      }
     }
   }, [activeSceneId, isOffline, items, selectionMap, startOperation, endOperation, pushChange, updateActiveSceneItems])
 
@@ -1740,8 +1765,9 @@ function App() {
           onDeleteSelected={deleteSelected}
           onCombineTextItems={combineTextItems}
           onBakeCrop={bakeCrops}
-          onDuplicateImages={duplicateImages}
-          onSetImageResolutions={setImageResolutions}
+          onDuplicateItems={duplicateItems}
+          onSetResolutions={setResolutions}
+          onBakeVideoEdits={bakeVideoEditsOf}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
           onRunImageGenPrompt={handleRunImageGenPrompt}

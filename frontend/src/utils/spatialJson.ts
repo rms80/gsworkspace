@@ -1,4 +1,5 @@
 import { CanvasItem, TextItem, ImageItem } from '../types'
+import { sortByReadingOrder } from './readingOrder'
 
 export interface Bounds {
   x: number
@@ -79,8 +80,8 @@ export function convertItemsToSpatialJson(items: CanvasItem[]): SpatialConversio
     height: Math.round(maxY - minY),
   }
 
-  // Sort by Y position (top to bottom)
-  const sortedItems = [...filteredItems].sort((a, b) => a.y - b.y)
+  // Reading order: rows top to bottom, left to right within a row
+  const sortedItems = sortByReadingOrder(filteredItems)
 
   const imageMap: ImageSourceMap = new Map()
   let imageCounter = 1

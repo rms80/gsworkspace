@@ -14,7 +14,7 @@ import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
 import { isModel3DFile, uploadModel3D, getModel3DFormat } from '../api/models3d'
 import { isSplatFile, uploadSplat } from '../api/splats'
-import { duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
+import { convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
@@ -61,6 +61,13 @@ import { useCropMode } from '../hooks/useCropMode'
 import { useMultiCropMode } from '../hooks/useMultiCropMode'
 import { useResolutionMode } from '../hooks/useResolutionMode'
 import SetResolutionOverlay from './canvas/overlays/SetResolutionOverlay'
+import { useGifCreateMode } from '../hooks/useGifCreateMode'
+import CreateGifOverlay from './canvas/overlays/CreateGifOverlay'
+import { useVideoCreateMode } from '../hooks/useVideoCreateMode'
+import CreateVideoOverlay from './canvas/overlays/CreateVideoOverlay'
+import { useVideoToGifMode } from '../hooks/useVideoToGifMode'
+import VideoToGifOverlay from './canvas/overlays/VideoToGifOverlay'
+import { MODAL_PANEL_WIDTH, MODAL_PANEL_GAP } from './canvas/overlays/ModalBackdrop'
 import { useVideoCropMode } from '../hooks/useVideoCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
 import { usePulseAnimation } from '../hooks/usePulseAnimation'
@@ -81,6 +88,7 @@ import {
 } from '../constants/canvas'
 import type { TransformEntry } from '../history'
 import { computeCropChanges } from '../utils/imageCrop'
+import { sortByReadingOrder } from '../utils/readingOrder'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -94,8 +102,9 @@ interface InfiniteCanvasProps {
   onDeleteSelected: () => void
   onCombineTextItems?: () => void
   onBakeCrop?: (imageIds: string[]) => void
-  onDuplicateImages?: (imageIds: string[]) => void
-  onSetImageResolutions?: (targets: { id: string; width: number; height: number }[], nearest: boolean) => void
+  onDuplicateItems?: (ids: string[]) => void
+  onBakeVideoEdits?: (ids: string[]) => void
+  onSetResolutions?: (targets: { id: string; width: number; height: number }[], nearest: boolean) => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
   onRunImageGenPrompt: (promptId: string) => void
@@ -166,7 +175,7 @@ function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
   if (el.contentDocument?.readyState === 'complete') attach()
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateImages, onSetImageResolutions, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateItems, onSetResolutions, onBakeVideoEdits, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -314,7 +323,39 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const multiCropIds = multiCrop.session?.status === 'ready' ? multiCrop.session.ids : []
 
   // 3b. Set Resolution hook
-  const resolution = useResolutionMode({ items, loadedImages, onSetImageResolutions })
+  const resolution = useResolutionMode({ items, loadedImages, onSetResolutions })
+
+  // 3c. Create GIF hook
+  const gifCreate = useGifCreateMode({ items, sceneId, loadedImages, onAddImageAt, onSelectItems })
+
+  // 3e. Convert to GIF (from a video) hook
+  const videoToGif = useVideoToGifMode({ items, sceneId, onAddImageAt, onSelectItems })
+
+  // 3d. Create Video hook
+  const videoCreate = useVideoCreateMode({ items, sceneId, onAddVideoAt, onSelectItems })
+
+  // When Create GIF / Create Video opens, frame the preview and its panel so together they fill
+  // ~60% of the view
+  const videoCreateOpen = !!videoCreate.session
+  const gifCreateOpen = !!gifCreate.session
+  const videoToGifOpen = !!videoToGif.session
+  useEffect(() => {
+    const rect = videoCreate.session?.rect ?? gifCreate.session?.rect ?? videoToGif.session?.rect
+    if (!rect) return
+    const fill = 0.6
+    const panelW = MODAL_PANEL_WIDTH + MODAL_PANEL_GAP
+    // The panel has a fixed screen width, so only the preview scales with zoom
+    const scale = Math.max(0.1, Math.min(5,
+      (stageSize.width * fill - panelW) / rect.width,
+      (stageSize.height * fill) / rect.height,
+    ))
+    const groupWidth = rect.width * scale + panelW
+    _setStageScale(scale)
+    setStagePos({
+      x: (stageSize.width - groupWidth) / 2 - rect.x * scale,
+      y: (stageSize.height - rect.height * scale) / 2 - rect.y * scale,
+    })
+  }, [videoCreateOpen, gifCreateOpen, videoToGifOpen])
 
   // 3b. Video crop mode hook
   const {
@@ -380,8 +421,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     sceneId,
     isEditing,
     isOffline,
-    // Any image crop/resolution edit in progress (single, MultiCrop, Set Resolution) blocks Delete
-    croppingImageId: croppingImageId ?? multiCrop.session?.ids[0] ?? resolution.session?.ids[0] ?? null,
+    // Any media edit session in progress (crop, MultiCrop, Set Resolution, Create GIF/Video) blocks Delete
+    croppingImageId: croppingImageId ?? multiCrop.session?.ids[0] ?? resolution.session?.ids[0] ??
+      gifCreate.session?.ids[0] ?? videoCreate.session?.ids[0] ?? videoToGif.session?.videoId ?? null,
     screenToCanvas,
     scaleImageToViewport,
     onAddTextAt,
@@ -795,72 +837,6 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     if (onBatchTransform && entries.length > 0) onBatchTransform(entries)
   }, [items, loadedImages, onUpdateItem, onBatchTransform])
 
-  // Handle video duplication
-  const handleDuplicateVideo = useCallback(async (videoItem: VideoItem) => {
-    try {
-      startOperation()
-      const result = await duplicateVideo(sceneId, videoItem, isOffline)
-      onAddVideoAt(
-        result.id,
-        result.positionX,
-        result.positionY,
-        result.url,
-        result.visualWidth,
-        result.visualHeight,
-        result.name,
-        result.fileSize,
-        result.pixelWidth,
-        result.pixelHeight
-      )
-      endOperation()
-    } catch (error) {
-      console.error('Failed to duplicate video:', error)
-      endOperation()
-    }
-  }, [sceneId, onAddVideoAt, isOffline, startOperation, endOperation])
-
-  // Handle video → GIF conversion
-  const handleConvertVideoToGif = useCallback(async (videoItem: VideoItem) => {
-    // Compute placeholder position (same logic as convertToGif in sceneOperations)
-    const scaleX = videoItem.scaleX ?? 1
-    const scaleY = videoItem.scaleY ?? 1
-    const visualWidth = Math.round(videoItem.width * scaleX)
-    const visualHeight = Math.round(videoItem.height * scaleY)
-    const gap = 20
-    const placeholderId = videoItem.id + '_converting'
-    const placeholder = {
-      id: placeholderId,
-      x: videoItem.x + visualWidth + gap,
-      y: videoItem.y,
-      width: visualWidth,
-      height: visualHeight,
-      name: (videoItem.name || 'Video') + ' → GIF',
-    }
-    setConversionPlaceholders(prev => [...prev, placeholder])
-    try {
-      startOperation()
-      const result = await convertToGif(sceneId, videoItem)
-      onAddImageAt(
-        result.id,
-        result.positionX,
-        result.positionY,
-        result.url,
-        result.visualWidth,
-        result.visualHeight,
-        result.name,
-        result.pixelWidth,
-        result.pixelHeight,
-        result.fileSize
-      )
-      endOperation()
-    } catch (error) {
-      console.error('Failed to convert video to GIF:', error)
-      endOperation()
-    } finally {
-      setConversionPlaceholders(prev => prev.filter(p => p.id !== placeholderId))
-    }
-  }, [sceneId, onAddImageAt, startOperation, endOperation])
-
   // Handle GIF → video conversion
   const handleConvertGifToVideo = useCallback(async (imageItem: ImageItem) => {
     // Compute placeholder position (same logic as convertToVideo in sceneOperations)
@@ -1077,6 +1053,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   rightClickMenuHandlerRef.current = (e: MouseEvent) => {
     if (e.button !== 2) return
     if (rightMouseDidDragRef.current) return
+    // Create GIF / Create Video / Convert to GIF are modal: right-click only pans
+    if (videoCreate.session || gifCreate.session || videoToGif.session) return
 
     const clientX = e.clientX
     const clientY = e.clientY
@@ -2260,10 +2238,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
 
       {/* Coding Robot chat overlays */}
       {(() => {
-        // Compute selected text blocks sorted top-to-bottom, concatenated with newlines
-        const selectedTextContent = items
-          .filter((item) => item.type === 'text' && selectedIds.includes(item.id))
-          .sort((a, b) => a.y - b.y)
+        // Compute selected text blocks in reading order, concatenated with newlines
+        const selectedTextContent = sortByReadingOrder(items
+          .filter((item) => item.type === 'text' && selectedIds.includes(item.id)))
           .map((item) => item.type === 'text' ? item.text : '')
           .join('\n')
 
@@ -2363,6 +2340,25 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         multiCrop={multiCrop}
         items={items}
         loadedImages={loadedImages}
+        stageScale={stageScale}
+        stagePos={stagePos}
+      />
+
+      {/* Create GIF preview + timing panel */}
+      <CreateGifOverlay
+        gif={gifCreate}
+        items={items}
+        stageScale={stageScale}
+        stagePos={stagePos}
+      />
+
+      {/* Convert to GIF placeholder + settings panel */}
+      <VideoToGifOverlay convert={videoToGif} stageScale={stageScale} stagePos={stagePos} />
+
+      {/* Create Video preview + transitions panel */}
+      <CreateVideoOverlay
+        video={videoCreate}
+        items={items}
         stageScale={stageScale}
         stagePos={stagePos}
       />
@@ -2620,11 +2616,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             setCroppingImageId(id)
             setPendingCropRect(initialCrop)
           }}
-          onDuplicate={(imageItem) => onDuplicateImages?.([imageItem.id])}
+          onDuplicate={(imageItem) => onDuplicateItems?.([imageItem.id])}
           onConvertToVideo={handleConvertGifToVideo}
           onBakeCrop={onBakeCrop ? (id) => onBakeCrop([id]) : undefined}
           onRemoveCrop={(id) => handleRemoveCrops([id])}
-          onSetResolution={onSetImageResolutions ? (id) => resolution.start([id]) : undefined}
+          onSetResolution={onSetResolutions ? (id) => resolution.start([id]) : undefined}
           onClose={imageContextMenuState.closeMenu}
         />
       )}
@@ -2652,8 +2648,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
               startVideoCrop(videoId, initialCrop, initialSpeed, initialRemoveAudio, initialTrim, initialTrimStart, initialTrimEnd)
             }
           }}
-          onDuplicate={handleDuplicateVideo}
-          onConvertToGif={handleConvertVideoToGif}
+          onDuplicate={(videoItem) => onDuplicateItems?.([videoItem.id])}
+          onConvertToGif={(videoItem) => videoToGif.start(videoItem.id)}
+          onBakeEdits={onBakeVideoEdits ? (id) => onBakeVideoEdits([id]) : undefined}
+          onSetResolution={onSetResolutions ? (id) => resolution.start([id]) : undefined}
           onClose={videoContextMenuState.closeMenu}
         />
       )}
@@ -2724,8 +2722,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           onMultiCrop={(imageIds) => multiCrop.start(imageIds)}
           onBakeCrop={onBakeCrop}
           onRemoveCrop={handleRemoveCrops}
-          onDuplicateImages={onDuplicateImages}
-          onSetResolution={onSetImageResolutions ? resolution.start : undefined}
+          onDuplicateImages={onDuplicateItems}
+          onSetResolution={onSetResolutions ? resolution.start : undefined}
+          onCreateGif={gifCreate.start}
+          onCreateVideo={videoCreate.start}
           isOffline={isOffline}
         />
       )}
