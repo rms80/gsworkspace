@@ -59,6 +59,8 @@ import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
 import { useCropMode } from '../hooks/useCropMode'
 import { useMultiCropMode } from '../hooks/useMultiCropMode'
+import { useResolutionMode } from '../hooks/useResolutionMode'
+import SetResolutionOverlay from './canvas/overlays/SetResolutionOverlay'
 import { useVideoCropMode } from '../hooks/useVideoCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
 import { usePulseAnimation } from '../hooks/usePulseAnimation'
@@ -93,6 +95,7 @@ interface InfiniteCanvasProps {
   onCombineTextItems?: () => void
   onBakeCrop?: (imageIds: string[]) => void
   onDuplicateImages?: (imageIds: string[]) => void
+  onSetImageResolutions?: (targets: { id: string; width: number; height: number }[], nearest: boolean) => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
   onRunImageGenPrompt: (promptId: string) => void
@@ -163,7 +166,7 @@ function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
   if (el.contentDocument?.readyState === 'complete') attach()
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateImages, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateImages, onSetImageResolutions, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -310,6 +313,9 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   // Images replaced by MultiCrop overlays (only once alignment is done)
   const multiCropIds = multiCrop.session?.status === 'ready' ? multiCrop.session.ids : []
 
+  // 3b. Set Resolution hook
+  const resolution = useResolutionMode({ items, loadedImages, onSetImageResolutions })
+
   // 3b. Video crop mode hook
   const {
     croppingVideoId,
@@ -363,6 +369,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     applyOrCancelVideoCrop: applyOrCancelVideoCrop,
     multiCropActive: !!multiCrop.session,
     applyMultiCrop: multiCrop.apply,
+    resolutionActive: !!resolution.session,
+    cancelResolution: resolution.cancel,
   })
 
   // 8. Clipboard hook
@@ -372,8 +380,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     sceneId,
     isEditing,
     isOffline,
-    // Any image crop in progress (single or MultiCrop) blocks Delete
-    croppingImageId: croppingImageId ?? multiCrop.session?.ids[0] ?? null,
+    // Any image crop/resolution edit in progress (single, MultiCrop, Set Resolution) blocks Delete
+    croppingImageId: croppingImageId ?? multiCrop.session?.ids[0] ?? resolution.session?.ids[0] ?? null,
     screenToCanvas,
     scaleImageToViewport,
     onAddTextAt,
@@ -2359,6 +2367,14 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         stagePos={stagePos}
       />
 
+      {/* Set Resolution panel */}
+      <SetResolutionOverlay
+        resolution={resolution}
+        items={items}
+        stageScale={stageScale}
+        stagePos={stagePos}
+      />
+
       {/* Video crop overlay */}
       {croppingVideoId && videoPendingCropRect && (() => {
         const videoItem = items.find((i) => i.id === croppingVideoId && i.type === 'video') as VideoItem | undefined
@@ -2608,6 +2624,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           onConvertToVideo={handleConvertGifToVideo}
           onBakeCrop={onBakeCrop ? (id) => onBakeCrop([id]) : undefined}
           onRemoveCrop={(id) => handleRemoveCrops([id])}
+          onSetResolution={onSetImageResolutions ? (id) => resolution.start([id]) : undefined}
           onClose={imageContextMenuState.closeMenu}
         />
       )}
@@ -2708,6 +2725,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           onBakeCrop={onBakeCrop}
           onRemoveCrop={handleRemoveCrops}
           onDuplicateImages={onDuplicateImages}
+          onSetResolution={onSetImageResolutions ? resolution.start : undefined}
           isOffline={isOffline}
         />
       )}

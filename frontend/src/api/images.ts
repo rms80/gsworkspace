@@ -64,6 +64,32 @@ export async function bakeImageCrop(
   return response.json()
 }
 
+/**
+ * Resize an image on the server to exactly width×height: the resized pixels are saved as the
+ * original file of a new image item (newImageId). The source image file is left untouched.
+ */
+export async function resizeImage(
+  sceneId: string,
+  imageId: string,
+  newImageId: string,
+  width: number,
+  height: number,
+  nearest: boolean
+): Promise<CropImageResult> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(imageId, 'image ID')
+  validateUuid(newImageId, 'new image ID')
+  const response = await fetch(`${API_BASE}/resize-image`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId, imageId, newImageId, width, height, nearest }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to resize image: ${response.statusText}`)
+  }
+  return response.json()
+}
+
 export async function uploadImage(
   dataUrl: string,
   sceneId: string,

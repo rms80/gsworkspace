@@ -46,7 +46,7 @@ import { fetchYouTubeTitle } from './api/embed'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory, ImportProgress } from './utils/sceneImport'
 import { uploadImage, cropImage } from './api/images'
-import { bakeCrop } from './utils/imageCrop'
+import { bakeCrop, bakeResize } from './utils/imageBake'
 import { duplicateImage } from './utils/sceneOperations'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames, getExistingSplatNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
@@ -1128,13 +1128,15 @@ function App() {
     })
   }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
 
-  // Bake the crop of each given image into a new uncropped image. Each baked image replaces
-  // its original item under a new id (see bakeCrop); all replacements are one undo step.
-  const bakeCrops = useCallback(async (ids: string[]) => {
-    if (!activeSceneId) return
+  // Replace images with baked versions (see utils/imageBake). Each baked image replaces its
+  // original item in place under a new id; all replacements are one undo step.
+  const replaceWithBaked = useCallback(async (
+    targets: ImageItem[],
+    bake: (item: ImageItem, sceneId: string) => Promise<ImageItem>,
+    operationName: string
+  ) => {
+    if (!activeSceneId || targets.length === 0) return
     const sceneId = activeSceneId
-    const targets = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image' && !!i.cropRect)
-    if (targets.length === 0) return
 
     const replacements = new Map<string, ImageItem>()
     const failed: string[] = []
@@ -1142,9 +1144,9 @@ function App() {
     try {
       await Promise.all(targets.map(async (item) => {
         try {
-          replacements.set(item.id, await bakeCrop(item, sceneId, isOffline))
+          replacements.set(item.id, await bake(item, sceneId))
         } catch (err) {
-          console.error(`Failed to bake crop for image ${item.id}:`, err)
+          console.error(`Failed to ${operationName} for image ${item.id}:`, err)
           failed.push(item.name ?? item.id)
         }
       }))
@@ -1168,9 +1170,25 @@ function App() {
       })
     }
     if (failed.length > 0) {
-      alert(`Failed to bake crop for: ${failed.join(', ')}`)
+      alert(`Failed to ${operationName} for: ${failed.join(', ')}`)
     }
-  }, [activeSceneId, items, isOffline, startOperation, endOperation, pushChange, updateActiveSceneItems])
+  }, [activeSceneId, startOperation, endOperation, pushChange, updateActiveSceneItems])
+
+  // Bake the crop of each given image into a new uncropped image
+  const bakeCrops = useCallback((ids: string[]) => {
+    const targets = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image' && !!i.cropRect)
+    return replaceWithBaked(targets, (item, sceneId) => bakeCrop(item, sceneId, isOffline), 'bake crop')
+  }, [items, isOffline, replaceWithBaked])
+
+  // Resize each given (uncropped) image to its target resolution, baked into a new image
+  const setImageResolutions = useCallback((targets: { id: string; width: number; height: number }[], nearest: boolean) => {
+    const sizes = new Map(targets.map((t) => [t.id, t]))
+    const images = items.filter((i): i is ImageItem => sizes.has(i.id) && i.type === 'image' && !i.cropRect)
+    return replaceWithBaked(images, (item, sceneId) => {
+      const { width, height } = sizes.get(item.id)!
+      return bakeResize(item, sceneId, isOffline, width, height, nearest)
+    }, 'set resolution')
+  }, [items, isOffline, replaceWithBaked])
 
   // Duplicate images with everything carried over (crop, size, scale, rotation...). Copies keep
   // their relative layout, are placed below and to the right of the originals, and become the
@@ -1723,6 +1741,7 @@ function App() {
           onCombineTextItems={combineTextItems}
           onBakeCrop={bakeCrops}
           onDuplicateImages={duplicateImages}
+          onSetImageResolutions={setImageResolutions}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
           onRunImageGenPrompt={handleRunImageGenPrompt}

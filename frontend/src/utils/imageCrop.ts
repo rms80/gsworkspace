@@ -1,52 +1,5 @@
-import { v4 as uuidv4 } from 'uuid'
 import { CropRect, ImageItem } from '../types'
 import { getContentData } from '../api/scenes'
-import { bakeImageCrop, uploadImage } from '../api/images'
-
-/**
- * Bakes an image item's crop into a new image, returning a replacement item (with a new id)
- * that shows the same pixels at the same place but has no crop.
- *
- * Image files are stored per item id, so the baked pixels go to a new item id and the
- * original file stays intact for undo. Server images are cropped on the server (keeps GIF
- * animation); data/blob URLs and offline mode crop in the browser (PNG output).
- */
-export async function bakeCrop(item: ImageItem, sceneId: string, isOffline: boolean): Promise<ImageItem> {
-  if (!item.cropRect) throw new Error('Image has no crop to bake')
-  const cropRect = item.cropRect
-  const newId = uuidv4()
-
-  let src: string
-  let fileSize: number | undefined
-  const isLocalSrc = item.src.startsWith('data:') || item.src.startsWith('blob:')
-  if (isOffline || isLocalSrc) {
-    const dataUrl = await getCroppedImageDataUrl(sceneId, item.id, item.src, cropRect)
-    fileSize = Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 3 / 4)
-    src = isOffline ? dataUrl : await uploadImage(dataUrl, sceneId, newId, `${newId}.png`)
-  } else {
-    const result = await bakeImageCrop(sceneId, item.id, newId, cropRect)
-    src = result.url
-    fileSize = result.fileSize
-  }
-
-  // Preload so the swap doesn't flash an empty frame while the new image loads
-  await new Promise<void>((resolve) => {
-    const img = new Image()
-    img.onload = () => resolve()
-    img.onerror = () => resolve()
-    img.src = src
-  })
-
-  const { cropRect: _cropRect, cropSrc: _cropSrc, cropSrcFileSize: _cropSrcFileSize, ...rest } = item
-  return {
-    ...rest,
-    id: newId,
-    src,
-    originalWidth: Math.round(cropRect.width),
-    originalHeight: Math.round(cropRect.height),
-    fileSize,
-  }
-}
 
 /**
  * Computes the item changes for applying a crop (in source pixels) to an image,

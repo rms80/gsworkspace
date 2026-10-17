@@ -15,6 +15,7 @@ interface ImageContextMenuProps {
   onConvertToVideo: (imageItem: ImageItem) => void
   onBakeCrop?: (id: string) => void
   onRemoveCrop: (id: string) => void
+  onSetResolution?: (id: string) => void
   onClose: () => void
 }
 
@@ -33,6 +34,7 @@ export default function ImageContextMenu({
   onConvertToVideo,
   onBakeCrop,
   onRemoveCrop,
+  onSetResolution,
   onClose,
 }: ImageContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -85,6 +87,12 @@ export default function ImageContextMenu({
   const handleRemoveCrop = () => {
     if (!imageItem) { onClose(); return }
     onRemoveCrop(imageItem.id)
+    onClose()
+  }
+
+  const handleSetResolution = () => {
+    if (!imageItem) { onClose(); return }
+    onSetResolution?.(imageItem.id)
     onClose()
   }
 
@@ -165,6 +173,21 @@ export default function ImageContextMenu({
           Bake Crop
         </button>
       )}
+      {onSetResolution && (() => {
+        const hasCrop = !!imageItem?.cropRect
+        return (
+          <button
+            onClick={hasCrop ? undefined : handleSetResolution}
+            disabled={hasCrop}
+            style={{ ...buttonStyle, opacity: hasCrop ? 0.5 : 1, cursor: hasCrop ? 'not-allowed' : 'pointer' }}
+            onMouseEnter={(e) => !hasCrop && (e.currentTarget.style.background = '#4a4a4a')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            title={hasCrop ? 'Remove or bake the crop first' : undefined}
+          >
+            Set Resolution
+          </button>
+        )
+      })()}
       <button
         onClick={handleResetTransform}
         style={buttonStyle}

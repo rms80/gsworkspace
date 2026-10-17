@@ -423,6 +423,56 @@ async function cropImageBuffer(
   }
 }
 
+/**
+ * Resizes an image buffer to exactly width×height. GIFs are scaled with ffmpeg (keeps animation);
+ * everything else with sharp, output as PNG. `nearest` uses nearest-neighbour sampling,
+ * otherwise Lanczos.
+ */
+async function resizeImageBuffer(
+  buffer: Buffer,
+  ext: string,
+  width: number,
+  height: number,
+  nearest: boolean
+): Promise<{ buffer: Buffer; ext: 'gif' | 'png'; contentType: string }> {
+  if (ext !== 'gif') {
+    const resized = await sharp(buffer)
+      .resize(width, height, { fit: 'fill', kernel: nearest ? 'nearest' : 'lanczos3' })
+      .png()
+      .toBuffer()
+    return { buffer: resized, ext: 'png', contentType: 'image/png' }
+  }
+
+  const tempDir = os.tmpdir()
+  const tempId = uuidv4()
+  const gifInputPath = path.join(tempDir, `gif-resize-input-${tempId}.gif`)
+  const gifOutputPath = path.join(tempDir, `gif-resize-output-${tempId}.gif`)
+
+  try {
+    fs.writeFileSync(gifInputPath, buffer)
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(gifInputPath)
+        .complexFilter([
+          `[0:v]scale=${width}:${height}:flags=${nearest ? 'neighbor' : 'lanczos'},split[s0][s1]`,
+          '[s0]palettegen[p]',
+          // Nearest keeps the source colours, so dithering would only add noise
+          nearest ? '[s1][p]paletteuse=dither=none' : '[s1][p]paletteuse',
+        ])
+        .output(gifOutputPath)
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .run()
+    })
+    return { buffer: fs.readFileSync(gifOutputPath), ext: 'gif', contentType: 'image/gif' }
+  } finally {
+    try { if (fs.existsSync(gifInputPath)) fs.unlinkSync(gifInputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(gifOutputPath)) fs.unlinkSync(gifOutputPath) } catch { /* ignore */ }
+  }
+}
+
+const MAX_RESIZE_DIMENSION = 16384
+const MAX_RESIZE_PIXELS = 100_000_000
+
 function isValidCropRect(cropRect: unknown): cropRect is CropRectInput {
   if (!cropRect || typeof cropRect !== 'object') return false
   const { x, y, width, height } = cropRect as Record<string, unknown>
@@ -490,6 +540,42 @@ router.post('/bake-crop', async (req, res) => {
   } catch (error) {
     console.error('Error baking image crop:', error)
     res.status(500).json({ error: 'Failed to bake image crop' })
+  }
+})
+
+// Resize an image to an exact resolution, saved as the original file of a new image item.
+// The source image is left untouched so the pre-resize item can still be restored (undo).
+router.post('/resize-image', async (req, res) => {
+  try {
+    const { sceneId, imageId, newImageId, width, height, nearest } = req.body
+    if (!sceneId || !imageId || !newImageId) {
+      return res.status(400).json({ error: 'sceneId, imageId and newImageId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(imageId) || !uuidValidate(newImageId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or image ID format' })
+    }
+    if (!Number.isInteger(width) || !Number.isInteger(height) ||
+        width < 1 || height < 1 || width > MAX_RESIZE_DIMENSION || height > MAX_RESIZE_DIMENSION ||
+        width * height > MAX_RESIZE_PIXELS) {
+      return res.status(400).json({
+        error: `width and height must be whole numbers from 1 to ${MAX_RESIZE_DIMENSION}, at most ${MAX_RESIZE_PIXELS} pixels in total`,
+      })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const source = await loadSourceImage(sceneFolder, imageId)
+    if (!source) {
+      return res.status(404).json({ error: 'Source image not found' })
+    }
+
+    const resized = await resizeImageBuffer(source.buffer, source.ext, width, height, !!nearest)
+    const outputKey = `${sceneFolder}/${newImageId}.${resized.ext}`
+    await save(outputKey, resized.buffer, resized.contentType)
+
+    res.json({ success: true, url: getPublicUrl(outputKey), fileSize: resized.buffer.length })
+  } catch (error) {
+    console.error('Error resizing image:', error)
+    res.status(500).json({ error: 'Failed to resize image' })
   }
 })
 

@@ -16,6 +16,8 @@ interface UseCanvasSelectionParams {
   applyOrCancelVideoCrop: () => void
   multiCropActive: boolean
   applyMultiCrop: () => void
+  resolutionActive: boolean
+  cancelResolution: () => void
 }
 
 export interface CanvasSelection {
@@ -41,6 +43,8 @@ export function useCanvasSelection({
   applyOrCancelVideoCrop,
   multiCropActive,
   applyMultiCrop,
+  resolutionActive,
+  cancelResolution,
 }: UseCanvasSelectionParams): CanvasSelection {
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
@@ -70,6 +74,11 @@ export function useCanvasSelection({
       if (e.target === stageRef.current) {
         applyMultiCrop()
       }
+      return
+    }
+    // Set Resolution bakes a resize, so clicking on empty canvas cancels rather than applies
+    if (resolutionActive && e.target === stageRef.current) {
+      cancelResolution()
       return
     }
     if (e.target !== stageRef.current) return

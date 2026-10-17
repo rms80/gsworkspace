@@ -17,6 +17,8 @@ interface MultiSelectContextMenuProps {
   onRemoveCrop?: (imageIds: string[]) => void
   /** Called with the selected image ids */
   onDuplicateImages?: (imageIds: string[]) => void
+  /** Called with the selected image ids, in selection order */
+  onSetResolution?: (imageIds: string[]) => void
   isOffline?: boolean
 }
 
@@ -31,6 +33,7 @@ export default function MultiSelectContextMenu({
   onBakeCrop,
   onRemoveCrop,
   onDuplicateImages,
+  onSetResolution,
   isOffline = false,
 }: MultiSelectContextMenuProps) {
   const DOWNLOADABLE_TYPES = ['image', 'video', 'text-file', 'pdf']
@@ -55,6 +58,9 @@ export default function MultiSelectContextMenu({
   const canBakeCrop = !!onBakeCrop && croppedImageIds.length > 0
   const canRemoveCrop = !!onRemoveCrop && croppedImageIds.length > 0
   const showDuplicate = !!onDuplicateImages && selectedImageIds.length > 0
+  const showSetResolution = !!onSetResolution && selectedImageIds.length > 0
+  // Resizing is baked into the pixels, so it only applies to uncropped images
+  const resolutionBlocked = croppedImageIds.length > 0
 
   const buttonStyle: React.CSSProperties = {
     display: 'block',
@@ -135,6 +141,11 @@ export default function MultiSelectContextMenu({
     onClose()
   }
 
+  const handleSetResolution = () => {
+    onSetResolution?.(selectedImageIds)
+    onClose()
+  }
+
   return (
     <div
       style={{
@@ -163,7 +174,7 @@ export default function MultiSelectContextMenu({
           <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
         </>
       )}
-      {(canMultiCrop || canBakeCrop || canRemoveCrop) && (
+      {(canMultiCrop || canBakeCrop || canRemoveCrop || showSetResolution) && (
         <>
           {canMultiCrop && (
             <button
@@ -193,6 +204,18 @@ export default function MultiSelectContextMenu({
               onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
             >
               Bake Crop
+            </button>
+          )}
+          {showSetResolution && (
+            <button
+              onClick={resolutionBlocked ? undefined : handleSetResolution}
+              disabled={resolutionBlocked}
+              style={resolutionBlocked ? disabledStyle : buttonStyle}
+              onMouseEnter={(e) => !resolutionBlocked && (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+              title={resolutionBlocked ? 'Some selected images are cropped - remove or bake their crops first' : undefined}
+            >
+              Set Resolution
             </button>
           )}
           <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
