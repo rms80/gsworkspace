@@ -199,24 +199,30 @@ export function useClipboard({
 
       e.preventDefault()
       try {
-        const isDataUrl = item.src.startsWith('data:')
+        // Data/blob URLs load directly; S3 URLs go through getContentData to avoid CORS canvas taint
+        const isLocalUrl = item.src.startsWith('data:') || item.src.startsWith('blob:')
+        const blobUrl = isLocalUrl
+          ? null
+          : URL.createObjectURL(await getContentData(sceneId, item.id, 'image', false))
 
-        if (isDataUrl) {
+        try {
           const img = new window.Image()
           await new Promise<void>((resolve, reject) => {
             img.onload = () => resolve()
             img.onerror = () => reject(new Error('Failed to load image'))
-            img.src = item.src
+            img.src = blobUrl ?? item.src
           })
 
+          // Copy only the cropped region (cropRect is in source pixels)
+          const crop = item.cropRect ?? { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight }
           const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth
-          canvas.height = img.naturalHeight
+          canvas.width = crop.width
+          canvas.height = crop.height
           const ctx = canvas.getContext('2d')
           if (!ctx) throw new Error('Failed to get canvas context')
-          ctx.drawImage(img, 0, 0)
+          ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height)
 
-          const blob = await new Promise<Blob>((resolve, reject) => {
+          const pngBlob = await new Promise<Blob>((resolve, reject) => {
             canvas.toBlob((b) => {
               if (b) resolve(b)
               else reject(new Error('Failed to create blob'))
@@ -224,41 +230,10 @@ export function useClipboard({
           })
 
           await navigator.clipboard.write([
-            new ClipboardItem({ 'image/png': blob })
+            new ClipboardItem({ 'image/png': pngBlob })
           ])
-        } else {
-          // Use getContentData API for S3 URLs
-          const blob = await getContentData(sceneId, item.id, 'image', false)
-          const blobUrl = URL.createObjectURL(blob)
-
-          try {
-            const pngBlob = await new Promise<Blob>((resolve, reject) => {
-              const img = new window.Image()
-              img.onload = () => {
-                const canvas = document.createElement('canvas')
-                canvas.width = img.naturalWidth
-                canvas.height = img.naturalHeight
-                const ctx = canvas.getContext('2d')
-                if (!ctx) {
-                  reject(new Error('Failed to get canvas context'))
-                  return
-                }
-                ctx.drawImage(img, 0, 0)
-                canvas.toBlob((b) => {
-                  if (b) resolve(b)
-                  else reject(new Error('Failed to create blob'))
-                }, 'image/png')
-              }
-              img.onerror = () => reject(new Error('Failed to load image'))
-              img.src = blobUrl
-            })
-
-            await navigator.clipboard.write([
-              new ClipboardItem({ 'image/png': pngBlob })
-            ])
-          } finally {
-            URL.revokeObjectURL(blobUrl)
-          }
+        } finally {
+          if (blobUrl) URL.revokeObjectURL(blobUrl)
         }
       } catch (err) {
         console.error('Failed to copy image to clipboard:', err)
