@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { CanvasItem, CropRect } from '../types'
 import { cropImage } from '../api/images'
+import { computeCropChanges } from '../utils/imageCrop'
 
 interface UseCropModeParams {
   items: CanvasItem[]
@@ -53,73 +54,17 @@ export function useCropMode({
       return
     }
 
-    const natW = img.naturalWidth
-    const natH = img.naturalHeight
-    const scaleX = item.scaleX ?? 1
-    const scaleY = item.scaleY ?? 1
-
-    const currentSourceW = item.cropRect?.width ?? natW
-    const currentSourceH = item.cropRect?.height ?? natH
-    const baseDisplayScaleX = item.width / currentSourceW
-    const baseDisplayScaleY = item.height / currentSourceH
-    const displayScaleX = baseDisplayScaleX * scaleX
-    const displayScaleY = baseDisplayScaleY * scaleY
-
     const itemId = croppingImageId
-
-    // Check if crop covers the full image (within a small tolerance for floating point)
-    const isFullImage =
-      Math.abs(pendingCropRect.x) < 1 &&
-      Math.abs(pendingCropRect.y) < 1 &&
-      Math.abs(pendingCropRect.width - natW) < 1 &&
-      Math.abs(pendingCropRect.height - natH) < 1
-
-    if (isFullImage) {
-      // Remove crop - restore to full image
-      const newWidth = natW * baseDisplayScaleX
-      const newHeight = natH * baseDisplayScaleY
-      const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
-      const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScaleY
-
-      onUpdateItem(itemId, {
-        x: offsetX,
-        y: offsetY,
-        width: newWidth,
-        height: newHeight,
-        cropRect: undefined,
-        cropSrc: undefined,
-        cropSrcFileSize: undefined,
-      })
-
-      setCroppingImageId(null)
-      setPendingCropRect(null)
-      setLockAspectRatio(false)
-      return
-    }
-
-    const newWidth = pendingCropRect.width * baseDisplayScaleX
-    const newHeight = pendingCropRect.height * baseDisplayScaleY
-
-    const offsetX = item.x - (item.cropRect?.x ?? 0) * displayScaleX
-    const offsetY = item.y - (item.cropRect?.y ?? 0) * displayScaleY
-    const newX = offsetX + pendingCropRect.x * displayScaleX
-    const newY = offsetY + pendingCropRect.y * displayScaleY
-
     const cropRect = pendingCropRect
-    onUpdateItem(itemId, {
-      x: newX,
-      y: newY,
-      width: newWidth,
-      height: newHeight,
-      cropRect,
-    })
+    const { changes, isFullImage } = computeCropChanges(item, img.naturalWidth, img.naturalHeight, cropRect)
+    onUpdateItem(itemId, changes)
 
     setCroppingImageId(null)
     setPendingCropRect(null)
     setLockAspectRatio(false)
 
-    // Skip server-side crop in offline mode
-    if (isOffline) {
+    // No server-side crop when the crop was removed, or in offline mode
+    if (isFullImage || isOffline) {
       return
     }
 

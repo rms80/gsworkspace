@@ -23,7 +23,7 @@ import { useViewportManager } from './hooks/useViewportManager'
 import { useAutoSave } from './hooks/useAutoSave'
 import { useAuth } from './hooks/useAuth'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
-import { CanvasItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
+import { CanvasItem, ImageItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode } from './api/scenes'
 import { deleteActivity } from './utils/activityStorage'
 import { getCodingRobotEnabled } from './utils/experimentalSettings'
@@ -45,7 +45,9 @@ import {
 import { fetchYouTubeTitle } from './api/embed'
 import { exportSceneToZip } from './utils/sceneExport'
 import { importSceneFromZip, importSceneFromDirectory, ImportProgress } from './utils/sceneImport'
-import { uploadImage } from './api/images'
+import { uploadImage, cropImage } from './api/images'
+import { bakeCrop } from './utils/imageCrop'
+import { duplicateImage } from './utils/sceneOperations'
 import { generateUniqueName, getExistingImageNames, getExistingVideoNames, getExistingPdfNames, getExistingTextFileNames, getExistingModel3DNames, getExistingSplatNames } from './utils/imageNames'
 import { loadModeSettings, setOpenScenes as saveOpenScenesToSettings, getLastWorkspace, setLastWorkspace } from './utils/settings'
 import { ACTIVE_WORKSPACE, WORKSPACE_FROM_URL } from './api/workspace'
@@ -174,22 +176,55 @@ function App() {
     setIsSaving, setConflict,
   })
 
-  // Helper to push a change record to history
-  const pushChange = useCallback((change: ChangeRecord) => {
-    if (!activeSceneId) return
-
+  // Push a change record to a scene's history
+  const pushChangeToScene = useCallback((sceneId: string, change: ChangeRecord) => {
     setHistoryMap((prev) => {
       const newMap = new Map(prev)
-      const oldHistory = prev.get(activeSceneId)
+      const oldHistory = prev.get(sceneId)
       // Clone before mutating to ensure immutability (required for React Strict Mode)
       const newHistory = oldHistory ? oldHistory.clone() : new HistoryStack()
       newHistory.push(change)
-      newMap.set(activeSceneId, newHistory)
+      newMap.set(sceneId, newHistory)
       return newMap
     })
     // Trigger re-render for canUndo/canRedo
     setHistoryVersion((v) => v + 1)
-  }, [activeSceneId])
+  }, [])
+
+  // Transform records made in the same tick are coalesced into one undo step. The transformer
+  // fires a separate transformend (and so a separate item update) for every selected node.
+  const pendingTransformsRef = useRef<{ sceneId: string; entries: TransformEntry[] } | null>(null)
+
+  const flushPendingTransforms = useCallback(() => {
+    const pending = pendingTransformsRef.current
+    if (!pending) return
+    pendingTransformsRef.current = null
+    const [first] = pending.entries
+    pushChangeToScene(pending.sceneId, pending.entries.length === 1
+      ? new TransformObjectChange(first.objectId, first.oldTransform, first.newTransform)
+      : new TransformObjectsChange(pending.entries))
+  }, [pushChangeToScene])
+
+  // Helper to push a change record to history
+  const pushChange = useCallback((change: ChangeRecord) => {
+    if (!activeSceneId) return
+    // Keep history order: pending transforms happened before this change
+    flushPendingTransforms()
+    pushChangeToScene(activeSceneId, change)
+  }, [activeSceneId, flushPendingTransforms, pushChangeToScene])
+
+  // Record a single item transform, merged with any others made in the same tick
+  const pushTransformChange = useCallback((entry: TransformEntry) => {
+    if (!activeSceneId) return
+    const pending = pendingTransformsRef.current
+    if (pending && pending.sceneId === activeSceneId) {
+      pending.entries.push(entry)
+      return
+    }
+    flushPendingTransforms()
+    pendingTransformsRef.current = { sceneId: activeSceneId, entries: [entry] }
+    queueMicrotask(flushPendingTransforms)
+  }, [activeSceneId, flushPendingTransforms])
 
   // Function to load scenes from current storage provider
   // Respects settings for which scenes should be open
@@ -940,7 +975,7 @@ function App() {
           if ('cropSrc' in changes) (newTransform as Record<string, unknown>).cropSrc = (changes as Record<string, unknown>).cropSrc ?? null
           // Only record if transform actually changed
           if (JSON.stringify(oldTransform) !== JSON.stringify(newTransform)) {
-            pushChange(new TransformObjectChange(id, oldTransform, newTransform))
+            pushTransformChange({ objectId: id, oldTransform, newTransform })
           }
         }
       }
@@ -951,7 +986,7 @@ function App() {
         )
       )
     },
-    [updateActiveSceneItems, items, pushChange]
+    [updateActiveSceneItems, items, pushChange, pushTransformChange]
   )
 
   const togglePdfMinimized = useCallback((id: string) => {
@@ -1092,6 +1127,115 @@ function App() {
       return newMap
     })
   }, [updateActiveSceneItems, items, pushChange, activeSceneId, selectionMap])
+
+  // Bake the crop of each given image into a new uncropped image. Each baked image replaces
+  // its original item under a new id (see bakeCrop); all replacements are one undo step.
+  const bakeCrops = useCallback(async (ids: string[]) => {
+    if (!activeSceneId) return
+    const sceneId = activeSceneId
+    const targets = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image' && !!i.cropRect)
+    if (targets.length === 0) return
+
+    const replacements = new Map<string, ImageItem>()
+    const failed: string[] = []
+    startOperation()
+    try {
+      await Promise.all(targets.map(async (item) => {
+        try {
+          replacements.set(item.id, await bakeCrop(item, sceneId, isOffline))
+        } catch (err) {
+          console.error(`Failed to bake crop for image ${item.id}:`, err)
+          failed.push(item.name ?? item.id)
+        }
+      }))
+    } finally {
+      endOperation()
+    }
+
+    if (replacements.size > 0) {
+      pushChange(new MultiStepChange(targets
+        .filter((item) => replacements.has(item.id))
+        .flatMap((item) => [new DeleteObjectChange(item), new AddObjectChange(replacements.get(item.id)!)])
+      ))
+      // Replace in place to keep stacking order
+      updateActiveSceneItems((prev) => prev.map((i) => replacements.get(i.id) ?? i))
+      setSelectionMap((prev) => {
+        const selected = prev.get(sceneId)
+        if (!selected) return prev
+        const newMap = new Map(prev)
+        newMap.set(sceneId, selected.map((id) => replacements.get(id)?.id ?? id))
+        return newMap
+      })
+    }
+    if (failed.length > 0) {
+      alert(`Failed to bake crop for: ${failed.join(', ')}`)
+    }
+  }, [activeSceneId, items, isOffline, startOperation, endOperation, pushChange, updateActiveSceneItems])
+
+  // Duplicate images with everything carried over (crop, size, scale, rotation...). Copies keep
+  // their relative layout, are placed below and to the right of the originals, and become the
+  // selection. Adding the copies and the selection change are one undo step.
+  const duplicateImages = useCallback(async (ids: string[]) => {
+    if (!activeSceneId || isOffline) return
+    const sceneId = activeSceneId
+    const sources = items.filter((i): i is ImageItem => ids.includes(i.id) && i.type === 'image')
+    if (sources.length === 0) return
+
+    // Below the originals' bounding box with a gap of a quarter image height, shifted right by
+    // half an image width (using the average displayed image size)
+    const visualWidths = sources.map((i) => i.width * (i.scaleX ?? 1))
+    const visualHeights = sources.map((i) => i.height * (i.scaleY ?? 1))
+    const avgWidth = visualWidths.reduce((a, b) => a + b, 0) / sources.length
+    const avgHeight = visualHeights.reduce((a, b) => a + b, 0) / sources.length
+    const top = Math.min(...sources.map((i) => i.y))
+    const bottom = Math.max(...sources.map((i, idx) => i.y + visualHeights[idx]))
+    const offsetX = avgWidth * 0.5
+    const offsetY = bottom - top + avgHeight * 0.25
+
+    startOperation()
+    let results: PromiseSettledResult<ImageItem>[]
+    try {
+      results = await Promise.allSettled(sources.map((item) => duplicateImage(sceneId, item, offsetX, offsetY)))
+    } finally {
+      endOperation()
+    }
+    const copies = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
+    results.forEach((r) => {
+      if (r.status === 'rejected') console.error('Failed to duplicate image:', r.reason)
+    })
+    if (copies.length < sources.length) {
+      alert(`Failed to duplicate ${sources.length - copies.length} of ${sources.length} image(s).`)
+    }
+    if (copies.length === 0) return
+
+    const existingNames = getExistingImageNames(items)
+    for (const copy of copies) {
+      copy.name = generateUniqueName(copy.name || 'Image', existingNames)
+      existingNames.push(copy.name)
+    }
+
+    const oldSelection = selectionMap.get(sceneId) ?? []
+    const newSelection = copies.map((c) => c.id)
+    pushChange(new MultiStepChange([
+      ...copies.map((c) => new AddObjectChange(c)),
+      new SelectionChange(oldSelection, newSelection),
+    ]))
+    updateActiveSceneItems((prev) => [...prev, ...copies])
+    setSelectionMap((prev) => new Map(prev).set(sceneId, newSelection))
+
+    // Regenerate the server-side crop file for cropped copies (display doesn't depend on it)
+    for (const copy of copies) {
+      if (!copy.cropRect) continue
+      cropImage(sceneId, copy.id, copy.cropRect)
+        .then((result) => {
+          const cropSrc = `${result.url}${result.url.includes('?') ? '&' : '?'}t=${Date.now()}`
+          updateActiveSceneItems((prev) => prev.map((i) =>
+            i.id === copy.id && i.type === 'image' ? { ...i, cropSrc, cropSrcFileSize: result.fileSize } : i
+          ))
+        })
+        .catch((err) => console.error('Failed to create server-side crop for duplicate:', err))
+    }
+  }, [activeSceneId, isOffline, items, selectionMap, startOperation, endOperation, pushChange, updateActiveSceneItems])
 
   const selectItems = useCallback(
     (ids: string[]) => {
@@ -1577,6 +1721,8 @@ function App() {
           onAddVideoAt={addVideoAt}
           onDeleteSelected={deleteSelected}
           onCombineTextItems={combineTextItems}
+          onBakeCrop={bakeCrops}
+          onDuplicateImages={duplicateImages}
           onRunPrompt={handleRunPrompt}
           runningPromptIds={runningPromptIds}
           onRunImageGenPrompt={handleRunImageGenPrompt}

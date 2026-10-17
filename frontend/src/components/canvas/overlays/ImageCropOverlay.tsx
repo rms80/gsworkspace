@@ -10,6 +10,19 @@ interface ImageCropOverlayProps {
   lockAspectRatio: boolean
   onCropChange: (crop: CropRect) => void
   onLockAspectRatioChange: (locked: boolean) => void
+  /** Region (in source pixels) the crop must stay within. Defaults to the full image. */
+  bounds?: CropRect
+  /** Another image drawn over the crop region, positioned in this image's source pixels */
+  ghost?: { src: string; x: number; y: number; width: number; height: number; opacity: number }
+  /** Replaces the default control panel contents */
+  controls?: React.ReactNode
+  /** Instruction text under the default controls */
+  instructions?: string
+  /** Enables the 's' (square) hotkey. Disable when several overlays are shown at once. */
+  enableHotkeys?: boolean
+  /** Controlled locked aspect ratio, for overlays that share one crop */
+  aspectRatio?: number
+  onAspectRatioChange?: (ar: number) => void
 }
 
 const MIN_CROP_SIZE = 10
@@ -17,14 +30,18 @@ const HANDLE_SIZE = 10
 
 type HandlePosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right' | 'top' | 'bottom' | 'left' | 'right'
 
-function clampCrop(crop: CropRect, maxW: number, maxH: number): CropRect {
+function clampCrop(crop: CropRect, bounds: CropRect): CropRect {
   let { x, y, width, height } = crop
-  width = Math.max(MIN_CROP_SIZE, width)
-  height = Math.max(MIN_CROP_SIZE, height)
-  x = Math.max(0, Math.min(x, maxW - MIN_CROP_SIZE))
-  y = Math.max(0, Math.min(y, maxH - MIN_CROP_SIZE))
-  width = Math.min(width, maxW - x)
-  height = Math.min(height, maxH - y)
+  const minW = Math.min(MIN_CROP_SIZE, bounds.width)
+  const minH = Math.min(MIN_CROP_SIZE, bounds.height)
+  const right = bounds.x + bounds.width
+  const bottom = bounds.y + bounds.height
+  width = Math.max(minW, width)
+  height = Math.max(minH, height)
+  x = Math.max(bounds.x, Math.min(x, right - minW))
+  y = Math.max(bounds.y, Math.min(y, bottom - minH))
+  width = Math.min(width, right - x)
+  height = Math.min(height, bottom - y)
   return { x, y, width, height }
 }
 
@@ -67,9 +84,21 @@ export default function ImageCropOverlay({
   lockAspectRatio,
   onCropChange,
   onLockAspectRatioChange,
+  bounds: boundsProp,
+  ghost,
+  controls,
+  instructions = 'Press Enter to apply, Escape to cancel',
+  enableHotkeys = true,
+  aspectRatio,
+  onAspectRatioChange,
 }: ImageCropOverlayProps) {
   const dragStateRef = useRef<DragState | null>(null)
   const aspectRatioRef = useRef(cropRect.width / cropRect.height)
+  if (aspectRatio !== undefined) aspectRatioRef.current = aspectRatio
+  const setAspectRatio = (ar: number) => {
+    aspectRatioRef.current = ar
+    onAspectRatioChange?.(ar)
+  }
   const [showAspectMenu, setShowAspectMenu] = useState(false)
   const aspectMenuRef = useRef<HTMLDivElement>(null)
 
@@ -105,6 +134,9 @@ export default function ImageCropOverlay({
 
   const natW = image.naturalWidth
   const natH = image.naturalHeight
+  const bounds = boundsProp ?? { x: 0, y: 0, width: natW, height: natH }
+  const boundsRef = useRef(bounds)
+  boundsRef.current = bounds
 
   // Get scale factors (default to 1)
   const scaleX = item.scaleX ?? 1
@@ -162,11 +194,12 @@ export default function ImageCropOverlay({
     const dx = (e.clientX - ds.startMouseX) / stageScale / displayScaleXRef.current
     const dy = (e.clientY - ds.startMouseY) / stageScale / displayScaleYRef.current
 
+    const b = boundsRef.current
     if (ds.type === 'body') {
       let nx = ds.startCrop.x + dx
       let ny = ds.startCrop.y + dy
-      nx = Math.max(0, Math.min(nx, natW - ds.startCrop.width))
-      ny = Math.max(0, Math.min(ny, natH - ds.startCrop.height))
+      nx = Math.max(b.x, Math.min(nx, b.x + b.width - ds.startCrop.width))
+      ny = Math.max(b.y, Math.min(ny, b.y + b.height - ds.startCrop.height))
       onCropChangeRef.current({ ...ds.startCrop, x: nx, y: ny })
     } else if (ds.type === 'handle' && ds.handlePos) {
       let { x: bx, y: by, width: bw, height: bh } = ds.startCrop
@@ -249,9 +282,9 @@ export default function ImageCropOverlay({
           if (locked) by = ds.startCrop.y + (ds.startCrop.height - bh) / 2
           break
       }
-      onCropChangeRef.current(clampCrop({ x: bx, y: by, width: bw, height: bh }, natW, natH))
+      onCropChangeRef.current(clampCrop({ x: bx, y: by, width: bw, height: bh }, b))
     }
-  }, [natW, natH, stageScale])
+  }, [stageScale])
 
   const handleMouseUp = useCallback(() => {
     dragStateRef.current = null
@@ -323,7 +356,7 @@ export default function ImageCropOverlay({
       newCrop[field] = num
     }
 
-    onCropChange(clampCrop(newCrop, natW, natH))
+    onCropChange(clampCrop(newCrop, bounds))
   }
 
   // Handle Enter key in input fields
@@ -339,7 +372,7 @@ export default function ImageCropOverlay({
   const handleLockToggle = () => {
     if (!lockAspectRatio) {
       // When locking, capture current aspect ratio
-      aspectRatioRef.current = cropRect.width / cropRect.height
+      setAspectRatio(cropRect.width / cropRect.height)
     }
     onLockAspectRatioChange(!lockAspectRatio)
   }
@@ -369,27 +402,28 @@ export default function ImageCropOverlay({
     let newX = centerX - newWidth / 2
     let newY = centerY - newHeight / 2
 
-    // Clamp to image bounds
-    newX = Math.max(0, Math.min(newX, natW - newWidth))
-    newY = Math.max(0, Math.min(newY, natH - newHeight))
+    // Clamp to bounds
+    const { x: bx, y: by, width: bw, height: bh } = bounds
+    newX = Math.max(bx, Math.min(newX, bx + bw - newWidth))
+    newY = Math.max(by, Math.min(newY, by + bh - newHeight))
 
     // If dimensions exceed bounds, scale down
-    if (newWidth > natW) {
-      newWidth = natW
+    if (newWidth > bw) {
+      newWidth = bw
       newHeight = newWidth / ar
-      newX = 0
-      newY = Math.max(0, Math.min(centerY - newHeight / 2, natH - newHeight))
+      newX = bx
+      newY = Math.max(by, Math.min(centerY - newHeight / 2, by + bh - newHeight))
     }
-    if (newHeight > natH) {
-      newHeight = natH
+    if (newHeight > bh) {
+      newHeight = bh
       newWidth = newHeight * ar
-      newY = 0
-      newX = Math.max(0, Math.min(centerX - newWidth / 2, natW - newWidth))
+      newY = by
+      newX = Math.max(bx, Math.min(centerX - newWidth / 2, bx + bw - newWidth))
     }
 
-    // Update the aspect ratio ref and enable lock
-    aspectRatioRef.current = ar
-    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, natW, natH))
+    // Update the aspect ratio and enable lock
+    setAspectRatio(ar)
+    onCropChange(clampCrop({ x: newX, y: newY, width: newWidth, height: newHeight }, bounds))
     if (!lockAspectRatio) {
       onLockAspectRatioChange(true)
     }
@@ -398,6 +432,7 @@ export default function ImageCropOverlay({
 
   // 's' hotkey to apply 1:1 (square) aspect ratio preset
   useEffect(() => {
+    if (!enableHotkeys) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
         document.activeElement?.tagName === 'INPUT' ||
@@ -410,7 +445,7 @@ export default function ImageCropOverlay({
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [cropRect, natW, natH, lockAspectRatio])
+  }, [cropRect, natW, natH, lockAspectRatio, enableHotkeys, bounds.x, bounds.y, bounds.width, bounds.height])
 
   const handleCopyCrop = () => {
     setCopiedCropRect({ ...cropRect })
@@ -420,11 +455,11 @@ export default function ImageCropOverlay({
   const handlePasteCrop = () => {
     const copied = getCopiedCropRect()
     if (!copied) return
-    // Apply the copied crop, clamped to current image bounds
-    onCropChange(clampCrop({ ...copied }, natW, natH))
-    // Update aspect ratio ref if lock is enabled
+    // Apply the copied crop, clamped to current bounds
+    onCropChange(clampCrop({ ...copied }, bounds))
+    // Update aspect ratio if lock is enabled
     if (lockAspectRatio) {
-      aspectRatioRef.current = copied.width / copied.height
+      setAspectRatio(copied.width / copied.height)
     }
     setShowAspectMenu(false)
   }
@@ -543,6 +578,22 @@ export default function ImageCropOverlay({
             pointerEvents: 'none',
           }}
         />
+        {ghost && ghost.opacity > 0 && (
+          <img
+            src={ghost.src}
+            alt=""
+            style={{
+              position: 'absolute',
+              left: ghost.x * displayScaleX * stageScale - Math.max(0, screenCx),
+              top: ghost.y * displayScaleY * stageScale - Math.max(0, screenCy),
+              width: ghost.width * displayScaleX * stageScale,
+              height: ghost.height * displayScaleY * stageScale,
+              objectFit: 'fill',
+              opacity: ghost.opacity,
+              pointerEvents: 'none',
+            }}
+          />
+        )}
       </div>
 
       {/* Dashed crop border */}
@@ -619,6 +670,7 @@ export default function ImageCropOverlay({
             -moz-appearance: textfield;
           }
         `}</style>
+        {controls ?? (<>
         {/* Controls row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -806,8 +858,9 @@ export default function ImageCropOverlay({
         </div>
         {/* Instructions row */}
         <div style={{ textAlign: 'center', opacity: 0.8 }}>
-          Press Enter to apply, Escape to cancel
+          {instructions}
         </div>
+        </>)}
       </div>
     </div>
   )

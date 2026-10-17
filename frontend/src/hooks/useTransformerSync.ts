@@ -5,7 +5,7 @@ import { CanvasItem } from '../types'
 interface TransformerConfig {
   type: CanvasItem['type']
   ref: RefObject<Konva.Transformer | null>
-  excludeId?: string | null
+  excludeId?: string | string[] | null
   childName?: string
   filterItem?: (item: CanvasItem) => boolean
 }
@@ -27,11 +27,12 @@ export function useTransformerSync({
     if (!stageRef.current) return
 
     for (const { type, ref, excludeId, childName, filterItem } of transformers) {
+      const excluded = excludeId == null ? [] : Array.isArray(excludeId) ? excludeId : [excludeId]
       const nodes = items
         .filter((item) =>
           selectedIds.includes(item.id) &&
           item.type === type &&
-          (excludeId == null || item.id !== excludeId) &&
+          !excluded.includes(item.id) &&
           (filterItem == null || filterItem(item))
         )
         .map((item) => {
@@ -45,5 +46,5 @@ export function useTransformerSync({
 
       ref.current?.nodes(nodes)
     }
-  }, [items, selectedIds, ...transformers.map((t) => t.excludeId)])
+  }, [items, selectedIds, ...transformers.map((t) => String(t.excludeId ?? ''))])
 }

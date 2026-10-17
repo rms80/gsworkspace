@@ -9,6 +9,15 @@ interface MultiSelectContextMenuProps {
   sceneId: string
   onClose: () => void
   onCombineTextItems?: () => void
+  /** Called with the selected image ids, in selection order */
+  onMultiCrop?: (imageIds: string[]) => void
+  /** Called with the selected image ids that have a crop */
+  onBakeCrop?: (imageIds: string[]) => void
+  /** Called with the selected image ids that have a crop */
+  onRemoveCrop?: (imageIds: string[]) => void
+  /** Called with the selected image ids */
+  onDuplicateImages?: (imageIds: string[]) => void
+  isOffline?: boolean
 }
 
 export default function MultiSelectContextMenu({
@@ -18,6 +27,11 @@ export default function MultiSelectContextMenu({
   sceneId,
   onClose,
   onCombineTextItems,
+  onMultiCrop,
+  onBakeCrop,
+  onRemoveCrop,
+  onDuplicateImages,
+  isOffline = false,
 }: MultiSelectContextMenuProps) {
   const DOWNLOADABLE_TYPES = ['image', 'video', 'text-file', 'pdf']
   const hasDownloadable = selectedIds.some(id => {
@@ -30,6 +44,17 @@ export default function MultiSelectContextMenu({
     return item && item.type === 'text'
   })
   const canCombineText = selectedTextItems.length >= 2
+
+  const selectedImageIds = selectedIds.filter(id => items.find(i => i.id === id)?.type === 'image')
+  const canMultiCrop = !!onMultiCrop && selectedImageIds.length >= 2
+
+  const croppedImageIds = selectedImageIds.filter(id => {
+    const item = items.find(i => i.id === id)
+    return item?.type === 'image' && !!item.cropRect
+  })
+  const canBakeCrop = !!onBakeCrop && croppedImageIds.length > 0
+  const canRemoveCrop = !!onRemoveCrop && croppedImageIds.length > 0
+  const showDuplicate = !!onDuplicateImages && selectedImageIds.length > 0
 
   const buttonStyle: React.CSSProperties = {
     display: 'block',
@@ -90,6 +115,26 @@ export default function MultiSelectContextMenu({
     onClose()
   }
 
+  const handleMultiCrop = () => {
+    onMultiCrop?.(selectedImageIds)
+    onClose()
+  }
+
+  const handleBakeCrop = () => {
+    onBakeCrop?.(croppedImageIds)
+    onClose()
+  }
+
+  const handleRemoveCrop = () => {
+    onRemoveCrop?.(croppedImageIds)
+    onClose()
+  }
+
+  const handleDuplicate = () => {
+    onDuplicateImages?.(selectedImageIds)
+    onClose()
+  }
+
   return (
     <div
       style={{
@@ -114,6 +159,56 @@ export default function MultiSelectContextMenu({
             onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
           >
             Combine
+          </button>
+          <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
+        </>
+      )}
+      {(canMultiCrop || canBakeCrop || canRemoveCrop) && (
+        <>
+          {canMultiCrop && (
+            <button
+              onClick={handleMultiCrop}
+              style={buttonStyle}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              MultiCrop
+            </button>
+          )}
+          {canRemoveCrop && (
+            <button
+              onClick={handleRemoveCrop}
+              style={buttonStyle}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Remove Crop
+            </button>
+          )}
+          {canBakeCrop && (
+            <button
+              onClick={handleBakeCrop}
+              style={buttonStyle}
+              onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            >
+              Bake Crop
+            </button>
+          )}
+          <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
+        </>
+      )}
+      {showDuplicate && (
+        <>
+          <button
+            onClick={isOffline ? undefined : handleDuplicate}
+            disabled={isOffline}
+            style={isOffline ? disabledStyle : buttonStyle}
+            onMouseEnter={(e) => !isOffline && (e.currentTarget.style.background = '#4a4a4a')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+            title={isOffline ? 'Duplicate unavailable in offline mode' : undefined}
+          >
+            {selectedImageIds.length === selectedIds.length ? 'Duplicate' : 'Duplicate Images'}
           </button>
           <div style={{ height: 1, background: '#555', margin: '4px 8px' }} />
         </>

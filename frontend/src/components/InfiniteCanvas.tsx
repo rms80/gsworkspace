@@ -14,7 +14,7 @@ import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
 import { isModel3DFile, uploadModel3D, getModel3DFormat } from '../api/models3d'
 import { isSplatFile, uploadSplat } from '../api/splats'
-import { duplicateImage, duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
+import { duplicateVideo, convertToGif, convertToVideo } from '../utils/sceneOperations'
 import CanvasContextMenu from './canvas/menus/CanvasContextMenu'
 import ModelSelectorMenu from './canvas/menus/ModelSelectorMenu'
 import ImageContextMenu from './canvas/menus/ImageContextMenu'
@@ -51,12 +51,14 @@ import GifOverlay from './canvas/overlays/GifOverlay'
 import CodingRobotOverlay from './canvas/overlays/CodingRobotOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
 import ImageCropOverlay from './canvas/overlays/ImageCropOverlay'
+import MultiCropOverlay from './canvas/overlays/MultiCropOverlay'
 import ProcessingOverlay from './canvas/overlays/ProcessingOverlay'
 import QuickPromptOverlay, { QuickPromptMode } from './canvas/overlays/QuickPromptOverlay'
 import { useCanvasViewport } from '../hooks/useCanvasViewport'
 import { useClipboard } from '../hooks/useClipboard'
 import { useCanvasSelection } from '../hooks/useCanvasSelection'
 import { useCropMode } from '../hooks/useCropMode'
+import { useMultiCropMode } from '../hooks/useMultiCropMode'
 import { useVideoCropMode } from '../hooks/useVideoCropMode'
 import { usePromptEditing } from '../hooks/usePromptEditing'
 import { usePulseAnimation } from '../hooks/usePulseAnimation'
@@ -76,6 +78,7 @@ import {
   TEXT_FILE_EXTENSION_PATTERN, getTextFileFormat,
 } from '../constants/canvas'
 import type { TransformEntry } from '../history'
+import { computeCropChanges } from '../utils/imageCrop'
 
 interface InfiniteCanvasProps {
   items: CanvasItem[]
@@ -88,6 +91,8 @@ interface InfiniteCanvasProps {
   onAddVideoAt: (id: string, x: number, y: number, src: string, width: number, height: number, name?: string, fileSize?: number, originalWidth?: number, originalHeight?: number) => void
   onDeleteSelected: () => void
   onCombineTextItems?: () => void
+  onBakeCrop?: (imageIds: string[]) => void
+  onDuplicateImages?: (imageIds: string[]) => void
   onRunPrompt: (promptId: string) => void
   runningPromptIds: Set<string>
   onRunImageGenPrompt: (promptId: string) => void
@@ -158,7 +163,7 @@ function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
   if (el.contentDocument?.readyState === 'complete') attach()
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateImages, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -300,6 +305,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     cancelCrop: _cancelCrop,
   } = useCropMode({ items, sceneId, loadedImages, isOffline, onUpdateItem })
 
+  // 3a. Multi-image crop (MultiCrop) hook
+  const multiCrop = useMultiCropMode({ items, sceneId, loadedImages, isOffline, onUpdateItem, onBatchTransform })
+  // Images replaced by MultiCrop overlays (only once alignment is done)
+  const multiCropIds = multiCrop.session?.status === 'ready' ? multiCrop.session.ids : []
+
   // 3b. Video crop mode hook
   const {
     croppingVideoId,
@@ -351,6 +361,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     applyCrop,
     croppingVideoId,
     applyOrCancelVideoCrop: applyOrCancelVideoCrop,
+    multiCropActive: !!multiCrop.session,
+    applyMultiCrop: multiCrop.apply,
   })
 
   // 8. Clipboard hook
@@ -360,7 +372,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     sceneId,
     isEditing,
     isOffline,
-    croppingImageId,
+    // Any image crop in progress (single or MultiCrop) blocks Delete
+    croppingImageId: croppingImageId ?? multiCrop.session?.ids[0] ?? null,
     screenToCanvas,
     scaleImageToViewport,
     onAddTextAt,
@@ -517,7 +530,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     stageRef,
     transformers: [
       { type: 'text', ref: textTransformerRef },
-      { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId, childName: 'transform-target' },
+      { type: 'image', ref: imageTransformerRef, excludeId: croppingImageId ? [croppingImageId, ...multiCropIds] : multiCropIds, childName: 'transform-target' },
       { type: 'video', ref: videoTransformerRef, childName: 'transform-target' },
       { type: 'prompt', ref: promptTransformerRef },
       { type: 'image-gen-prompt', ref: imageGenPromptTransformerRef },
@@ -751,29 +764,28 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     e.dataTransfer.dropEffect = 'copy'
   }
 
-  // Handle image duplication
-  const handleDuplicateImage = useCallback(async (imageItem: ImageItem) => {
-    try {
-      startOperation()
-      const result = await duplicateImage(sceneId, imageItem)
-      onAddImageAt(
-        result.id,
-        result.positionX,
-        result.positionY,
-        result.url,
-        result.visualWidth,
-        result.visualHeight,
-        result.name,
-        result.pixelWidth,
-        result.pixelHeight,
-        result.fileSize
-      )
-      endOperation()
-    } catch (error) {
-      console.error('Failed to duplicate image:', error)
-      endOperation()
+  // Remove the crop from each given image, restoring the full image around the cropped
+  // region's current position. Recorded as a single undo step when batch history is available.
+  const handleRemoveCrops = useCallback((ids: string[]) => {
+    const skipHistory = !!onBatchTransform
+    const entries: TransformEntry[] = []
+    for (const id of ids) {
+      const item = items.find((i) => i.id === id)
+      if (!item || item.type !== 'image' || !item.cropRect) continue
+      const img = loadedImages.get(item.src)
+      if (!img) continue
+      const natW = img.naturalWidth
+      const natH = img.naturalHeight
+      const { changes } = computeCropChanges(item, natW, natH, { x: 0, y: 0, width: natW, height: natH })
+      onUpdateItem(id, changes, skipHistory)
+      entries.push({
+        objectId: id,
+        oldTransform: { x: item.x, y: item.y, width: item.width, height: item.height, cropRect: item.cropRect, cropSrc: item.cropSrc ?? null },
+        newTransform: { x: changes.x, y: changes.y, width: changes.width, height: changes.height, cropRect: null, cropSrc: null },
+      })
     }
-  }, [sceneId, onAddImageAt, startOperation, endOperation])
+    if (onBatchTransform && entries.length > 0) onBatchTransform(entries)
+  }, [items, loadedImages, onUpdateItem, onBatchTransform])
 
   // Handle video duplication
   const handleDuplicateVideo = useCallback(async (videoItem: VideoItem) => {
@@ -1347,7 +1359,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             )
           } else if (item.type === 'image') {
             // Hide the image item when it's being cropped
-            if (croppingImageId === item.id) return null
+            if (croppingImageId === item.id || multiCropIds.includes(item.id)) return null
             const img = loadedImages.get(item.src)
             if (!img) return null
             const itemIsGif = gifIds.has(item.id)
@@ -2282,7 +2294,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         .filter((item) => item.type === 'image' && gifIds.has(item.id))
         .map((item) => {
           if (item.type !== 'image') return null
-          if (croppingImageId === item.id) return null
+          if (croppingImageId === item.id || multiCropIds.includes(item.id)) return null
           const transform = gifItemTransforms.get(item.id)
           return (
             <GifOverlay
@@ -2337,6 +2349,15 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           />
         )
       })()}
+
+      {/* MultiCrop overlays */}
+      <MultiCropOverlay
+        multiCrop={multiCrop}
+        items={items}
+        loadedImages={loadedImages}
+        stageScale={stageScale}
+        stagePos={stagePos}
+      />
 
       {/* Video crop overlay */}
       {croppingVideoId && videoPendingCropRect && (() => {
@@ -2583,8 +2604,10 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
             setCroppingImageId(id)
             setPendingCropRect(initialCrop)
           }}
-          onDuplicate={handleDuplicateImage}
+          onDuplicate={(imageItem) => onDuplicateImages?.([imageItem.id])}
           onConvertToVideo={handleConvertGifToVideo}
+          onBakeCrop={onBakeCrop ? (id) => onBakeCrop([id]) : undefined}
+          onRemoveCrop={(id) => handleRemoveCrops([id])}
           onClose={imageContextMenuState.closeMenu}
         />
       )}
@@ -2681,6 +2704,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
           sceneId={sceneId}
           onClose={multiSelectContextMenuState.closeMenu}
           onCombineTextItems={onCombineTextItems}
+          onMultiCrop={(imageIds) => multiCrop.start(imageIds)}
+          onBakeCrop={onBakeCrop}
+          onRemoveCrop={handleRemoveCrops}
+          onDuplicateImages={onDuplicateImages}
+          isOffline={isOffline}
         />
       )}
 

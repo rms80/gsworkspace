@@ -40,6 +40,30 @@ export async function cropImage(
   return response.json()
 }
 
+/**
+ * Bake an image's crop on the server: the cropped pixels are saved as the original
+ * file of a new image item (newImageId). The source image file is left untouched.
+ */
+export async function bakeImageCrop(
+  sceneId: string,
+  imageId: string,
+  newImageId: string,
+  cropRect: { x: number; y: number; width: number; height: number }
+): Promise<CropImageResult> {
+  validateUuid(sceneId, 'scene ID')
+  validateUuid(imageId, 'image ID')
+  validateUuid(newImageId, 'new image ID')
+  const response = await fetch(`${API_BASE}/bake-crop`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sceneId, imageId, newImageId, cropRect }),
+  })
+  if (!response.ok) {
+    throw new Error(`Failed to bake image crop: ${response.statusText}`)
+  }
+  return response.json()
+}
+
 export async function uploadImage(
   dataUrl: string,
   sceneId: string,

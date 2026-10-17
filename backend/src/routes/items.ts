@@ -359,6 +359,77 @@ router.post('/upload-splat', upload.single('splat'), async (req, res) => {
   }
 })
 
+interface CropRectInput {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** Loads an image item's original file from its scene folder, trying common extensions. */
+async function loadSourceImage(sceneFolder: string, imageId: string): Promise<{ buffer: Buffer; ext: string } | null> {
+  for (const ext of ['png', 'jpg', 'jpeg', 'gif', 'webp']) {
+    const buffer = await loadAsBuffer(`${sceneFolder}/${imageId}.${ext}`)
+    if (buffer) return { buffer, ext }
+  }
+  return null
+}
+
+/**
+ * Crops an image buffer. GIFs are cropped with ffmpeg (palette-preserving, keeps animation);
+ * everything else is cropped with sharp and output as PNG.
+ */
+async function cropImageBuffer(
+  buffer: Buffer,
+  ext: string,
+  cropRect: CropRectInput
+): Promise<{ buffer: Buffer; ext: 'gif' | 'png'; contentType: string }> {
+  const cropX = Math.round(cropRect.x)
+  const cropY = Math.round(cropRect.y)
+  const cropW = Math.round(cropRect.width)
+  const cropH = Math.round(cropRect.height)
+
+  if (ext !== 'gif') {
+    const croppedBuffer = await sharp(buffer)
+      .extract({ left: cropX, top: cropY, width: cropW, height: cropH })
+      .png()
+      .toBuffer()
+    return { buffer: croppedBuffer, ext: 'png', contentType: 'image/png' }
+  }
+
+  const tempDir = os.tmpdir()
+  const tempId = uuidv4()
+  const gifInputPath = path.join(tempDir, `gif-crop-input-${tempId}.gif`)
+  const gifOutputPath = path.join(tempDir, `gif-crop-output-${tempId}.gif`)
+
+  try {
+    fs.writeFileSync(gifInputPath, buffer)
+    await new Promise<void>((resolve, reject) => {
+      ffmpeg(gifInputPath)
+        .complexFilter([
+          `[0:v]crop=${cropW}:${cropH}:${cropX}:${cropY},split[s0][s1]`,
+          '[s0]palettegen[p]',
+          '[s1][p]paletteuse',
+        ])
+        .output(gifOutputPath)
+        .on('end', () => resolve())
+        .on('error', (err) => reject(err))
+        .run()
+    })
+    return { buffer: fs.readFileSync(gifOutputPath), ext: 'gif', contentType: 'image/gif' }
+  } finally {
+    try { if (fs.existsSync(gifInputPath)) fs.unlinkSync(gifInputPath) } catch { /* ignore */ }
+    try { if (fs.existsSync(gifOutputPath)) fs.unlinkSync(gifOutputPath) } catch { /* ignore */ }
+  }
+}
+
+function isValidCropRect(cropRect: unknown): cropRect is CropRectInput {
+  if (!cropRect || typeof cropRect !== 'object') return false
+  const { x, y, width, height } = cropRect as Record<string, unknown>
+  return [x, y, width, height].every((v) => typeof v === 'number' && Number.isFinite(v)) &&
+    (width as number) >= 1 && (height as number) >= 1
+}
+
 // Crop an image and save the cropped version
 router.post('/crop-image', async (req, res) => {
   try {
@@ -370,94 +441,55 @@ router.post('/crop-image', async (req, res) => {
       return res.status(400).json({ error: 'cropRect is required' })
     }
 
-    const { x, y, width, height } = cropRect
-
     // Construct the source image key from scene and image IDs
     const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
 
-    // Try common image extensions, track which one matched
-    const extensions = ['png', 'jpg', 'jpeg', 'gif', 'webp']
-    let buffer: Buffer | null = null
-    let matchedExt = ''
-
-    for (const ext of extensions) {
-      const sourceKey = `${sceneFolder}/${imageId}.${ext}`
-      buffer = await loadAsBuffer(sourceKey)
-      if (buffer) {
-        matchedExt = ext
-        break
-      }
-    }
-
-    if (!buffer) {
+    const source = await loadSourceImage(sceneFolder, imageId)
+    if (!source) {
       return res.status(404).json({ error: 'Source image not found' })
     }
 
-    let outputKey: string
-    let contentType: string
-    let outputSize: number = 0
-
-    if (matchedExt === 'gif') {
-      // Use ffmpeg with palette-preserving crop to keep animation
-      const tempDir = os.tmpdir()
-      const tempId = uuidv4()
-      const gifInputPath = path.join(tempDir, `gif-crop-input-${tempId}.gif`)
-      const gifOutputPath = path.join(tempDir, `gif-crop-output-${tempId}.gif`)
-
-      const cleanupGif = () => {
-        try { if (fs.existsSync(gifInputPath)) fs.unlinkSync(gifInputPath) } catch { /* ignore */ }
-        try { if (fs.existsSync(gifOutputPath)) fs.unlinkSync(gifOutputPath) } catch { /* ignore */ }
-      }
-
-      try {
-        fs.writeFileSync(gifInputPath, buffer)
-
-        const cropW = Math.round(width)
-        const cropH = Math.round(height)
-        const cropX = Math.round(x)
-        const cropY = Math.round(y)
-
-        await new Promise<void>((resolve, reject) => {
-          ffmpeg(gifInputPath)
-            .complexFilter([
-              `[0:v]crop=${cropW}:${cropH}:${cropX}:${cropY},split[s0][s1]`,
-              '[s0]palettegen[p]',
-              '[s1][p]paletteuse',
-            ])
-            .output(gifOutputPath)
-            .on('end', () => resolve())
-            .on('error', (err) => reject(err))
-            .run()
-        })
-
-        const croppedGifBuffer = fs.readFileSync(gifOutputPath)
-        outputKey = `${sceneFolder}/${imageId}.crop.gif`
-        contentType = 'image/gif'
-        outputSize = croppedGifBuffer.length
-        await save(outputKey, croppedGifBuffer, contentType)
-        cleanupGif()
-      } catch (err) {
-        cleanupGif()
-        throw err
-      }
-    } else {
-      // Non-GIF: crop with sharp as before
-      const croppedBuffer = await sharp(buffer)
-        .extract({ left: Math.round(x), top: Math.round(y), width: Math.round(width), height: Math.round(height) })
-        .png()
-        .toBuffer()
-
-      outputKey = `${sceneFolder}/${imageId}.crop.png`
-      contentType = 'image/png'
-      outputSize = croppedBuffer.length
-      await save(outputKey, croppedBuffer, contentType)
-    }
+    const cropped = await cropImageBuffer(source.buffer, source.ext, cropRect)
+    const outputKey = `${sceneFolder}/${imageId}.crop.${cropped.ext}`
+    await save(outputKey, cropped.buffer, cropped.contentType)
 
     const url = getPublicUrl(outputKey)
-    res.json({ success: true, url, fileSize: outputSize })
+    res.json({ success: true, url, fileSize: cropped.buffer.length })
   } catch (error) {
     console.error('Error cropping image:', error)
     res.status(500).json({ error: 'Failed to crop image' })
+  }
+})
+
+// Bake an image's crop: save the cropped pixels as the original file of a new image item.
+// The source image is left untouched so the pre-bake item can still be restored (undo).
+router.post('/bake-crop', async (req, res) => {
+  try {
+    const { sceneId, imageId, newImageId, cropRect } = req.body
+    if (!sceneId || !imageId || !newImageId) {
+      return res.status(400).json({ error: 'sceneId, imageId and newImageId are required' })
+    }
+    if (!uuidValidate(sceneId) || !uuidValidate(imageId) || !uuidValidate(newImageId)) {
+      return res.status(400).json({ error: 'Invalid scene ID or image ID format' })
+    }
+    if (!isValidCropRect(cropRect)) {
+      return res.status(400).json({ error: 'A valid cropRect is required' })
+    }
+
+    const sceneFolder = `${(req.params as Record<string, string>).workspace}/${sceneId}`
+    const source = await loadSourceImage(sceneFolder, imageId)
+    if (!source) {
+      return res.status(404).json({ error: 'Source image not found' })
+    }
+
+    const cropped = await cropImageBuffer(source.buffer, source.ext, cropRect)
+    const outputKey = `${sceneFolder}/${newImageId}.${cropped.ext}`
+    await save(outputKey, cropped.buffer, cropped.contentType)
+
+    res.json({ success: true, url: getPublicUrl(outputKey), fileSize: cropped.buffer.length })
+  } catch (error) {
+    console.error('Error baking image crop:', error)
+    res.status(500).json({ error: 'Failed to bake image crop' })
   }
 })
 

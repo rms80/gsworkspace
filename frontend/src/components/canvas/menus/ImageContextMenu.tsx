@@ -13,6 +13,8 @@ interface ImageContextMenuProps {
   onStartCrop: (id: string, initialCrop: CropRect) => void
   onDuplicate: (imageItem: ImageItem) => void
   onConvertToVideo: (imageItem: ImageItem) => void
+  onBakeCrop?: (id: string) => void
+  onRemoveCrop: (id: string) => void
   onClose: () => void
 }
 
@@ -29,6 +31,8 @@ export default function ImageContextMenu({
   onStartCrop,
   onDuplicate,
   onConvertToVideo,
+  onBakeCrop,
+  onRemoveCrop,
   onClose,
 }: ImageContextMenuProps) {
   const buttonStyle: React.CSSProperties = {
@@ -80,23 +84,13 @@ export default function ImageContextMenu({
 
   const handleRemoveCrop = () => {
     if (!imageItem) { onClose(); return }
-    const img = loadedImages.get(imageItem.src)
-    if (!img) { onClose(); return }
-    const natW = img.naturalWidth
-    const natH = img.naturalHeight
-    const currentSourceW = imageItem.cropRect?.width ?? natW
-    const displayScale = imageItem.width / currentSourceW
-    const offsetX = imageItem.x - (imageItem.cropRect?.x ?? 0) * displayScale
-    const offsetY = imageItem.y - (imageItem.cropRect?.y ?? 0) * displayScale
-    onUpdateItem(imageItem.id, {
-      x: offsetX,
-      y: offsetY,
-      width: natW * displayScale,
-      height: natH * displayScale,
-      cropRect: undefined,
-      cropSrc: undefined,
-      cropSrcFileSize: undefined,
-    })
+    onRemoveCrop(imageItem.id)
+    onClose()
+  }
+
+  const handleBakeCrop = () => {
+    if (!imageItem) { onClose(); return }
+    onBakeCrop?.(imageItem.id)
     onClose()
   }
 
@@ -159,6 +153,16 @@ export default function ImageContextMenu({
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >
           Remove Crop
+        </button>
+      )}
+      {imageItem?.cropRect && onBakeCrop && (
+        <button
+          onClick={handleBakeCrop}
+          style={buttonStyle}
+          onMouseEnter={(e) => (e.currentTarget.style.background = '#4a4a4a')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
+        >
+          Bake Crop
         </button>
       )}
       <button

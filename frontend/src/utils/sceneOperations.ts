@@ -10,19 +10,6 @@ import { uploadImage } from '../api/images'
 import { uploadVideo, convertMedia } from '../api/videos'
 import { v4 as uuidv4 } from 'uuid'
 
-export interface DuplicateImageResult {
-  id: string
-  url: string
-  pixelWidth: number
-  pixelHeight: number
-  visualWidth: number
-  visualHeight: number
-  positionX: number
-  positionY: number
-  name: string
-  fileSize: number
-}
-
 export interface DuplicateVideoResult {
   id: string
   url: string
@@ -38,18 +25,21 @@ export interface DuplicateVideoResult {
 
 /**
  * Duplicate an image item.
- * Fetches the image data (edited version if available), uploads as new file,
- * and returns the information needed to create the duplicate item.
+ * Copies the original (uncropped) image to a new file and returns a full copy of the item -
+ * crop rect, size, scale, rotation etc. included - moved by (offsetX, offsetY).
+ * The copy has no server-side crop file (cropSrc) yet; callers can regenerate it from the crop rect.
  */
 export async function duplicateImage(
   sceneId: string,
-  imageItem: ImageItem
-): Promise<DuplicateImageResult> {
-  // Determine if we're duplicating the edited (cropped) version
-  const hasEdit = !!imageItem.cropRect
-
-  // Get the content data directly from the server
-  const blob = await getContentData(sceneId, imageItem.id, 'image', hasEdit)
+  imageItem: ImageItem,
+  offsetX: number,
+  offsetY: number
+): Promise<ImageItem> {
+  // Data/blob URLs (not yet on the server) are read directly; otherwise fetch the original from the server
+  const isLocalSrc = imageItem.src.startsWith('data:') || imageItem.src.startsWith('blob:')
+  const blob = isLocalSrc
+    ? await (await fetch(imageItem.src)).blob()
+    : await getContentData(sceneId, imageItem.id, 'image', false)
 
   // Convert blob to data URL
   const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -59,42 +49,21 @@ export async function duplicateImage(
     reader.readAsDataURL(blob)
   })
 
-  // Load into an Image element to get the actual pixel dimensions
-  const { width: pixelWidth, height: pixelHeight } = await new Promise<{ width: number; height: number }>((resolve, reject) => {
-    const img = new window.Image()
-    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
-    img.onerror = () => reject(new Error('Failed to load image for duplication'))
-    img.src = dataUrl
-  })
-
   // Generate item ID and upload to scene folder
   // Preserve source extension (e.g. gif) instead of always using png
-  const ext = getExtensionFromSrc(imageItem.src, 'png')
+  const ext = isLocalSrc
+    ? (blob.type.match(/^image\/(\w+)/)?.[1] ?? 'png')
+    : getExtensionFromSrc(imageItem.src, 'png')
   const id = uuidv4()
   const url = await uploadImage(dataUrl, sceneId, id, `${imageItem.name || 'image'}.${ext}`)
 
-  // Calculate the visual size the original is displayed at
-  const scaleX = imageItem.scaleX ?? 1
-  const scaleY = imageItem.scaleY ?? 1
-  const visualWidth = Math.round(imageItem.width * scaleX)
-  const visualHeight = Math.round(imageItem.height * scaleY)
-  const gap = 20
-
-  // Calculate position to the right of original
-  // onAddImageAt centers at given position, so calculate center of new position
-  const positionX = imageItem.x + visualWidth + gap + visualWidth / 2
-  const positionY = imageItem.y + visualHeight / 2
-
+  const { cropSrc: _cropSrc, cropSrcFileSize: _cropSrcFileSize, ...rest } = imageItem
   return {
+    ...rest,
     id,
-    url,
-    pixelWidth,
-    pixelHeight,
-    visualWidth,
-    visualHeight,
-    positionX,
-    positionY,
-    name: imageItem.name || 'Image',
+    src: url,
+    x: imageItem.x + offsetX,
+    y: imageItem.y + offsetY,
     fileSize: blob.size,
   }
 }

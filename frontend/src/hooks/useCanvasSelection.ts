@@ -14,6 +14,8 @@ interface UseCanvasSelectionParams {
   applyCrop: () => void
   croppingVideoId: string | null
   applyOrCancelVideoCrop: () => void
+  multiCropActive: boolean
+  applyMultiCrop: () => void
 }
 
 export interface CanvasSelection {
@@ -37,6 +39,8 @@ export function useCanvasSelection({
   applyCrop,
   croppingVideoId,
   applyOrCancelVideoCrop,
+  multiCropActive,
+  applyMultiCrop,
 }: UseCanvasSelectionParams): CanvasSelection {
   const [selectionRect, setSelectionRect] = useState<SelectionRect | null>(null)
   const [isSelecting, setIsSelecting] = useState(false)
@@ -58,6 +62,13 @@ export function useCanvasSelection({
     if (croppingVideoId) {
       if (e.target === stageRef.current) {
         applyOrCancelVideoCrop()
+      }
+      return
+    }
+    // If in multi-crop mode and clicking on empty canvas, apply crop
+    if (multiCropActive) {
+      if (e.target === stageRef.current) {
+        applyMultiCrop()
       }
       return
     }
