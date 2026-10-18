@@ -90,7 +90,11 @@ export function usePromptExecution({
     setRunningPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
+    // In selection order: click order, or reading order for a marquee
+    const selectedItems = selectedIds
+      .filter((id) => id !== promptId)
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is CanvasItem => !!item)
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
@@ -319,7 +323,11 @@ export function usePromptExecution({
     setRunningImageGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
-    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
+    // In selection order: click order, or reading order for a marquee
+    const selectedItems = selectedIds
+      .filter((id) => id !== promptId)
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is CanvasItem => !!item)
 
     // Convert to ContentItem format for the API
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
@@ -460,6 +468,7 @@ export function usePromptExecution({
     setRunningHtmlGenPromptIds((prev) => new Set(prev).add(promptId))
 
     // Gather selected items (excluding the prompt itself)
+    // Always in reading order (top to bottom, left to right), however the items were selected
     const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id) && item.id !== promptId))
 
     // Convert to spatial JSON format (images use placeholder IDs to keep prompt small)
@@ -543,7 +552,10 @@ export function usePromptExecution({
     save: boolean,
   ) => {
     // Gather all selected items as context
-    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id)))
+    // In selection order: click order, or reading order for a marquee
+    const selectedItems = selectedIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is CanvasItem => !!item)
 
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
       if (item.type === 'text') {
@@ -713,7 +725,10 @@ export function usePromptExecution({
     outputPos: { x: number; y: number },
     save: boolean,
   ) => {
-    const selectedItems = sortByReadingOrder(items.filter((item) => selectedIds.includes(item.id)))
+    // In selection order: click order, or reading order for a marquee
+    const selectedItems = selectedIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is CanvasItem => !!item)
 
     const contentItems: ContentItem[] = (await Promise.all(selectedItems.map(async (item) => {
       if (item.type === 'text') {

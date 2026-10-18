@@ -250,9 +250,12 @@ export function useCodingRobotManager({
     const robot = items.find((item): item is CodingRobotItem => item.id === itemId && item.type === 'coding-robot')
     if (!robot || !activeSceneId) return
 
-    // Selected items (other than the robot) go along as context
-    const contentItems: ContentItem[] = items
-      .filter((item) => selectedIds.includes(item.id) && item.id !== itemId)
+    // Selected items (other than the robot) go along as context, in selection order: click order,
+    // or reading order for a marquee
+    const contentItems: ContentItem[] = selectedIds
+      .filter((id) => id !== itemId)
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is CanvasItem => !!item)
       .map((item): ContentItem => {
         if (item.type === 'text') {
           // A message taken from the selected text already has it
