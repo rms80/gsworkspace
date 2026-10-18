@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { PROMPT_THEME, IMAGE_GEN_PROMPT_THEME } from '../../../constants/canvas'
+import { STATUS_BAR_HEIGHT } from '../../StatusBar'
 
 export type QuickPromptMode = 'prompt' | 'image-gen-prompt'
 
+// Space between the popup and the status bar (which is fixed over the bottom of the window)
+const BOTTOM_GAP = 20
+
 interface QuickPromptOverlayProps {
   mode: QuickPromptMode
-  screenPos: { x: number; y: number }
+  /** The canvas area; the popup opens centered at its bottom */
+  viewportRef: React.RefObject<HTMLDivElement>
   contextSummaryLines?: string[]
   onRun: (text: string) => void
   onRunAndSave: (text: string) => void
@@ -14,7 +19,7 @@ interface QuickPromptOverlayProps {
 
 export default function QuickPromptOverlay({
   mode,
-  screenPos,
+  viewportRef,
   contextSummaryLines,
   onRun,
   onRunAndSave,
@@ -22,6 +27,37 @@ export default function QuickPromptOverlay({
 }: QuickPromptOverlayProps) {
   const [text, setText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  // Where the user dragged the popup to by its header; null until then
+  const [dragPos, setDragPos] = useState<{ left: number; top: number } | null>(null)
+  const endDragRef = useRef<(() => void) | null>(null)
+
+  // Stop listening for a drag in progress if the popup closes mid-drag
+  useEffect(() => () => endDragRef.current?.(), [])
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0 || !popupRef.current) return
+    // Keep focus (and the caret) in the textarea
+    e.preventDefault()
+    const rect = popupRef.current.getBoundingClientRect()
+    const grabX = e.clientX - rect.left
+    const grabY = e.clientY - rect.top
+    const onMove = (ev: MouseEvent) => {
+      // Keep the whole popup on screen
+      setDragPos({
+        left: Math.min(Math.max(0, ev.clientX - grabX), window.innerWidth - rect.width),
+        top: Math.min(Math.max(0, ev.clientY - grabY), window.innerHeight - rect.height),
+      })
+    }
+    const endDrag = () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', endDrag)
+      endDragRef.current = null
+    }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', endDrag)
+    endDragRef.current = endDrag
+  }
 
   const theme = mode === 'prompt' ? PROMPT_THEME : IMAGE_GEN_PROMPT_THEME
   const title = mode === 'prompt' ? 'Quick Prompt' : 'Quick Image Prompt'
@@ -69,19 +105,16 @@ export default function QuickPromptOverlay({
     }
   }
 
-  // Position the popup so it doesn't overflow the viewport
-  const width = 360
-  const estimatedHeight = 200
-  let left = screenPos.x
-  let top = screenPos.y
-  if (left + width > window.innerWidth - 16) {
-    left = window.innerWidth - width - 16
-  }
-  if (top + estimatedHeight > window.innerHeight - 16) {
-    top = window.innerHeight - estimatedHeight - 16
-  }
-  if (left < 16) left = 16
-  if (top < 16) top = 16
+  // Centered over the canvas area, just above the status bar, anchored by its bottom edge so it
+  // grows upward (the textarea resizes); where it was dragged to, once moved
+  const width = 720
+  const viewport = viewportRef.current?.getBoundingClientRect()
+  const placement: React.CSSProperties = dragPos
+    ? { left: dragPos.left, top: dragPos.top }
+    : {
+        left: Math.max(16, viewport ? viewport.left + (viewport.width - width) / 2 : (window.innerWidth - width) / 2),
+        bottom: STATUS_BAR_HEIGHT + BOTTOM_GAP,
+      }
 
   return (
     <>
@@ -100,10 +133,10 @@ export default function QuickPromptOverlay({
 
       {/* Popup */}
       <div
+        ref={popupRef}
         style={{
           position: 'fixed',
-          left,
-          top,
+          ...placement,
           width,
           zIndex: 1000,
           borderRadius: 8,
@@ -116,9 +149,13 @@ export default function QuickPromptOverlay({
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
+        {/* Header: drag it to move the popup */}
         <div
+          onMouseDown={handleHeaderMouseDown}
+          title="Drag to move"
           style={{
+            cursor: 'move',
+            userSelect: 'none',
             padding: '6px 12px',
             backgroundColor: theme.headerBg,
             color: theme.headerText,

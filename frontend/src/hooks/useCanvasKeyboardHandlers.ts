@@ -1,7 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import Konva from 'konva'
 import { CanvasItem, ImageItem, VideoItem, TextFileItem, CodingRobotItem } from '../types'
 import { TEXTFILE_HEADER_HEIGHT, CODING_ROBOT_HEADER_HEIGHT, CODING_ROBOT_ACTIVITY_PANEL_WIDTH, CODING_ROBOT_ACTIVITY_PANEL_GAP } from '../constants/canvas'
+
+// Two spacebar taps this close together open the quick prompt
+const SPACE_DOUBLE_TAP_MS = 300
 
 interface UseKeyboardHandlersProps {
   // Editing state
@@ -503,14 +506,34 @@ export function useCanvasKeyboardHandlers(props: UseKeyboardHandlersProps) {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [isEditing, screenToCanvas, mousePos, onAddPrompt, onAddImageGenPrompt, onSelectItems, promptEditing, imageGenPromptEditing])
 
-  // 'Q' hotkey to open quick prompt, Shift+Q for quick image-gen prompt
+  // When the spacebar was last tapped, for double-tap detection
+  const lastSpaceTapRef = useRef(0)
+
+  // 'Q' hotkey (or a spacebar double-tap) to open quick prompt, Shift+Q for quick image-gen prompt
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null
       if (
-        document.activeElement?.tagName === 'INPUT' ||
-        document.activeElement?.tagName === 'TEXTAREA'
+        active?.tagName === 'INPUT' ||
+        active?.tagName === 'TEXTAREA' ||
+        active?.isContentEditable
       ) return
       if (isEditing) return
+
+      if (e.key === ' ' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        // Holding the key down isn't a tap
+        if (e.repeat) return
+        const now = performance.now()
+        if (now - lastSpaceTapRef.current < SPACE_DOUBLE_TAP_MS) {
+          lastSpaceTapRef.current = 0
+          e.preventDefault()
+          const canvasPos = screenToCanvas(mousePos.x, mousePos.y)
+          onOpenQuickPrompt('prompt', { x: mousePos.x, y: mousePos.y }, canvasPos)
+        } else {
+          lastSpaceTapRef.current = now
+        }
+        return
+      }
 
       if (e.key === 'Q' && e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault()

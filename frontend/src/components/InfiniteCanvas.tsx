@@ -2855,7 +2855,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       {quickPrompt && (
         <QuickPromptOverlay
           mode={quickPrompt.mode}
-          screenPos={quickPrompt.screenPos}
+          viewportRef={containerRef}
           contextSummaryLines={getPromptContextSummary(items, selectedIds, '')}
           onRun={(text) => {
             const isImage = quickPrompt.mode === 'image-gen-prompt'
