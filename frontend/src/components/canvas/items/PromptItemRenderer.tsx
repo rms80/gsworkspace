@@ -114,8 +114,6 @@ export default function PromptItemRenderer({
         width={item.width}
         height={item.height}
         fill={theme.itemBg}
-        stroke={borderColor}
-        strokeWidth={borderWidth}
         cornerRadius={4}
       />
       {/* Header background */}
@@ -227,6 +225,15 @@ export default function PromptItemRenderer({
         fill={theme.contentText}
         onDblClick={() => editing.handleTextDblClick(item.id)}
         visible={!(isEditingThis && editing.editingField === 'text')}
+      />
+      {/* Border, drawn last so the header doesn't cover it */}
+      <Rect
+        width={item.width}
+        height={item.height}
+        stroke={borderColor}
+        strokeWidth={borderWidth}
+        cornerRadius={4}
+        listening={false}
       />
     </Group>
   )

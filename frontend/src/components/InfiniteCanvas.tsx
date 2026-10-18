@@ -3,7 +3,10 @@ import { Stage, Layer, Rect, Group, Text, Transformer } from 'react-konva'
 import Konva from 'konva'
 import { v4 as uuidv4 } from 'uuid'
 import { marked } from 'marked'
-import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, Model3DItem, SplatItem, ActivityMessage } from '../types'
+import { CanvasItem, ImageItem, VideoItem, PromptItem, ImageGenPromptItem, HTMLGenPromptItem, PdfItem, TextFileItem, Model3DItem, SplatItem, CodingRobotItem } from '../types'
+import { CodingRobotSessionView } from '../hooks/useCodingRobotManager'
+import { pickRobotFolder } from '../utils/robotFolder'
+import { openServerFolder } from '../api/agentSessions'
 import { config } from '../config'
 import { uploadImage } from '../api/images'
 import { uploadPdf, uploadPdfThumbnail } from '../api/pdfs'
@@ -50,6 +53,7 @@ import TextFileLabelEditingOverlay from './canvas/overlays/TextFileLabelEditingO
 import VideoOverlay from './canvas/overlays/VideoOverlay'
 import GifOverlay from './canvas/overlays/GifOverlay'
 import CodingRobotOverlay from './canvas/overlays/CodingRobotOverlay'
+import CodingRobotLabelEditingOverlay from './canvas/overlays/CodingRobotLabelEditingOverlay'
 import VideoCropOverlay from './canvas/overlays/VideoCropOverlay'
 import ImageCropOverlay from './canvas/overlays/ImageCropOverlay'
 import MultiCropOverlay from './canvas/overlays/MultiCropOverlay'
@@ -114,12 +118,11 @@ interface InfiniteCanvasProps {
   runningHtmlGenPromptIds: Set<string>
   onQuickPrompt?: (text: string, outputPos: { x: number; y: number }, save: boolean) => Promise<void>
   onQuickImageGenPrompt?: (text: string, outputPos: { x: number; y: number }, save: boolean) => Promise<void>
-  onSendCodingRobotMessage: (itemId: string, message: string) => void
+  onSendCodingRobotMessage: (itemId: string, message: string, messageFromSelection: boolean) => void
   onStopCodingRobotMessage?: (itemId: string) => void
-  onClearCodingRobotChat?: (itemId: string) => void
+  onNewCodingRobotSession?: (itemId: string) => void
   runningCodingRobotIds: Set<string>
-  reconnectingCodingRobotIds: Set<string>
-  codingRobotActivity: Map<string, ActivityMessage[][]>
+  codingRobotSessions: Map<string, CodingRobotSessionView>
   isOffline: boolean
   onAddText?: (x?: number, y?: number) => void
   onAddPrompt?: (x?: number, y?: number) => string
@@ -176,7 +179,7 @@ function setupIframeCtrlWheel(el: HTMLIFrameElement | null) {
   if (el.contentDocument?.readyState === 'complete') attach()
 }
 
-const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateItems, onSetResolutions, onBakeVideoEdits, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onClearCodingRobotChat, runningCodingRobotIds, reconnectingCodingRobotIds, codingRobotActivity, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
+const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function InfiniteCanvas({ items, selectedIds, sceneId, onUpdateItem, onSelectItems, onAddTextAt, onAddImageAt, onAddVideoAt, onDeleteSelected, onCombineTextItems, onBakeCrop, onDuplicateItems, onSetResolutions, onBakeVideoEdits, onRunPrompt, runningPromptIds, onRunImageGenPrompt, runningImageGenPromptIds, onRunHtmlGenPrompt, runningHtmlGenPromptIds, onSendCodingRobotMessage, onStopCodingRobotMessage, onNewCodingRobotSession, runningCodingRobotIds, codingRobotSessions, isOffline, onAddText, onAddPrompt, onAddImageGenPrompt, onAddHtmlGenPrompt, onAddCodingRobot, videoPlaceholders, onUploadVideoAt, onBatchTransform, onAddPdfAt, onTogglePdfMinimized, onAddTextFileAt, onToggleTextFileMinimized, onAddModel3DAt, onToggleModel3DMinimized, onAddSplatAt, onToggleSplatMinimized, onAddEmbedVideoAt, onQuickPrompt, onQuickImageGenPrompt }, ref) {
   // Refs
   const containerRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<Konva.Stage>(null)
@@ -510,6 +513,35 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const [videoItemTransforms, setVideoItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [gifItemTransforms, setGifItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
   const [codingRobotItemTransforms, setCodingRobotItemTransforms] = useState<Map<string, { x: number; y: number; width: number; height: number }>>(new Map())
+
+  // Coding Robot folder popup (typing the path): which robot, and why it opened
+  const [robotFolderPrompt, setRobotFolderPrompt] = useState<{ itemId: string; notice: string | null; mode: 'edit' | 'locked' | 'message' } | null>(null)
+  const closeRobotFolderPrompt = useCallback(() => setRobotFolderPrompt(null), [])
+  const openRobotFolderPrompt = useCallback((itemId: string) => setRobotFolderPrompt({ itemId, notice: null, mode: 'edit' }), [])
+
+  // Clicking the folder path: show it in the server's file manager
+  const handleRobotOpenFolder = useCallback((item: CodingRobotItem, folder: string) => {
+    openServerFolder(folder).catch((error) => {
+      setRobotFolderPrompt({ itemId: item.id, notice: error instanceof Error ? error.message : 'Could not open the folder.', mode: 'message' })
+    })
+  }, [])
+
+  // The folder button: the server's folder dialog, or the popup if it can't show one
+  const handleRobotFolderClick = useCallback(async (item: CodingRobotItem) => {
+    if (item.agentSessionId) {
+      setRobotFolderPrompt({ itemId: item.id, notice: null, mode: 'locked' })
+      return
+    }
+    const current = item.rootDirectory ?? ''
+    const result = await pickRobotFolder(current)
+    if (result.status === 'picked') {
+      if (result.folder !== current) onUpdateItem(item.id, { rootDirectory: result.folder })
+    } else if (result.status === 'unavailable') {
+      setRobotFolderPrompt({ itemId: item.id, notice: "The server can't show a folder dialog, so type the path instead.", mode: 'edit' })
+    } else if (result.status === 'failed') {
+      setRobotFolderPrompt({ itemId: item.id, notice: result.message, mode: 'edit' })
+    }
+  }, [onUpdateItem])
   const [editingHtmlLabelId, setEditingHtmlLabelId] = useState<string | null>(null)
   const htmlLabelInputRef = useRef<HTMLInputElement>(null)
   const [editingVideoLabelId, setEditingVideoLabelId] = useState<string | null>(null)
@@ -528,6 +560,8 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const splatContextMenuState = useMenuState<{ splatId: string }>()
   const [splatResetKeys, setSplatResetKeys] = useState<Map<string, number>>(new Map())
   const [editingTextFileLabelId, setEditingTextFileLabelId] = useState<string | null>(null)
+  const [editingRobotLabelId, setEditingRobotLabelId] = useState<string | null>(null)
+  const robotLabelInputRef = useRef<HTMLInputElement>(null)
   const textFileLabelInputRef = useRef<HTMLInputElement>(null)
   // Cache fetched text file content (keyed by item src URL)
   const [textFileContents, setTextFileContents] = useState<Map<string, string>>(new Map())
@@ -1239,6 +1273,32 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
     onToggleSplatMinimized?.(id)
   }, [onToggleSplatMinimized])
 
+  // Coding robot label editing handlers
+  const handleRobotLabelDblClick = (id: string) => {
+    setEditingRobotLabelId(id)
+    setTimeout(() => {
+      robotLabelInputRef.current?.focus()
+      robotLabelInputRef.current?.select()
+    }, 0)
+  }
+
+  const handleRobotLabelBlur = () => {
+    if (editingRobotLabelId && robotLabelInputRef.current) {
+      onUpdateItem(editingRobotLabelId, { label: robotLabelInputRef.current.value })
+    }
+    setEditingRobotLabelId(null)
+  }
+
+  const handleRobotLabelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') setEditingRobotLabelId(null)
+    else if (e.key === 'Enter') handleRobotLabelBlur()
+  }
+
+  const editingRobotItem = (() => {
+    const item = editingRobotLabelId ? items.find((i) => i.id === editingRobotLabelId) : undefined
+    return item?.type === 'coding-robot' ? item : null
+  })()
+
   // Text file item label editing handlers
   const handleTextFileLabelDblClick = (id: string) => {
     setEditingTextFileLabelId(id)
@@ -1473,6 +1533,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 pulsePhase={pulsePhase}
                 onItemClick={handleItemClick}
                 onUpdateItem={onUpdateItem}
+                onFolderClick={handleRobotFolderClick}
+                onOpenFolder={handleRobotOpenFolder}
+                isEditingLabel={editingRobotLabelId === item.id}
+                onLabelDblClick={handleRobotLabelDblClick}
+                sessionFolder={codingRobotSessions.get(item.id)?.session?.cwd}
                 setCodingRobotItemTransforms={setCodingRobotItemTransforms}
               />
             )
@@ -2262,16 +2327,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
                 stageScale={stageScale}
                 stagePos={stagePos}
                 isRunning={runningCodingRobotIds.has(item.id)}
-                isReconnecting={reconnectingCodingRobotIds.has(item.id)}
                 isSelected={selectedIds.includes(item.id)}
                 isAnyDragActive={isAnyDragActive}
                 transform={transform}
                 selectedTextContent={selectedTextContent}
                 contextSummaryLines={promptContextSummaries[item.id]}
-                activitySteps={codingRobotActivity.get(item.id) || []}
+                sessionView={codingRobotSessions.get(item.id)}
                 onSendMessage={onSendCodingRobotMessage}
                 onStopMessage={onStopCodingRobotMessage}
-                onClearChat={onClearCodingRobotChat}
+                onNewSession={onNewCodingRobotSession}
+                folderPrompt={robotFolderPrompt?.itemId === item.id ? robotFolderPrompt : null}
+                onOpenFolderPrompt={openRobotFolderPrompt}
+                onCloseFolderPrompt={closeRobotFolderPrompt}
                 onUpdateItem={onUpdateItem}
                 onSelectItems={onSelectItems}
                 selectedIds={selectedIds}
@@ -2531,6 +2598,18 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         />
       )}
 
+      {/* Coding robot label editing overlay */}
+      {editingRobotItem && (
+        <CodingRobotLabelEditingOverlay
+          item={editingRobotItem}
+          inputRef={robotLabelInputRef}
+          stageScale={stageScale}
+          stagePos={stagePos}
+          onBlur={handleRobotLabelBlur}
+          onKeyDown={handleRobotLabelKeyDown}
+        />
+      )}
+
       {/* Text file label editing overlay */}
       {editingTextFileItem && (
         <TextFileLabelEditingOverlay
@@ -2776,7 +2855,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
       {quickPrompt && (
         <QuickPromptOverlay
           mode={quickPrompt.mode}
-          screenPos={quickPrompt.screenPos}
+          viewportRef={containerRef}
           contextSummaryLines={getPromptContextSummary(items, selectedIds, '')}
           onRun={(text) => {
             const isImage = quickPrompt.mode === 'image-gen-prompt'

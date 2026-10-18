@@ -1,7 +1,13 @@
 import { useRef, useEffect, useLayoutEffect, useState, useCallback } from 'react'
-import { CodingRobotItem, ChatMessage, ActivityMessage } from '../../../types'
+import { CodingRobotItem, ChatMessage, ActivityMessage, CodingAgent, AgentPermissions, LLMModel } from '../../../types'
+import { CodingRobotSessionView } from '../../../hooks/useCodingRobotManager'
+import CodingRobotFolderPopup from './CodingRobotFolderPopup'
+import { browserIsOnServer, copyText } from '../../../utils/robotFolder'
+import { openAgentSessionTerminal } from '../../../api/agentSessions'
+import ChatMarkdown from './ChatMarkdown'
 import {
   CODING_ROBOT_HEADER_HEIGHT,
+  CODING_ROBOT_BORDER_WIDTH,
   CODING_ROBOT_INPUT_HEIGHT,
   CODING_ROBOT_SEND_BUTTON_WIDTH,
   CODING_ROBOT_THEME,
@@ -9,10 +15,14 @@ import {
   CODING_ROBOT_ACTIVITY_PANEL_GAP,
   Z_IFRAME_OVERLAY,
   BUTTON_HEIGHT,
+  CODING_AGENT_LABELS,
+  CODING_AGENT_MODELS,
+  LLM_MODEL_LABELS,
 } from '../../../constants/canvas'
 
 const ACTIVITY_BORDER_COLORS: Record<ActivityMessage['type'], string> = {
   tool_use: '#3b82f6',
+  tool_result: '#6b7280',
   assistant_text: '#22c55e',
   status: '#f59e0b',
   error: '#ef4444',
@@ -23,16 +33,19 @@ interface CodingRobotOverlayProps {
   stageScale: number
   stagePos: { x: number; y: number }
   isRunning: boolean
-  isReconnecting?: boolean
   isSelected: boolean
   isAnyDragActive: boolean
   transform?: { x: number; y: number; width: number; height: number }
   selectedTextContent: string
   contextSummaryLines?: string[]
-  activitySteps: ActivityMessage[][]
-  onSendMessage: (itemId: string, message: string) => void
+  sessionView?: CodingRobotSessionView
+  onSendMessage: (itemId: string, message: string, messageFromSelection: boolean) => void
   onStopMessage?: (itemId: string) => void
-  onClearChat?: (itemId: string) => void
+  onNewSession?: (itemId: string) => void
+  /** The folder popup, when open for this robot */
+  folderPrompt?: { notice: string | null; mode: 'edit' | 'locked' | 'message' } | null
+  onOpenFolderPrompt?: (itemId: string) => void
+  onCloseFolderPrompt?: () => void
   onUpdateItem: (id: string, changes: Partial<CodingRobotItem>) => void
   onSelectItems: (ids: string[]) => void
   selectedIds: string[]
@@ -43,21 +56,24 @@ export default function CodingRobotOverlay({
   stageScale,
   stagePos,
   isRunning,
-  isReconnecting,
   isSelected,
   isAnyDragActive,
   transform,
   selectedTextContent,
   contextSummaryLines,
-  activitySteps,
+  sessionView,
   onSendMessage,
   onStopMessage,
-  onClearChat,
+  onNewSession,
+  folderPrompt,
+  onOpenFolderPrompt,
+  onCloseFolderPrompt,
   onUpdateItem,
   onSelectItems,
   selectedIds,
 }: CodingRobotOverlayProps) {
   const mainContainerRef = useRef<HTMLDivElement>(null)
+  const inputAreaRef = useRef<HTMLDivElement>(null)
   const activityContainerRef = useRef<HTMLDivElement>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const activityScrollRef = useRef<HTMLDivElement>(null)
@@ -69,6 +85,10 @@ export default function CodingRobotOverlay({
   const chatAtBottomRef = useRef(true)
   const activityAtBottomRef = useRef(true)
   const [copyFeedback, setCopyFeedback] = useState(false)
+  const [sessionIdHover, setSessionIdHover] = useState(false)
+  const [sessionIdCopied, setSessionIdCopied] = useState(false)
+  // A problem from a menu action, shown with the session's own notices
+  const [localNotice, setLocalNotice] = useState<string | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [inputText, setInputText] = useState(item.text)
   const [viewStepIndex, setViewStepIndex] = useState(0)
@@ -83,6 +103,14 @@ export default function CodingRobotOverlay({
   }
 
   const theme = CODING_ROBOT_THEME
+  const agent: CodingAgent = item.agent ?? 'claude-code'
+  const agentLabel = CODING_AGENT_LABELS[agent]
+  const session = sessionView?.session ?? null
+  // Settings apply to a session when it starts
+  const settingsLocked = !!item.agentSessionId || isRunning
+  const activitySteps = sessionView?.activitySteps ?? []
+  const chatMessages = [...item.chatHistory, ...(sessionView?.messages ?? [])]
+  const notice = localNotice ?? sessionView?.notice ?? null
   const x = transform?.x ?? item.x
   const y = transform?.y ?? item.y
   const width = transform?.width ?? item.width
@@ -92,6 +120,8 @@ export default function CodingRobotOverlay({
   const displayHeight = height * stageScale
   const left = x * stageScale + stagePos.x
   const top = (y + CODING_ROBOT_HEADER_HEIGHT) * stageScale + stagePos.y
+  // Clear of the inner half of the canvas border on the sides and bottom
+  const borderInset = (CODING_ROBOT_BORDER_WIDTH / 2) * stageScale
 
   const totalSteps = activitySteps.length
   const currentMessages = totalSteps > 0 ? activitySteps[viewStepIndex] || [] : []
@@ -127,7 +157,7 @@ export default function CodingRobotOverlay({
   useEffect(() => {
     const el = chatEndRef.current?.parentElement
     if (el) el.scrollTop = el.scrollHeight
-  }, [item.chatHistory.length])
+  }, [chatMessages.length])
 
   // Auto-scroll activity panel when viewing latest step
   useEffect(() => {
@@ -197,9 +227,12 @@ export default function CodingRobotOverlay({
 
   const handleSend = () => {
     if (!canSend) return
-    const message = selectedTextContent || inputText.trim()
+    // Typed text, or else the selected text
+    const typed = inputText.trim()
+    const message = typed || selectedTextContent
     if (!message) return
-    onSendMessage(item.id, message)
+    setLocalNotice(null)
+    onSendMessage(item.id, message, !typed)
     setInputText('')
   }
 
@@ -214,11 +247,21 @@ export default function CodingRobotOverlay({
     setInputText(e.target.value)
   }
 
-  const handleCopySessionId = () => {
-    if (!item.sessionId) return
-    navigator.clipboard.writeText(item.sessionId).then(() => {
+  const copyToClipboard = (text: string | null | undefined) => {
+    if (!text) return
+    void copyText(text).then((ok) => {
+      if (!ok) return
       setCopyFeedback(true)
       setTimeout(() => setCopyFeedback(false), 1500)
+    })
+  }
+
+  const copySessionId = () => {
+    if (!session?.cliSessionId) return
+    void copyText(session.cliSessionId).then((ok) => {
+      if (!ok) return
+      setSessionIdCopied(true)
+      setTimeout(() => setSessionIdCopied(false), 1200)
     })
   }
 
@@ -256,11 +299,35 @@ export default function CodingRobotOverlay({
 
   const statusBarHeight = 18 * stageScale
   const inputAreaHeight = CODING_ROBOT_INPUT_HEIGHT * stageScale
-  const chatAreaHeight = displayHeight - inputAreaHeight - statusBarHeight
+  const chatAreaHeight = displayHeight - borderInset - inputAreaHeight - statusBarHeight
 
   const activityPanelWidth = liveWidthPx ?? (item.activityPanelWidth ?? CODING_ROBOT_ACTIVITY_PANEL_WIDTH) * stageScale
   const activityPanelGap = CODING_ROBOT_ACTIVITY_PANEL_GAP * stageScale
   const activityPanelLeft = left + displayWidth + activityPanelGap
+
+  const selectStyle: React.CSSProperties = {
+    height: `${14 * stageScale}px`,
+    fontSize: `${9 * stageScale}px`,
+    padding: 0,
+    border: '1px solid #bbb',
+    borderRadius: `${3 * stageScale}px`,
+    background: 'transparent',
+    color: '#666',
+    minWidth: 0,
+    cursor: 'pointer',
+  }
+  const menuItemStyle = (disabled: boolean): React.CSSProperties => ({
+    display: 'block',
+    width: '100%',
+    border: 'none',
+    background: 'transparent',
+    cursor: disabled ? 'default' : 'pointer',
+    padding: `${4 * stageScale}px ${8 * stageScale}px`,
+    fontSize: `${9 * stageScale}px`,
+    color: disabled ? '#aaa' : '#333',
+    textAlign: 'left',
+    whiteSpace: 'nowrap',
+  })
 
   const navBtnStyle: React.CSSProperties = {
     border: 'none',
@@ -282,19 +349,20 @@ export default function CodingRobotOverlay({
       <div
         ref={mainContainerRef}
         onMouseDown={(e) => {
-          if (!isSelected) {
-            e.stopPropagation()
-            // Add to selection (don't replace) so other selected items
-            // remain as context when clicking Send
-            onSelectItems([...selectedIds, item.id])
-          }
+          if (e.button !== 0 || isSelected) return
+          e.stopPropagation()
+          // The input row leaves the selection alone: selected items are the message's context
+          if (inputAreaRef.current?.contains(e.target as Node)) return
+          // Elsewhere, select like a click on the header: replace, or add with Shift/Ctrl
+          const add = e.shiftKey || e.ctrlKey || e.metaKey
+          onSelectItems(add ? [...selectedIds, item.id] : [item.id])
         }}
         style={{
           position: 'absolute',
-          left,
+          left: left + borderInset,
           top,
-          width: displayWidth,
-          height: displayHeight,
+          width: displayWidth - 2 * borderInset,
+          height: displayHeight - borderInset,
           overflow: 'hidden',
           borderRadius: '0 0 4px 4px',
           zIndex: Z_IFRAME_OVERLAY,
@@ -320,9 +388,61 @@ export default function CodingRobotOverlay({
               flexShrink: 0,
             }}
           >
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-              Session: {item.sessionId ?? 'not initialized'}
-            </span>
+            {settingsLocked ? (
+              <span
+                title={session ? `Folder: ${session.cwd}${session.cliSessionId ? `\nSession: ${session.cliSessionId}` : ''}` : undefined}
+                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}
+              >
+                {agentLabel} · {item.agentModel ? LLM_MODEL_LABELS[item.agentModel] : 'default model'} · {(item.permissions ?? 'safe') === 'full' ? 'full access' : 'safe'}
+                {session?.cliSessionId && (
+                  <>
+                    {' · '}
+                    <span
+                      onClick={copySessionId}
+                      onMouseEnter={() => setSessionIdHover(true)}
+                      onMouseLeave={() => setSessionIdHover(false)}
+                      title={`${session.cliSessionId}\nClick to copy the ${agentLabel} session id (to resume the session in the CLI)`}
+                      style={{ cursor: 'pointer', color: sessionIdHover ? '#444' : undefined }}
+                    >
+                      {sessionIdCopied ? 'Copied' : session.cliSessionId}
+                    </span>
+                  </>
+                )}
+              </span>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', gap: `${3 * stageScale}px`, flex: 1, minWidth: 0 }}>
+                <select
+                  value={agent}
+                  onChange={(e) => onUpdateItem(item.id, { agent: e.target.value as CodingAgent, agentModel: null })}
+                  title="Which agent CLI runs the session"
+                  style={selectStyle}
+                >
+                  {(Object.keys(CODING_AGENT_LABELS) as CodingAgent[]).map((a) => (
+                    <option key={a} value={a}>{CODING_AGENT_LABELS[a]}</option>
+                  ))}
+                </select>
+                <select
+                  value={item.agentModel ?? ''}
+                  onChange={(e) => onUpdateItem(item.id, { agentModel: (e.target.value || null) as LLMModel | null })}
+                  title="Model (default: the CLI's configured model)"
+                  style={selectStyle}
+                >
+                  <option value="">Default model</option>
+                  {CODING_AGENT_MODELS[agent].map((m) => (
+                    <option key={m} value={m}>{LLM_MODEL_LABELS[m]}</option>
+                  ))}
+                </select>
+                <select
+                  value={item.permissions ?? 'safe'}
+                  onChange={(e) => onUpdateItem(item.id, { permissions: e.target.value as AgentPermissions })}
+                  title={'Safe: Claude Code approves routine actions and blocks risky ones; Codex edits only inside its folder, with sandboxed commands.\nFull access: no checks or sandbox.'}
+                  style={selectStyle}
+                >
+                  <option value="safe">Safe</option>
+                  <option value="full">Full access</option>
+                </select>
+              </div>
+            )}
             <div ref={menuRef} style={{ position: 'relative', flexShrink: 0, marginRight: `${4 * stageScale}px` }}>
               <button
                 onClick={() => setMenuOpen((v) => !v)}
@@ -357,43 +477,85 @@ export default function CodingRobotOverlay({
                   overflow: 'hidden',
                 }}>
                   <button
-                    onClick={() => { handleCopySessionId(); setMenuOpen(false) }}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      border: 'none',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      padding: `${4 * stageScale}px ${8 * stageScale}px`,
-                      fontSize: `${9 * stageScale}px`,
-                      color: '#333',
-                      textAlign: 'left',
-                      whiteSpace: 'nowrap',
-                    }}
-                    onMouseEnter={(e) => { (e.currentTarget).style.background = '#f0f0f0' }}
+                    onClick={() => { copyToClipboard(session?.cliSessionId); setMenuOpen(false) }}
+                    disabled={!session?.cliSessionId}
+                    title={`The ${agentLabel} session id, to resume it in the CLI`}
+                    style={menuItemStyle(!session?.cliSessionId)}
+                    onMouseEnter={(e) => { if (session?.cliSessionId) (e.currentTarget).style.background = '#f0f0f0' }}
                     onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
                   >
                     Copy Session ID
                   </button>
                   <button
-                    onClick={() => { onClearChat?.(item.id); setMenuOpen(false) }}
-                    disabled={isRunning}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      border: 'none',
-                      background: 'transparent',
-                      cursor: isRunning ? 'default' : 'pointer',
-                      padding: `${4 * stageScale}px ${8 * stageScale}px`,
-                      fontSize: `${9 * stageScale}px`,
-                      color: isRunning ? '#aaa' : '#c00',
-                      textAlign: 'left',
-                      whiteSpace: 'nowrap',
+                    onClick={() => { copyToClipboard(session?.cwd); setMenuOpen(false) }}
+                    disabled={!session}
+                    title={session?.cwd}
+                    style={menuItemStyle(!session)}
+                    onMouseEnter={(e) => { if (session) (e.currentTarget).style.background = '#f0f0f0' }}
+                    onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                  >
+                    Copy Folder Path
+                  </button>
+                  {browserIsOnServer() && (() => {
+                    const disabled = !session?.cliSessionId || isRunning
+                    return (
+                      <button
+                        onClick={() => {
+                          setMenuOpen(false)
+                          if (!session) return
+                          setLocalNotice(null)
+                          openAgentSessionTerminal(session.id).catch((error) => {
+                            setLocalNotice(`Could not open the session in a terminal: ${error instanceof Error ? error.message : 'unknown error'}`)
+                          })
+                        }}
+                        disabled={disabled}
+                        title={isRunning
+                          ? 'Wait for the running turn to finish first'
+                          : `Continue this conversation in ${agentLabel} in a terminal window on this computer`}
+                        style={menuItemStyle(disabled)}
+                        onMouseEnter={(e) => { if (!disabled) (e.currentTarget).style.background = '#f0f0f0' }}
+                        onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                      >
+                        Open Session Locally
+                      </button>
+                    )
+                  })()}
+                  {!item.agentSessionId && (
+                    <>
+                      <button
+                        onClick={() => { setMenuOpen(false); onOpenFolderPrompt?.(item.id) }}
+                        title="Type the path of the folder the agent works in"
+                        style={menuItemStyle(false)}
+                        onMouseEnter={(e) => { (e.currentTarget).style.background = '#f0f0f0' }}
+                        onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                      >
+                        Type Folder Path...
+                      </button>
+                      <button
+                        onClick={() => { onUpdateItem(item.id, { rootDirectory: '' }); setMenuOpen(false) }}
+                        disabled={!item.rootDirectory}
+                        title="Give the session a new folder of its own"
+                        style={menuItemStyle(!item.rootDirectory)}
+                        onMouseEnter={(e) => { if (item.rootDirectory) (e.currentTarget).style.background = '#f0f0f0' }}
+                        onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
+                      >
+                        Use Own Folder
+                      </button>
+                    </>
+                  )}
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false)
+                      if (window.confirm(`Start a new session? This conversation will be deleted from the server.`)) {
+                        onNewSession?.(item.id)
+                      }
                     }}
+                    disabled={isRunning}
+                    style={{ ...menuItemStyle(isRunning), color: isRunning ? '#aaa' : '#c00' }}
                     onMouseEnter={(e) => { if (!isRunning) (e.currentTarget).style.background = '#f0f0f0' }}
                     onMouseLeave={(e) => { (e.currentTarget).style.background = 'transparent' }}
                   >
-                    Clear Chat
+                    New Session
                   </button>
                 </div>
               )}
@@ -437,7 +599,7 @@ export default function CodingRobotOverlay({
             background: theme.itemBg,
           }}
         >
-          {item.chatHistory.length === 0 && (
+          {chatMessages.length === 0 && !notice && (
             <div style={{
               color: '#999',
               fontStyle: 'italic',
@@ -445,10 +607,10 @@ export default function CodingRobotOverlay({
               marginTop: `${20 * stageScale}px`,
               fontSize: `${11 * stageScale}px`,
             }}>
-              Send a message to start a conversation with Claude Code
+              Send a message to start a {agentLabel} session
             </div>
           )}
-          {item.chatHistory.map((msg: ChatMessage, i: number) => (
+          {chatMessages.map((msg: ChatMessage, i: number) => (
             <div
               key={i}
               style={{
@@ -469,7 +631,7 @@ export default function CodingRobotOverlay({
                   lineHeight: 1.4,
                 }}
               >
-                {msg.content}
+                {msg.role === 'assistant' ? <ChatMarkdown text={msg.content} /> : msg.content}
               </div>
             </div>
           ))}
@@ -490,11 +652,26 @@ export default function CodingRobotOverlay({
               </div>
             </div>
           )}
+          {notice && (
+            <div style={{
+              margin: `${4 * stageScale}px 0`,
+              padding: `${4 * stageScale}px ${8 * stageScale}px`,
+              borderRadius: `${4 * stageScale}px`,
+              background: '#fdecec',
+              color: '#a11',
+              fontSize: `${11 * stageScale}px`,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}>
+              {notice}
+            </div>
+          )}
           <div ref={chatEndRef} />
         </div>
 
         {/* Input area */}
         <div
+          ref={inputAreaRef}
           style={{
             height: inputAreaHeight,
             display: 'flex',
@@ -564,6 +741,17 @@ export default function CodingRobotOverlay({
         </div>
       </div>
 
+      {folderPrompt && (
+        <CodingRobotFolderPopup
+          current={item.rootDirectory ?? ''}
+          anchor={{ left, top, width: displayWidth }}
+          notice={folderPrompt.notice}
+          mode={folderPrompt.mode}
+          onApply={(folder) => onUpdateItem(item.id, { rootDirectory: folder })}
+          onClose={() => onCloseFolderPrompt?.()}
+        />
+      )}
+
       {/* Activity panel */}
       {showActivity && (
         <div
@@ -619,11 +807,6 @@ export default function CodingRobotOverlay({
               </div>
             ) : (
               <span>Activity</span>
-            )}
-            {isReconnecting && (
-              <span style={{ color: '#f59e0b', fontStyle: 'italic', fontSize: `${9 * stageScale}px` }}>
-                reconnecting...
-              </span>
             )}
             <button
               onClick={() => setShowActivity(false)}

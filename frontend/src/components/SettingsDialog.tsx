@@ -3,6 +3,7 @@ import OfflineModeSettingsTab from './settings/OfflineModeSettingsTab'
 import LocalStorageSettingsTab from './settings/LocalStorageSettingsTab'
 import StorageModeSettingsTab from './settings/StorageModeSettingsTab'
 import ViewportSettingsTab from './settings/ViewportSettingsTab'
+import ExperimentalSettingsTab from './settings/ExperimentalSettingsTab'
 import { StorageMode, getStorageMode } from '../api/storage'
 
 interface SettingsDialogProps {
@@ -11,7 +12,7 @@ interface SettingsDialogProps {
   onStorageModeChange?: (mode: StorageMode) => void
 }
 
-type TabId = 'storage-mode' | 'api-keys' | 'browser-storage' | 'viewport'
+type TabId = 'storage-mode' | 'api-keys' | 'browser-storage' | 'viewport' | 'experimental'
 
 interface TabDef {
   id: TabId
@@ -23,6 +24,7 @@ const tabs: TabDef[] = [
   { id: 'storage-mode', label: 'Storage Mode' },
   { id: 'api-keys', label: 'API Keys' },
   { id: 'browser-storage', label: 'Browser Data' },
+  { id: 'experimental', label: 'Experimental' },
 ]
 
 export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }: SettingsDialogProps) {
@@ -159,6 +161,9 @@ export default function SettingsDialog({ isOpen, onClose, onStorageModeChange }:
             )}
             {activeTab === 'viewport' && (
               <ViewportSettingsTab />
+            )}
+            {activeTab === 'experimental' && (
+              <ExperimentalSettingsTab />
             )}
           </div>
         </div>
