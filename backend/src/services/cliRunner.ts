@@ -5,14 +5,34 @@ import { tmpdir } from 'os'
 import { delimiter, extname, join } from 'path'
 
 /**
- * Runs an AI coding agent's CLI (Claude Code, Codex, ...) as a single-shot headless query.
+ * Runs an AI coding agent's CLI (Claude Code, Codex, ...) headless.
  *
- * Each run gets a fresh, empty temp directory as its working directory, so the agent picks up no
- * project instructions or settings, and anything the CLI needs as files (a system prompt,
- * attachments) is written there first. The directory is deleted afterwards.
+ * Anything the CLI needs as files (a system prompt, attachments) is written to a fresh temp
+ * directory first, which is deleted afterwards. That directory is also the working directory unless
+ * the caller gives one, so a single-shot query picks up no project instructions or settings.
  */
 
 const DEFAULT_TIMEOUT_SECONDS = 600
+
+/**
+ * Variables an agent CLI sets for the processes it runs, which the server inherits when it's
+ * started from inside a Claude Code session (e.g. a dev server launched by Claude Code). Passed on,
+ * they make the CLIs the server runs act as that session's children (an interactive Claude Code
+ * turns off saving its transcript) and give them its messaging socket. User settings
+ * (CLAUDE_CODE_USE_BEDROCK, ...) are left alone.
+ */
+export const INHERITED_SESSION_ENV = [
+  'CLAUDECODE',
+  'CLAUDE_CODE_CHILD_SESSION',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_SESSION_ATTENDED',
+  'CLAUDE_CODE_ENTRYPOINT',
+  'CLAUDE_CODE_EXECPATH',
+  'CLAUDE_CODE_MESSAGING_SOCKET',
+  'CLAUDE_CODE_MESSAGING_TOKEN',
+  'CLAUDE_PID',
+  'CLAUDE_EFFORT',
+]
 
 /** An error whose message is fit to show the user */
 export class CliError extends Error {}
@@ -26,12 +46,16 @@ export interface CliRunOptions {
   command: string
   /** Env var that sets `command`, named in the error when the command isn't found */
   commandEnvVar: string
-  /** Arguments, or a function of the working directory that returns them (for absolute file paths) */
-  args: string[] | ((cwd: string) => string[])
-  /** Files to create in the working directory, by name */
+  /** Working directory; defaults to the temp directory that holds `files` */
+  cwd?: string
+  /** Arguments, or a function of the files directory that returns them (for absolute file paths) */
+  args: string[] | ((filesDir: string) => string[])
+  /** Files to create in the temp files directory, by name */
   files?: Record<string, string | Buffer>
-  /** Files the CLI writes in the working directory to read back into the result, by name */
+  /** Files the CLI writes in the temp files directory to read back into the result, by name */
   outputFiles?: string[]
+  /** Called with each line of stdout as it arrives */
+  onStdoutLine?: (line: string) => void
   stdin?: string
   /** Changes to the CLI's environment (inherited from the server); undefined removes a variable */
   env?: Record<string, string | undefined>
@@ -83,16 +107,18 @@ export async function runCli(options: CliRunOptions): Promise<CliRunResult> {
   if (signal?.aborted) throw abortError()
 
   const command = resolveCommand(options.command)
-  const cwd = await mkdtemp(join(tmpdir(), 'gsworkspace-cli-'))
+  const filesDir = await mkdtemp(join(tmpdir(), 'gsworkspace-cli-'))
+  const cwd = options.cwd ?? filesDir
   try {
     for (const [file, content] of Object.entries(options.files ?? {})) {
-      await writeFile(join(cwd, file), content)
+      await writeFile(join(filesDir, file), content)
     }
-    const args = typeof options.args === 'function' ? options.args(cwd) : options.args
+    const args = typeof options.args === 'function' ? options.args(filesDir) : options.args
 
     const result = await new Promise<Omit<CliRunResult, 'outputFiles'>>((resolve, reject) => {
       const shell = needsShell(command)
       const env = { ...process.env }
+      for (const key of INHERITED_SESSION_ENV) delete env[key]
       for (const [key, value] of Object.entries(options.env ?? {})) {
         if (value === undefined) delete env[key]
         else env[key] = value
@@ -109,7 +135,14 @@ export async function runCli(options: CliRunOptions): Promise<CliRunResult> {
       let stdout = ''
       let stderr = ''
       let failure: Error | null = null
-      child.stdout.setEncoding('utf-8').on('data', (chunk: string) => { stdout += chunk })
+      let partialLine = ''
+      child.stdout.setEncoding('utf-8').on('data', (chunk: string) => {
+        stdout += chunk
+        if (!options.onStdoutLine) return
+        const lines = (partialLine + chunk).split('\n')
+        partialLine = lines.pop() ?? ''
+        for (const line of lines) options.onStdoutLine(line.replace(/\r$/, ''))
+      })
       child.stderr.setEncoding('utf-8').on('data', (chunk: string) => { stderr += chunk })
 
       const kill = (error: Error) => {
@@ -139,6 +172,7 @@ export async function runCli(options: CliRunOptions): Promise<CliRunResult> {
       })
       child.on('close', (exitCode) => {
         cleanup()
+        if (partialLine) options.onStdoutLine?.(partialLine)
         if (failure) reject(failure)
         else resolve({ stdout, stderr, exitCode })
       })
@@ -150,12 +184,12 @@ export async function runCli(options: CliRunOptions): Promise<CliRunResult> {
 
     const outputFiles: Record<string, string> = {}
     for (const file of options.outputFiles ?? []) {
-      const content = await readFile(join(cwd, file), 'utf-8').catch(() => null)
+      const content = await readFile(join(filesDir, file), 'utf-8').catch(() => null)
       if (content !== null) outputFiles[file] = content
     }
     return { ...result, outputFiles }
   } finally {
-    await rm(cwd, { recursive: true, force: true }).catch(() => {})
+    await rm(filesDir, { recursive: true, force: true }).catch(() => {})
   }
 }
 

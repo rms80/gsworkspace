@@ -14,6 +14,7 @@ import configRouter from './routes/config.js'
 import embedRouter from './routes/embed.js'
 import workspacesRouter from './routes/workspaces.js'
 import videoToolsRouter from './routes/videoTools.js'
+import agentSessionsRouter from './routes/agentSessions.js'
 import { keepAlive } from './middleware/keepAlive.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
@@ -195,6 +196,7 @@ app.param('workspace', (req, res, next, value) => {
 // Rate limiters on workspace-prefixed paths
 app.use('/api/w/:workspace/', generalLimiter)
 app.use('/api/w/:workspace/llm', llmLimiter)
+app.use('/api/w/:workspace/agent-sessions/:id/messages', llmLimiter)
 app.use('/api/w/:workspace/items/upload-image', uploadLimiter)
 app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
 
@@ -203,6 +205,7 @@ app.use('/api/w/:workspace/items/upload-video', uploadLimiter)
 app.use('/api/w/:workspace/items', keepAlive(), itemsRouter)
 app.use('/api/w/:workspace/video-tools', keepAlive(), videoToolsRouter)
 app.use('/api/w/:workspace/llm', keepAlive(), llmRouter)
+app.use('/api/w/:workspace/agent-sessions', agentSessionsRouter)
 app.use('/api/w/:workspace/scenes', scenesRouter)
 app.use('/api/w/:workspace/embed', embedRouter)
 

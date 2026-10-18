@@ -3,7 +3,7 @@ import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import { getLlmCapabilities, resolveImageProvider, resolveTextProvider } from '../services/llmRegistry.js'
-import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData, resolveTextFileData } from '../services/llmTypes.js'
+import { LLMRequestItem, resolveItems } from '../services/llmTypes.js'
 import { ImageProvider, TextProvider, itemsToParts } from '../services/llmProvider.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -16,41 +16,6 @@ const htmlGenSystemPromptPath = join(__dirname, '../../prompts/html-gen-system.t
 function loadHtmlGenSystemPrompt(): string {
   return readFileSync(htmlGenSystemPromptPath, 'utf-8')
 }
-
-/**
- * Resolve LLMRequestItems into ResolvedContentItems by loading image data from storage.
- */
-async function resolveItems(workspace: string, items: LLMRequestItem[]): Promise<ResolvedContentItem[]> {
-  const resolved: ResolvedContentItem[] = []
-  for (const item of items) {
-    if (item.type === 'text') {
-      resolved.push({ type: 'text', text: item.text })
-    } else if (item.type === 'image' && item.id && item.sceneId) {
-      const imageData = await resolveImageData(workspace, item.sceneId, item.id, !!item.useEdited)
-      if (imageData) {
-        resolved.push({ type: 'image', imageData })
-      } else {
-        throw new Error(`Could not resolve image ${item.id} in scene ${item.sceneId}`)
-      }
-    } else if (item.type === 'pdf' && item.id && item.sceneId) {
-      const pdfData = await resolvePdfData(workspace, item.sceneId, item.id)
-      if (pdfData) {
-        resolved.push({ type: 'pdf', pdfData })
-      } else {
-        throw new Error(`Could not resolve PDF ${item.id} in scene ${item.sceneId}`)
-      }
-    } else if (item.type === 'text-file' && item.id && item.sceneId) {
-      const textFileData = await resolveTextFileData(workspace, item.sceneId, item.id, item.fileFormat || 'txt')
-      if (textFileData) {
-        resolved.push({ type: 'text-file', textFileData })
-      } else {
-        throw new Error(`Could not resolve text file ${item.id} in scene ${item.sceneId}`)
-      }
-    }
-  }
-  return resolved
-}
-
 
 /** A signal that aborts if the client disconnects before the response is sent */
 function abortOnDisconnect(res: Response): AbortSignal {

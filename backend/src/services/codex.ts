@@ -21,7 +21,7 @@ export type CodexImageModel = 'codex-imagen'
 export const CODEX_MODELS: readonly CodexModel[] = ['gpt-luna', 'gpt-sol', 'gpt-astra']
 export const CODEX_IMAGE_MODELS: readonly CodexImageModel[] = ['codex-imagen']
 
-const MODEL_IDS: Record<CodexModel, string> = {
+export const MODEL_IDS: Record<CodexModel, string> = {
   'gpt-luna': 'gpt-6-luna',
   'gpt-sol': 'gpt-6.1-sol',
   'gpt-astra': 'gpt-6-astra',
@@ -161,7 +161,7 @@ async function runCodex(options: {
     name: 'Codex',
     command: cliCommand('codex'),
     commandEnvVar: cliCommandEnvVar('codex'),
-    args: (cwd) => [
+    args: (filesDir) => [
       'exec',
       '--ephemeral',
       '--skip-git-repo-check',
@@ -170,10 +170,10 @@ async function runCodex(options: {
       '--color', 'never',
       '--model', options.modelId,
       // Unquoted values aren't valid TOML, so Codex takes them as plain strings
-      ...(options.instructions ? ['-c', `model_instructions_file=${join(cwd, INSTRUCTIONS_FILE)}`] : []),
+      ...(options.instructions ? ['-c', `model_instructions_file=${join(filesDir, INSTRUCTIONS_FILE)}`] : []),
       ...options.disabledFeatures.flatMap((feature) => ['-c', `features.${feature}=false`]),
       '-c', 'web_search=disabled',
-      ...input.images.map((file) => `--image=${join(cwd, file)}`),
+      ...input.images.map((file) => `--image=${join(filesDir, file)}`),
       '--output-last-message', LAST_MESSAGE_FILE,
       '-', // prompt on stdin
     ],

@@ -120,10 +120,13 @@ export interface ChatMessage {
 
 export interface ActivityMessage {
   id: string
-  type: 'tool_use' | 'assistant_text' | 'status' | 'error'
+  type: 'tool_use' | 'tool_result' | 'assistant_text' | 'status' | 'error'
   content: string
   timestamp: string
 }
+
+export type CodingAgent = 'claude-code' | 'codex'
+export type AgentPermissions = 'safe' | 'full'
 
 export interface CodingRobotItem extends BaseItem {
   type: 'coding-robot'
@@ -132,12 +135,20 @@ export interface CodingRobotItem extends BaseItem {
   fontSize: number
   width: number
   height: number
+  /** Conversation from the retired Agent SDK integration; shown read-only until a new session starts */
   chatHistory: ChatMessage[]
+  /** Agent SDK session id from the retired integration (unused) */
   sessionId: string | null
+  /** Backend agent session (see backend/src/services/agentSessions.ts); created on the first message */
+  agentSessionId?: string | null
+  agent?: CodingAgent           // default 'claude-code'
+  agentModel?: LLMModel | null  // null: the CLI's default model
+  permissions?: AgentPermissions // default 'safe'
+  /** The session's working directory on the server; empty for a folder of its own */
   rootDirectory?: string
   showActivity?: boolean
   activityPanelWidth?: number  // canvas units (unscaled)
-  activeRequestId?: string     // backend requestId for SSE reconnection after HMR
+  activeRequestId?: string     // retired
 }
 
 export interface PdfItem extends BaseItem {

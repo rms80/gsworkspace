@@ -177,6 +177,10 @@ interface StoredCodingRobotItem extends StoredItemBase {
   label: string
   text: string
   sessionId?: string | null
+  agentSessionId?: string | null
+  agent?: string
+  agentModel?: string | null
+  permissions?: string
   rootDirectory?: string
   chatHistoryFile?: string
   showActivity?: boolean
@@ -719,6 +723,10 @@ router.post('/:id', async (req, res) => {
           label: item.label,
           text: item.text,
           sessionId: item.sessionId ?? null,
+          agentSessionId: item.agentSessionId || undefined,
+          agent: item.agent || undefined,
+          agentModel: item.agentModel || undefined,
+          permissions: item.permissions || undefined,
           rootDirectory: item.rootDirectory || undefined,
           chatHistoryFile: (item.chatHistory && item.chatHistory.length > 0) ? chatHistoryFile : undefined,
           showActivity: item.showActivity || undefined,
@@ -1277,6 +1285,10 @@ router.get('/:id', async (req, res) => {
             text: item.text,
             chatHistory,
             sessionId: item.sessionId ?? null,
+            agentSessionId: item.agentSessionId ?? null,
+            agent: item.agent,
+            agentModel: item.agentModel ?? null,
+            permissions: item.permissions,
             rootDirectory: item.rootDirectory,
             showActivity: item.showActivity,
             activityPanelWidth: item.activityPanelWidth,

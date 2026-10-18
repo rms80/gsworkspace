@@ -1,4 +1,4 @@
-import { LLMModel, ImageGenModel } from '../types'
+import { LLMModel, ImageGenModel, CodingAgent } from '../types'
 
 // --- Prompt header & button dimensions (shared across all prompt types) ---
 
@@ -10,11 +10,14 @@ export const BUTTON_GAP = 4
 
 // --- Coding Robot dimensions ---
 
-export const CODING_ROBOT_HEADER_HEIGHT = 24
+export const CODING_ROBOT_HEADER_HEIGHT = 28
 export const CODING_ROBOT_INPUT_HEIGHT = 60
 export const CODING_ROBOT_SEND_BUTTON_WIDTH = 50
 export const CODING_ROBOT_ACTIVITY_PANEL_WIDTH = 364
 export const CODING_ROBOT_ACTIVITY_PANEL_GAP = 8
+// The border keeps one width (selection and the running pulse only change its color), so the DOM
+// body overlay can be inset by half of it on the sides and bottom without covering it or leaving a gap
+export const CODING_ROBOT_BORDER_WIDTH = 2
 
 // --- HTML item dimensions ---
 
@@ -218,6 +221,17 @@ export const LLM_MODEL_LABELS: Record<LLMModel, string> = {
   'gpt-astra': 'GPT Astra',
   'gemini-flash': 'Gemini 3 Flash',
   'gemini-pro': 'Gemini 3 Pro',
+}
+
+// Coding Robot agents (backend agent sessions) and the models each takes
+export const CODING_AGENT_LABELS: Record<CodingAgent, string> = {
+  'claude-code': 'Claude Code',
+  'codex': 'Codex',
+}
+
+export const CODING_AGENT_MODELS: Record<CodingAgent, LLMModel[]> = {
+  'claude-code': ['claude-haiku', 'claude-sonnet', 'claude-opus'],
+  'codex': ['gpt-luna', 'gpt-sol', 'gpt-astra'],
 }
 
 export const IMAGE_GEN_MODEL_LABELS: Record<ImageGenModel, string> = {

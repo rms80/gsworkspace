@@ -109,7 +109,12 @@ export function createCodingRobotItem(
     height: opts?.height ?? 350,
     chatHistory: [],
     sessionId: null,
-    rootDirectory: typeof __PROJECT_ROOT__ !== 'undefined' ? __PROJECT_ROOT__ : '',
+    agentSessionId: null,
+    agent: 'claude-code',
+    agentModel: null,
+    permissions: 'safe',
+    // Empty: the session gets a folder of its own
+    rootDirectory: '',
   }
 }
 

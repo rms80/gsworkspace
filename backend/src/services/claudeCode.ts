@@ -13,7 +13,7 @@ import { TextProvider, logRequest, logResponse } from './llmProvider.js'
  */
 
 // Aliases resolve to the latest model of each tier
-const MODEL_ALIASES: Record<ClaudeModel, string> = {
+export const MODEL_ALIASES: Record<ClaudeModel, string> = {
   'claude-haiku': 'haiku',
   'claude-sonnet': 'sonnet',
   'claude-opus': 'opus',

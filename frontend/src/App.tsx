@@ -25,7 +25,6 @@ import { useAuth } from './hooks/useAuth'
 import { useBackgroundOperations } from './contexts/BackgroundOperationsContext'
 import { CanvasItem, ImageItem, VideoItem, Scene, TextFileFormat, Model3DFormat, SplatFormat } from './types'
 import { saveScene, loadScene, listScenes, deleteScene, loadHistory, isOfflineMode, setOfflineMode, getStorageMode, setStorageMode, StorageMode, getContentUrl } from './api/scenes'
-import { deleteActivity } from './utils/activityStorage'
 import { getCodingRobotEnabled } from './utils/experimentalSettings'
 import { resolvePosition, randomFixedPosition, centeredAtPoint } from './utils/itemPositioning'
 import {
@@ -609,11 +608,10 @@ function App() {
 
   const {
     runningCodingRobotIds,
-    reconnectingCodingRobotIds,
-    codingRobotActivity,
+    codingRobotSessions,
     handleSendCodingRobotMessage,
     handleStopCodingRobot,
-    handleClearCodingRobotChat,
+    handleNewCodingRobotSession,
   } = useCodingRobotManager({
     activeSceneId,
     activeScene,
@@ -1062,13 +1060,6 @@ function App() {
       pushChange(new DeleteObjectChange(itemsForHistory[0]))
     } else if (itemsForHistory.length > 1) {
       pushChange(new MultiStepChange(itemsForHistory.map((item) => new DeleteObjectChange(item))))
-    }
-
-    // Clean up IndexedDB activity data for deleted coding robot items
-    for (const item of selectedItems) {
-      if (item.type === 'coding-robot') {
-        deleteActivity(item.id)
-      }
     }
 
     // Clear selection and remove items
@@ -1778,10 +1769,9 @@ function App() {
           runningHtmlGenPromptIds={runningHtmlGenPromptIds}
           onSendCodingRobotMessage={handleSendCodingRobotMessage}
           onStopCodingRobotMessage={handleStopCodingRobot}
-          onClearCodingRobotChat={handleClearCodingRobotChat}
+          onNewCodingRobotSession={handleNewCodingRobotSession}
           runningCodingRobotIds={runningCodingRobotIds}
-          reconnectingCodingRobotIds={reconnectingCodingRobotIds}
-          codingRobotActivity={codingRobotActivity}
+          codingRobotSessions={codingRobotSessions}
           isOffline={isOffline}
           onAddText={addTextItem}
           onAddPrompt={addPromptItem}
