@@ -1,165 +1,100 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
-import { ResolvedContentItem } from './llmTypes.js'
+import { GoogleGenerativeAI, Part } from '@google/generative-ai'
+import { GeneratedImage, ImageProvider, PromptPart, TextProvider, apiErrorMessage, logRequest, logResponse } from './llmProvider.js'
 
 const genAI = new GoogleGenerativeAI(process.env.GSWS_API_KEY_GEMINI || '')
 
-function truncatePrompt(text: string, maxWords = 50): string {
-  const words = text.split(/\s+/)
-  if (words.length <= maxWords) return text
-  return words.slice(0, maxWords).join(' ') + '...'
-}
-
-function logRequest(fn: string, model: string, modelId: string, prompt: string) {
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [request] ${fn} | model=${model} (${modelId}) | prompt: ${truncatePrompt(prompt)}`)
-}
-
-function logResponse(fn: string, response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }, resultLen: number) {
-  const meta = response.usageMetadata
-  const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [response] ${fn} | tokens: ${tokens} | result: ${resultLen} chars`)
-}
-
 export type GeminiModel = 'gemini-flash' | 'gemini-pro'
-export type ImageGenModel = 'gemini-imagen' | 'gemini-flash-imagen'
+export type GeminiImageModel = 'gemini-imagen' | 'gemini-flash-imagen'
+
+export const GEMINI_MODELS: readonly GeminiModel[] = ['gemini-flash', 'gemini-pro']
+export const GEMINI_IMAGE_MODELS: readonly GeminiImageModel[] = ['gemini-imagen', 'gemini-flash-imagen']
 
 const MODEL_IDS: Record<GeminiModel, string> = {
   'gemini-flash': 'gemini-3-flash-preview',
   'gemini-pro': 'gemini-3-pro-preview',
 }
 
-const IMAGE_GEN_MODEL_IDS: Record<ImageGenModel, string> = {
+const IMAGE_GEN_MODEL_IDS: Record<GeminiImageModel, string> = {
   'gemini-imagen': 'gemini-2.0-flash-exp-image-generation',
   'gemini-flash-imagen': 'gemini-2.0-flash-exp-image-generation',
 }
 
-export async function generateHtmlWithGemini(
-  systemPrompt: string,
-  userPrompt: string,
-  model: GeminiModel = 'gemini-flash'
-): Promise<string> {
-  logRequest('generateHtml', model, MODEL_IDS[model], userPrompt)
-
-  const genModel = genAI.getGenerativeModel({
-    model: MODEL_IDS[model],
-    systemInstruction: systemPrompt,
+function toGeminiParts(parts: PromptPart[]): Part[] {
+  return parts.map((part): Part => {
+    if (part.type === 'image') return { inlineData: { mimeType: part.mimeType, data: part.base64 } }
+    if (part.type === 'pdf') return { inlineData: { mimeType: 'application/pdf', data: part.base64 } }
+    return { text: part.text }
   })
-
-  const result = await genModel.generateContent(userPrompt)
-  const response = await result.response
-  const text = response.text()
-  logResponse('generateHtml', response, text.length)
-  return text
 }
 
-export async function generateTextWithGemini(
-  items: ResolvedContentItem[],
-  prompt: string,
-  model: GeminiModel = 'gemini-flash'
-): Promise<string> {
-  const genModel = genAI.getGenerativeModel({ model: MODEL_IDS[model] })
-
-  // Build content parts from canvas items
-  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
-
-  for (const item of items) {
-    if (item.type === 'text' && item.text) {
-      parts.push({ text: `[Text block]: ${item.text}` })
-    } else if (item.type === 'image' && item.imageData) {
-      parts.push({
-        inlineData: {
-          mimeType: item.imageData.mimeType,
-          data: item.imageData.base64,
-        },
-      })
-    } else if (item.type === 'pdf' && item.pdfData) {
-      parts.push({
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: item.pdfData.base64,
-        },
-      })
-    } else if (item.type === 'text-file' && item.textFileData) {
-      parts.push({ text: `[Text file content]:\n${item.textFileData.text}` })
-    }
-  }
-
-  // Add the user's prompt
-  parts.push({ text: `\n\nUser request: ${prompt}` })
-
-  logRequest('generateText', model, MODEL_IDS[model], prompt)
-
-  const result = await genModel.generateContent(parts)
-  const response = await result.response
-  const text = response.text()
-  logResponse('generateText', response, text.length)
-  return text
+function usageSummary(response: { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } }): string {
+  const meta = response.usageMetadata
+  return meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
 }
 
-export interface GeneratedImage {
-  mimeType: string
-  data: string // base64
+const isAvailable = () => !!process.env.GSWS_API_KEY_GEMINI
+const unavailableReason = () => 'GSWS_API_KEY_GEMINI is not set'
+const errorMessage = (error: unknown) => apiErrorMessage(error, 'Google', 'GSWS_API_KEY_GEMINI')
+
+/** Gemini models through the Gemini API */
+export const geminiApiProvider: TextProvider = {
+  name: 'Gemini',
+  models: GEMINI_MODELS,
+  isAvailable,
+  unavailableReason,
+  errorMessage,
+
+  async generate(request) {
+    const modelId = MODEL_IDS[request.model as GeminiModel]
+    logRequest(this.name, request, modelId)
+
+    const genModel = genAI.getGenerativeModel({
+      model: modelId,
+      ...(request.system && { systemInstruction: request.system }),
+    })
+    const result = await genModel.generateContent(toGeminiParts(request.parts), { signal: request.signal })
+    const response = await result.response
+    const text = response.text()
+    logResponse(this.name, request.operation, `tokens: ${usageSummary(response)} | result: ${text.length} chars`)
+    return text
+  },
 }
 
-export async function generateImageWithGemini(
-  items: ResolvedContentItem[],
-  prompt: string,
-  model: ImageGenModel = 'gemini-imagen'
-): Promise<GeneratedImage[]> {
-  const genModel = genAI.getGenerativeModel({
-    model: IMAGE_GEN_MODEL_IDS[model],
-    generationConfig: {
-      responseModalities: ['TEXT', 'IMAGE'],
-    } as Record<string, unknown>,
-  })
+/** Gemini image generation through the Gemini API */
+export const geminiImageProvider: ImageProvider = {
+  name: 'Gemini',
+  models: GEMINI_IMAGE_MODELS,
+  isAvailable,
+  unavailableReason,
+  errorMessage,
 
-  // Build content parts from canvas items
-  const parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = []
+  async generate(request) {
+    const modelId = IMAGE_GEN_MODEL_IDS[request.model as GeminiImageModel]
+    logRequest(this.name, request, modelId)
 
-  for (const item of items) {
-    if (item.type === 'text' && item.text) {
-      parts.push({ text: `[Text block]: ${item.text}` })
-    } else if (item.type === 'image' && item.imageData) {
-      parts.push({
-        inlineData: {
-          mimeType: item.imageData.mimeType,
-          data: item.imageData.base64,
-        },
-      })
-    } else if (item.type === 'pdf' && item.pdfData) {
-      parts.push({
-        inlineData: {
-          mimeType: 'application/pdf',
-          data: item.pdfData.base64,
-        },
-      })
-    } else if (item.type === 'text-file' && item.textFileData) {
-      parts.push({ text: `[Text file content]:\n${item.textFileData.text}` })
-    }
-  }
+    const genModel = genAI.getGenerativeModel({
+      model: modelId,
+      generationConfig: {
+        responseModalities: ['TEXT', 'IMAGE'],
+      } as Record<string, unknown>,
+    })
+    const result = await genModel.generateContent(toGeminiParts(request.parts), { signal: request.signal })
+    const response = await result.response
 
-  // Add the user's prompt
-  parts.push({ text: `\n\nUser request: ${prompt}` })
-
-  logRequest('generateImage', model, IMAGE_GEN_MODEL_IDS[model], prompt)
-
-  const result = await genModel.generateContent(parts)
-  const response = await result.response
-
-  // Extract images from response
-  const images: GeneratedImage[] = []
-  for (const candidate of response.candidates || []) {
-    for (const part of candidate.content?.parts || []) {
-      if ('inlineData' in part && part.inlineData) {
-        images.push({
-          mimeType: part.inlineData.mimeType || 'image/png',
-          data: part.inlineData.data || '',
-        })
+    // Extract images from response
+    const images: GeneratedImage[] = []
+    for (const candidate of response.candidates || []) {
+      for (const part of candidate.content?.parts || []) {
+        if ('inlineData' in part && part.inlineData) {
+          images.push({
+            mimeType: part.inlineData.mimeType || 'image/png',
+            data: part.inlineData.data || '',
+          })
+        }
       }
     }
-  }
 
-  const meta = response.usageMetadata
-  const tokens = meta ? `${meta.promptTokenCount ?? '?'} in / ${meta.candidatesTokenCount ?? '?'} out (${meta.totalTokenCount ?? '?'} total)` : 'no usage data'
-  console.log(`[${new Date().toISOString().replace('T', ' ')}] [Gemini] [response] generateImage | tokens: ${tokens} | result: ${images.length} images`)
-  return images
+    logResponse(this.name, request.operation, `tokens: ${usageSummary(response)} | result: ${images.length} images`)
+    return images
+  },
 }

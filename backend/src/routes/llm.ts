@@ -1,72 +1,21 @@
-import { Router } from 'express'
+import { Router, Response } from 'express'
 import { readFileSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { generateText, generateHtmlWithClaude, ClaudeModel } from '../services/claude.js'
-import { generateTextWithGemini, generateHtmlWithGemini, generateImageWithGemini, GeminiModel, ImageGenModel } from '../services/gemini.js'
+import { getLlmCapabilities, resolveImageProvider, resolveTextProvider } from '../services/llmRegistry.js'
 import { LLMRequestItem, ResolvedContentItem, resolveImageData, resolvePdfData, resolveTextFileData } from '../services/llmTypes.js'
+import { ImageProvider, TextProvider, itemsToParts } from '../services/llmProvider.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 const router = Router({ mergeParams: true })
 
-/**
- * Extract a user-friendly error message from various error types
- */
-function getErrorMessage(error: unknown, provider: 'anthropic' | 'gemini'): string {
-  if (error instanceof Error) {
-    const message = error.message
-
-    // Check for authentication errors
-    if ('status' in error && (error as { status: number }).status === 401) {
-      if (provider === 'anthropic') {
-        return 'Anthropic API key is missing or invalid. Please check your GSWS_API_KEY_ANTHROPIC in the backend .env file.'
-      } else {
-        return 'Google API key is missing or invalid. Please check your GSWS_API_KEY_GEMINI in the backend .env file.'
-      }
-    }
-
-    // Check for rate limiting
-    if ('status' in error && (error as { status: number }).status === 429) {
-      return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API rate limit exceeded. Please try again later.`
-    }
-
-    // Check for invalid API key in message
-    if (message.includes('invalid x-api-key') || message.includes('invalid api key') || message.includes('API_KEY_INVALID')) {
-      if (provider === 'anthropic') {
-        return 'Anthropic API key is invalid. Please check your GSWS_API_KEY_ANTHROPIC in the backend .env file.'
-      } else {
-        return 'Google API key is invalid. Please check your GSWS_API_KEY_GEMINI in the backend .env file.'
-      }
-    }
-
-    // Check for missing API key
-    if (message.includes('API key') && (message.includes('missing') || message.includes('not provided') || message.includes('required'))) {
-      if (provider === 'anthropic') {
-        return 'Anthropic API key is not configured. Please set GSWS_API_KEY_ANTHROPIC in the backend .env file.'
-      } else {
-        return 'Google API key is not configured. Please set GSWS_API_KEY_GEMINI in the backend .env file.'
-      }
-    }
-
-    // Return the original message if it's descriptive enough
-    if (message.length > 10 && message.length < 200) {
-      return message
-    }
-  }
-
-  // Generic fallback
-  return `${provider === 'anthropic' ? 'Anthropic' : 'Google'} API request failed. Check the server logs for details.`
-}
-
 const htmlGenSystemPromptPath = join(__dirname, '../../prompts/html-gen-system.txt')
 
 function loadHtmlGenSystemPrompt(): string {
   return readFileSync(htmlGenSystemPromptPath, 'utf-8')
 }
-
-type LLMModel = ClaudeModel | GeminiModel
 
 /**
  * Resolve LLMRequestItems into ResolvedContentItems by loading image data from storage.
@@ -102,61 +51,89 @@ async function resolveItems(workspace: string, items: LLMRequestItem[]): Promise
   return resolved
 }
 
-function isClaudeModel(model: string): model is ClaudeModel {
-  return model.startsWith('claude-')
+
+/** A signal that aborts if the client disconnects before the response is sent */
+function abortOnDisconnect(res: Response): AbortSignal {
+  const controller = new AbortController()
+  res.on('close', () => {
+    if (!res.writableEnded) controller.abort()
+  })
+  return controller.signal
 }
 
-function isGeminiModel(model: string): model is GeminiModel {
-  return model.startsWith('gemini-')
+/** Sends a provider error to the client, unless the client is gone */
+function sendError(res: Response, label: string, error: unknown, provider: TextProvider | ImageProvider | null, signal: AbortSignal) {
+  if (signal.aborted) {
+    console.log(`${label} aborted: client disconnected`)
+    return
+  }
+  console.error(`Error ${label}:`, error)
+  if (res.writableEnded || res.destroyed) return
+  const message = provider ? provider.errorMessage(error) : 'LLM request failed. Check the server logs for details.'
+  res.status(500).json({ error: message })
 }
 
 router.post('/generate', async (req, res) => {
+  const signal = abortOnDisconnect(res)
+  let provider: TextProvider | null = null
   try {
-    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: LLMModel }
-
+    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: string }
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
-    const selectedModel = model || 'claude-sonnet'
-    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
-    let result: string
-
-    if (isGeminiModel(selectedModel)) {
-      result = await generateTextWithGemini(resolved, prompt, selectedModel)
-    } else if (isClaudeModel(selectedModel)) {
-      result = await generateText(resolved, prompt, selectedModel)
-    } else {
-      return res.status(400).json({ error: `Unknown model: ${selectedModel}` })
+    const selectedModel = model || (await getLlmCapabilities()).defaultTextModel || 'claude-sonnet'
+    const resolvedProvider = await resolveTextProvider(selectedModel)
+    if ('error' in resolvedProvider) {
+      return res.status(resolvedProvider.status).json({ error: resolvedProvider.error })
     }
+    provider = resolvedProvider.provider
+
+    const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
+    const result = await provider.generate({
+      model: selectedModel,
+      parts: [...itemsToParts(resolved), { type: 'text', text: `\n\nUser request: ${prompt}` }],
+      maxTokens: 4096,
+      signal,
+      operation: 'generateText',
+    })
 
     res.json({ result })
   } catch (error) {
-    console.error('Error generating text:', error)
-    const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
-    res.status(500).json({ error: getErrorMessage(error, provider) })
+    sendError(res, 'generating text', error, provider, signal)
   }
 })
 
 router.post('/generate-image', async (req, res) => {
+  const signal = abortOnDisconnect(res)
+  let provider: ImageProvider | null = null
   try {
-    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: ImageGenModel }
-
+    const { items, prompt, model } = req.body as { items: LLMRequestItem[]; prompt: string; model?: string }
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
-    const selectedModel = model || 'gemini-imagen'
+    const selectedModel = model || (await getLlmCapabilities()).defaultImageModel || 'gemini-imagen'
+    const resolvedProvider = await resolveImageProvider(selectedModel)
+    if ('error' in resolvedProvider) {
+      return res.status(resolvedProvider.status).json({ error: resolvedProvider.error })
+    }
+    provider = resolvedProvider.provider
+
     const resolved = await resolveItems((req.params as Record<string, string>).workspace, items)
-    const images = await generateImageWithGemini(resolved, prompt, selectedModel)
+    const images = await provider.generate({
+      model: selectedModel,
+      parts: [...itemsToParts(resolved), { type: 'text', text: `\n\nUser request: ${prompt}` }],
+      signal,
+      operation: 'generateImage',
+    })
 
     // Return array of generated images as data URLs
     const imageDataUrls = images.map((img) => `data:${img.mimeType};base64,${img.data}`)
 
     res.json({ images: imageDataUrls })
   } catch (error) {
-    console.error('Error generating image:', error)
-    res.status(500).json({ error: getErrorMessage(error, 'gemini') })
+    sendError(res, 'generating image', error, provider, signal)
   }
 })
 
@@ -177,71 +154,79 @@ interface SpatialData {
 }
 
 router.post('/generate-html', async (req, res) => {
+  const signal = abortOnDisconnect(res)
+  let provider: TextProvider | null = null
   try {
     const { spatialData, userPrompt, model } = req.body as {
       spatialData: SpatialData
       userPrompt: string
-      model?: LLMModel
+      model?: string
     }
-
     if (!userPrompt) {
       return res.status(400).json({ error: 'User prompt is required' })
     }
 
-    const selectedModel = model || 'claude-sonnet'
+    const selectedModel = model || (await getLlmCapabilities()).defaultTextModel || 'claude-sonnet'
+    const resolvedProvider = await resolveTextProvider(selectedModel)
+    if ('error' in resolvedProvider) {
+      return res.status(resolvedProvider.status).json({ error: resolvedProvider.error })
+    }
+    provider = resolvedProvider.provider
 
     // Build the combined prompt with system instructions and spatial data
     const spatialDataJson = JSON.stringify(spatialData, null, 2)
     const combinedUserPrompt = `## Content Blocks (as spatial JSON):\n\`\`\`json\n${spatialDataJson}\n\`\`\`\n\n## User Request:\n${userPrompt}`
 
-    let html: string
-
-    if (isGeminiModel(selectedModel)) {
-      html = await generateHtmlWithGemini(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
-    } else if (isClaudeModel(selectedModel)) {
-      html = await generateHtmlWithClaude(loadHtmlGenSystemPrompt(), combinedUserPrompt, selectedModel)
-    } else {
-      return res.status(400).json({ error: `Unknown model: ${selectedModel}` })
-    }
+    const html = await provider.generate({
+      model: selectedModel,
+      system: loadHtmlGenSystemPrompt(),
+      parts: [{ type: 'text', text: combinedUserPrompt }],
+      maxTokens: 8192,
+      signal,
+      operation: 'generateHtml',
+    })
 
     res.json({ html })
   } catch (error) {
-    console.error('Error generating HTML:', error)
-    const provider = isGeminiModel(req.body.model || 'claude-sonnet') ? 'gemini' : 'anthropic'
-    res.status(500).json({ error: getErrorMessage(error, provider) })
+    sendError(res, 'generating HTML', error, provider, signal)
   }
 })
 
 /**
- * Quick text-only query using the fastest available model.
- * Server picks claude-haiku if Anthropic key is configured, otherwise gemini-flash.
+ * Quick text-only query using the fastest available model: the preferred CLI's fast model, else
+ * the other CLI's, else an API's.
  */
 router.post('/quick-query', async (req, res) => {
+  const signal = abortOnDisconnect(res)
+  let provider: TextProvider | null = null
   try {
     const { prompt } = req.body as { prompt: string }
-
     if (!prompt) {
       return res.status(400).json({ error: 'Prompt is required' })
     }
 
-    let result: string
-    let model: string
-    if (process.env.GSWS_API_KEY_ANTHROPIC) {
-      model = 'claude-haiku'
-      result = await generateText([], prompt, 'claude-haiku')
-    } else if (process.env.GSWS_API_KEY_GEMINI) {
-      model = 'gemini-flash'
-      result = await generateTextWithGemini([], prompt, 'gemini-flash')
-    } else {
-      return res.status(500).json({ error: 'No LLM API key configured on server. Set GSWS_API_KEY_ANTHROPIC or GSWS_API_KEY_GEMINI in .env.' })
+    const model = (await getLlmCapabilities()).quickModel
+    if (!model) {
+      return res.status(503).json({ error: 'No LLM available on the server. Install and log in to Claude Code or Codex, or set GSWS_API_KEY_ANTHROPIC or GSWS_API_KEY_GEMINI in .env.' })
     }
+    const resolvedProvider = await resolveTextProvider(model)
+    if ('error' in resolvedProvider) {
+      return res.status(resolvedProvider.status).json({ error: resolvedProvider.error })
+    }
+    provider = resolvedProvider.provider
+
+    const result = await provider.generate({
+      model,
+      parts: [{ type: 'text', text: `\n\nUser request: ${prompt}` }],
+      maxTokens: 4096,
+      signal,
+      operation: 'quickQuery',
+    })
 
     console.log(`[${new Date().toISOString().replace('T', ' ')}] [QuickQuery] [${model}] result: ${result}`)
     res.json({ result })
   } catch (error) {
-    console.error('Error in quick query:', error)
-    const provider = process.env.GSWS_API_KEY_ANTHROPIC ? 'anthropic' : 'gemini'
-    res.status(500).json({ error: getErrorMessage(error, provider) })
+    sendError(res, 'in quick query', error, provider, signal)
   }
 })
 

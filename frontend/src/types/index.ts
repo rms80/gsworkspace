@@ -66,9 +66,12 @@ export interface VideoItem extends BaseItem {
   trimEnd?: number      // trim end time in seconds (fractional)
 }
 
-export type LLMModel = 'claude-haiku' | 'claude-sonnet' | 'claude-opus' | 'gemini-flash' | 'gemini-pro'
+export type LLMModel =
+  | 'claude-haiku' | 'claude-sonnet' | 'claude-opus'
+  | 'gpt-luna' | 'gpt-sol' | 'gpt-astra'
+  | 'gemini-flash' | 'gemini-pro'
 
-export type ImageGenModel = 'gemini-imagen' | 'gemini-flash-imagen'
+export type ImageGenModel = 'codex-imagen' | 'gemini-imagen' | 'gemini-flash-imagen'
 
 export interface PromptItem extends BaseItem {
   type: 'prompt'

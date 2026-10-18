@@ -18,6 +18,7 @@ import { keepAlive } from './middleware/keepAlive.js'
 import { getStorageMode } from './services/storage.js'
 import { initializeStorage } from './services/diskStorage.js'
 import { getS3ConfigStatus } from './services/s3.js'
+import { detectClis } from './services/cliDetection.js'
 
 dotenv.config()
 
@@ -277,6 +278,9 @@ async function start() {
   }
 
   tryListen()
+
+  // Find which agent CLIs (Claude Code, Codex) are available; logs the result
+  detectClis().catch((err) => console.error('CLI detection failed:', err))
 }
 
 start().catch(console.error)

@@ -12,6 +12,7 @@ import { ACTIVE_WORKSPACE } from '../api/workspace'
 import { renderPdfPageToDataUrl } from '../utils/pdfThumbnail'
 import { parseCsv } from '../utils/csvParser'
 import { isVideoFile } from '../api/videos'
+import { refreshLlmCapabilities, useLlmCapabilities } from '../api/llmCapabilities'
 import { isModel3DFile, uploadModel3D, getModel3DFormat } from '../api/models3d'
 import { isSplatFile, uploadSplat } from '../api/splats'
 import { convertToVideo } from '../utils/sceneOperations'
@@ -83,7 +84,7 @@ import {
   Z_IFRAME_OVERLAY,
   COLOR_SELECTED,
   PROMPT_THEME, IMAGE_GEN_PROMPT_THEME, HTML_GEN_PROMPT_THEME, getPulseColor,
-  LLM_MODELS, IMAGE_GEN_MODELS, LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
+  LLM_MODEL_LABELS, IMAGE_GEN_MODEL_LABELS,
   TEXT_FILE_EXTENSION_PATTERN, getTextFileFormat,
 } from '../constants/canvas'
 import type { TransformEntry } from '../history'
@@ -492,6 +493,11 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
   const modelMenu = useMenuState<string>()
   const imageGenModelMenu = useMenuState<string>()
   const htmlGenModelMenu = useMenuState<string>()
+  const llmCapabilities = useLlmCapabilities()
+  // Pick up CLIs or API keys that became available since the last check
+  useEffect(() => {
+    if (modelMenu.menuData || imageGenModelMenu.menuData || htmlGenModelMenu.menuData) refreshLlmCapabilities()
+  }, [modelMenu.menuData, imageGenModelMenu.menuData, htmlGenModelMenu.menuData])
   const imageContextMenuState = useMenuState<{ imageId: string }>()
   const videoContextMenuState = useMenuState<{ videoId: string }>()
   const pdfContextMenuState = useMenuState<{ pdfId: string }>()
@@ -2558,7 +2564,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         return (
           <ModelSelectorMenu
             position={modelMenu.menuPosition}
-            models={LLM_MODELS}
+            models={llmCapabilities.textModels}
             labels={LLM_MODEL_LABELS}
             selectedModel={promptItem?.model}
             onSelect={(model) => {
@@ -2575,7 +2581,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         return (
           <ModelSelectorMenu
             position={imageGenModelMenu.menuPosition}
-            models={IMAGE_GEN_MODELS}
+            models={llmCapabilities.imageModels}
             labels={IMAGE_GEN_MODEL_LABELS}
             selectedModel={promptItem?.model}
             onSelect={(model) => {
@@ -2592,7 +2598,7 @@ const InfiniteCanvas = forwardRef<CanvasHandle, InfiniteCanvasProps>(function In
         return (
           <ModelSelectorMenu
             position={htmlGenModelMenu.menuPosition}
-            models={LLM_MODELS}
+            models={llmCapabilities.textModels}
             labels={LLM_MODEL_LABELS}
             selectedModel={promptItem?.model}
             onSelect={(model) => {

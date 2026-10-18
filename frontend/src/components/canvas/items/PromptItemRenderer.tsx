@@ -63,7 +63,7 @@ export default function PromptItemRenderer({
     } else if (needsGoogleKey) {
       return 'Google API key required. Add it in Edit > Settings.'
     }
-    return null
+    return 'This model runs through the server and is not available offline.'
   }
 
   const borderColor = isRunning

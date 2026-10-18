@@ -17,6 +17,11 @@ function isGeminiModel(model: string): boolean {
   return model.startsWith('gemini-')
 }
 
+/** Offline, the browser calls the Anthropic and Gemini APIs itself; other models need the server */
+function serverOnlyModelError(model: string): string {
+  return `The ${model} model runs through the server (Codex) and is not available offline.`
+}
+
 /** Used by offline-mode clients (anthropicClient, googleClient) which handle data URLs directly */
 export interface ContentItem {
   type: 'text' | 'image' | 'pdf' | 'text-file'
@@ -82,7 +87,7 @@ export async function generateFromPrompt(
       }
       return generateTextWithGemini(items, prompt, model as 'gemini-flash' | 'gemini-pro')
     } else {
-      throw new Error(`Unknown model: ${model}`)
+      throw new Error(serverOnlyModelError(model))
     }
   }
 
@@ -109,6 +114,9 @@ export async function generateImage(
 ): Promise<string[]> {
   // Check if we're in offline mode
   if (isOfflineMode()) {
+    if (model !== 'gemini-imagen' && model !== 'gemini-flash-imagen') {
+      throw new Error(serverOnlyModelError(model))
+    }
     if (!getGoogleApiKey()) {
       throw new Error('Google API key not configured. Please add your API key in Edit > Settings.')
     }
@@ -156,7 +164,7 @@ export async function generateHtml(
       }
       return generateHtmlWithGemini(spatialData, userPrompt, model as 'gemini-flash' | 'gemini-pro')
     } else {
-      throw new Error(`Unknown model: ${model}`)
+      throw new Error(serverOnlyModelError(model))
     }
   }
 

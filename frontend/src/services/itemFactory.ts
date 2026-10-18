@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { getLlmCapabilities } from '../api/llmCapabilities'
 import type {
   TextItem,
   PromptItem,
@@ -55,7 +56,7 @@ export function createPromptItem(
     fontSize: 14,
     width: opts?.width ?? 300,
     height: opts?.height ?? 150,
-    model: opts?.model ?? 'claude-sonnet',
+    model: opts?.model ?? getLlmCapabilities().defaultTextModel,
   }
 }
 
@@ -72,7 +73,7 @@ export function createImageGenPromptItem(
     fontSize: 14,
     width: opts?.width ?? 300,
     height: opts?.height ?? 150,
-    model: opts?.model ?? 'gemini-imagen',
+    model: opts?.model ?? getLlmCapabilities().defaultImageModel,
   }
 }
 
@@ -89,7 +90,7 @@ export function createHtmlGenPromptItem(
     fontSize: 14,
     width: opts?.width ?? 300,
     height: opts?.height ?? 150,
-    model: opts?.model ?? 'claude-sonnet',
+    model: opts?.model ?? getLlmCapabilities().defaultTextModel,
   }
 }
 

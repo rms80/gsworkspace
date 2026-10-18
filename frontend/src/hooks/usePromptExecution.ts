@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { CanvasItem, TextFileItem, TextFileFormat, PromptItem, ImageGenPromptItem } from '../types'
 import { generateFromPrompt, generateImage, generateHtml, ContentItem, generateHtmlTitle, quickLlmQuery } from '../api/llm'
+import { getLlmCapabilities } from '../api/llmCapabilities'
 import { getCroppedImageDataUrl } from '../utils/imageCrop'
 import { isHtmlContent, stripCodeFences } from '../utils/htmlDetection'
 import { extractCodeBlocks } from '../utils/codeBlockExtractor'
@@ -575,6 +576,7 @@ export function usePromptExecution({
     let outputX = outputPos.x
     let outputY = outputPos.y
     const promptWidth = 300
+    const model = getLlmCapabilities().defaultTextModel
 
     if (save) {
       const promptItem: PromptItem = {
@@ -587,14 +589,14 @@ export function usePromptExecution({
         fontSize: 14,
         width: promptWidth,
         height: 150,
-        model: 'claude-sonnet',
+        model,
       }
       updateActiveSceneItems((prev) => [...prev, promptItem])
       outputX = outputPos.x + promptWidth + 20
     }
 
     try {
-      const result = await generateFromPrompt(contentItems, promptText, 'claude-sonnet')
+      const result = await generateFromPrompt(contentItems, promptText, model)
 
       const { text: remainingText, codeBlocks } = extractCodeBlocks(result)
 
@@ -735,6 +737,7 @@ export function usePromptExecution({
     let outputX = outputPos.x
     let outputY = outputPos.y
     const promptWidth = 300
+    const model = getLlmCapabilities().defaultImageModel
 
     if (save) {
       const promptItem: ImageGenPromptItem = {
@@ -747,7 +750,7 @@ export function usePromptExecution({
         fontSize: 14,
         width: promptWidth,
         height: 150,
-        model: 'gemini-imagen',
+        model,
       }
       updateActiveSceneItems((prev) => [...prev, promptItem])
       outputX = outputPos.x + promptWidth + 20
@@ -755,7 +758,7 @@ export function usePromptExecution({
 
     try {
       const [images, baseName] = await Promise.all([
-        generateImage(contentItems, promptText, 'gemini-imagen'),
+        generateImage(contentItems, promptText, model),
         quickLlmQuery(
           `The prompt below was used to generate an image. Based on the prompt text, generate a very short descriptive name (1-3 words, PascalCase, no spaces). Just output the name, nothing else.\n\nPrompt:\n${promptText.slice(0, 500)}`
         ).then(r => extractShortName(r, 'Image')).catch(() => 'Image'),

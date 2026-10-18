@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { getStorageMode, setStorageMode, StorageMode } from '../services/storage.js'
 import { getStoragePath, initializeStorage } from '../services/diskStorage.js'
+import { getLlmCapabilities } from '../services/llmRegistry.js'
 
 const router = Router()
 
@@ -16,6 +17,17 @@ router.get('/', (_req, res) => {
       localStoragePath: getStoragePath(),
     }),
   })
+})
+
+// What the server's LLM features can run now: available models, defaults, and CLI/API status
+// GET /api/config/llm
+router.get('/llm', async (_req, res) => {
+  try {
+    res.json(await getLlmCapabilities())
+  } catch (error) {
+    console.error('Error getting LLM capabilities:', error)
+    res.status(500).json({ error: 'Failed to get LLM capabilities' })
+  }
 })
 
 // Change storage mode at runtime

@@ -200,19 +200,28 @@ export function getPulseColor(
 
 // --- Model lists ---
 
-export const LLM_MODELS: LLMModel[] = ['claude-haiku', 'claude-sonnet', 'claude-opus', 'gemini-flash', 'gemini-pro']
+// GPT models and Codex image gen are served by the Codex CLI on the server (online mode only)
+export const LLM_MODELS: LLMModel[] = [
+  'claude-haiku', 'claude-sonnet', 'claude-opus',
+  'gpt-luna', 'gpt-sol', 'gpt-astra',
+  'gemini-flash', 'gemini-pro',
+]
 
-export const IMAGE_GEN_MODELS: ImageGenModel[] = ['gemini-imagen', 'gemini-flash-imagen']
+export const IMAGE_GEN_MODELS: ImageGenModel[] = ['codex-imagen', 'gemini-imagen', 'gemini-flash-imagen']
 
 export const LLM_MODEL_LABELS: Record<LLMModel, string> = {
   'claude-haiku': 'Claude Haiku',
   'claude-sonnet': 'Claude Sonnet',
   'claude-opus': 'Claude Opus',
+  'gpt-luna': 'GPT Luna',
+  'gpt-sol': 'GPT Sol',
+  'gpt-astra': 'GPT Astra',
   'gemini-flash': 'Gemini 3 Flash',
   'gemini-pro': 'Gemini 3 Pro',
 }
 
 export const IMAGE_GEN_MODEL_LABELS: Record<ImageGenModel, string> = {
+  'codex-imagen': 'Codex Image Gen',
   'gemini-imagen': 'Gemini Nanobana',
   'gemini-flash-imagen': 'Gemini Nanobana Pro',
 }
