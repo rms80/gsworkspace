@@ -79,6 +79,9 @@ export default function CodingRobotOverlay({
   const activityScrollRef = useRef<HTMLDivElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const inputSlotRef = useRef<HTMLDivElement>(null)
+  // The message box's slot in the input row, relative to the panel
+  const [inputSlot, setInputSlot] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
   const activityEndRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const prevScaleRef = useRef(stageScale)
@@ -89,6 +92,7 @@ export default function CodingRobotOverlay({
   const [sessionIdCopied, setSessionIdCopied] = useState(false)
   // A problem from a menu action, shown with the session's own notices
   const [localNotice, setLocalNotice] = useState<string | null>(null)
+  const [inputFocused, setInputFocused] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [inputText, setInputText] = useState(item.text)
   const [viewStepIndex, setViewStepIndex] = useState(0)
@@ -111,6 +115,10 @@ export default function CodingRobotOverlay({
   const activitySteps = sessionView?.activitySteps ?? []
   const chatMessages = [...item.chatHistory, ...(sessionView?.messages ?? [])]
   const notice = localNotice ?? sessionView?.notice ?? null
+  // Selected items that go along with a message (same as Quick Prompt's context line), shown while
+  // typing one
+  const hasContext = !!contextSummaryLines?.length && contextSummaryLines[0] !== 'No context selected'
+  const showContext = hasContext && inputFocused
   const x = transform?.x ?? item.x
   const y = transform?.y ?? item.y
   const width = transform?.width ?? item.width
@@ -189,6 +197,29 @@ export default function CodingRobotOverlay({
     }
   }, [stageScale])
 
+  // Keep the message box over its slot (which moves only with zoom, resizing and the panel layout)
+  useLayoutEffect(() => {
+    const slot = inputSlotRef.current
+    if (!slot) return
+    const next = { left: slot.offsetLeft, top: slot.offsetTop, width: slot.offsetWidth, height: slot.offsetHeight }
+    setInputSlot((prev) => (prev && prev.left === next.left && prev.top === next.top && prev.width === next.width && prev.height === next.height ? prev : next))
+  })
+
+  // While typing, the message box grows downward to show the whole message, like the Prompt editor;
+  // otherwise it fills its slot, scrolled to the end
+  useLayoutEffect(() => {
+    const el = textareaRef.current
+    if (!el || !inputSlot) return
+    if (inputFocused) {
+      el.style.height = 'auto'
+      // scrollHeight leaves out the 1px borders
+      el.style.height = `${Math.max(inputSlot.height, el.scrollHeight + 2)}px`
+    } else {
+      el.style.height = `${inputSlot.height}px`
+      el.scrollTop = el.scrollHeight
+    }
+  }, [inputFocused, inputText, inputSlot, stageScale])
+
   // Forward wheel events to the Konva stage: always when not selected,
   // and on Ctrl+Wheel when selected (to zoom canvas instead of browser zoom).
   useEffect(() => {
@@ -204,11 +235,14 @@ export default function CodingRobotOverlay({
     }
     const mainEl = mainContainerRef.current
     const activityEl = activityContainerRef.current
+    const inputEl = textareaRef.current
     mainEl?.addEventListener('wheel', handler, { passive: false })
     activityEl?.addEventListener('wheel', handler, { passive: false })
+    inputEl?.addEventListener('wheel', handler, { passive: false })
     return () => {
       mainEl?.removeEventListener('wheel', handler)
       activityEl?.removeEventListener('wheel', handler)
+      inputEl?.removeEventListener('wheel', handler)
     }
   }, [isSelected, showActivity])
 
@@ -669,77 +703,114 @@ export default function CodingRobotOverlay({
           <div ref={chatEndRef} />
         </div>
 
-        {/* Input area */}
-        <div
-          ref={inputAreaRef}
-          style={{
-            height: inputAreaHeight,
-            display: 'flex',
-            alignItems: 'stretch',
-            gap: `${2 * stageScale}px`,
-            padding: `${3 * stageScale}px`,
-            background: theme.headerBg,
-            borderTop: `1px solid ${theme.border}`,
-          }}
-        >
-          <textarea
-            ref={textareaRef}
-            value={inputText}
-            onChange={handleTextChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Type a message..."
+        {/* Input area: the context line and the message row (clicks here leave the selection alone) */}
+        <div ref={inputAreaRef} style={{ flexShrink: 0 }}>
+          {showContext && (
+            <div
+              style={{
+                padding: `${2 * stageScale}px ${6 * stageScale}px`,
+                fontSize: `${10 * stageScale}px`,
+                color: theme.headerText,
+                background: theme.headerBg,
+                opacity: 0.8,
+                borderTop: `1px solid ${theme.border}`,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              Context: {contextSummaryLines!.join(', ')}
+            </div>
+          )}
+          <div
             style={{
-              flex: 1,
-              resize: 'none',
-              border: `1px solid ${theme.border}`,
-              borderRadius: `${4 * stageScale}px`,
-              padding: `${4 * stageScale}px ${6 * stageScale}px`,
-              fontSize: `${12 * stageScale}px`,
-              fontFamily: 'inherit',
-              background: '#fff',
-              color: '#333',
-              outline: 'none',
+              height: inputAreaHeight,
+              display: 'flex',
+              alignItems: 'stretch',
+              gap: `${2 * stageScale}px`,
+              padding: `${3 * stageScale}px`,
+              background: theme.headerBg,
+              borderTop: `1px solid ${theme.border}`,
             }}
-          />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: `${2 * stageScale}px` }}>
-            <button
-              onClick={handleSend}
-              disabled={!canSend}
-              title={contextSummaryLines?.join('\n')}
-              style={{
-                width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
-                height: BUTTON_HEIGHT * stageScale,
-                border: '1px solid #444',
-                borderRadius: `${4 * stageScale}px`,
-                background: canSend ? theme.runButton : '#787878',
-                color: '#fff',
-                fontSize: `${12 * stageScale}px`,
-                fontWeight: 'bold',
-                cursor: canSend ? 'pointer' : 'default',
-              }}
-            >
-              Send
-            </button>
-            <button
-              onClick={() => onStopMessage?.(item.id)}
-              disabled={!isRunning}
-              style={{
-                width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
-                height: BUTTON_HEIGHT * stageScale,
-                border: '1px solid #444',
-                borderRadius: `${4 * stageScale}px`,
-                background: isRunning ? '#dc2626' : '#787878',
-                color: '#fff',
-                fontSize: `${12 * stageScale}px`,
-                fontWeight: 'bold',
-                cursor: isRunning ? 'pointer' : 'default',
-              }}
-            >
-              Stop
-            </button>
+          >
+            {/* Where the message box sits; the box itself is drawn over the panel so it can grow past it */}
+            <div ref={inputSlotRef} style={{ flex: 1 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: `${2 * stageScale}px` }}>
+              <button
+                onClick={handleSend}
+                disabled={!canSend}
+                title={contextSummaryLines?.join('\n')}
+                style={{
+                  width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
+                  height: BUTTON_HEIGHT * stageScale,
+                  border: '1px solid #444',
+                  borderRadius: `${4 * stageScale}px`,
+                  background: canSend ? theme.runButton : '#787878',
+                  color: '#fff',
+                  fontSize: `${12 * stageScale}px`,
+                  fontWeight: 'bold',
+                  cursor: canSend ? 'pointer' : 'default',
+                }}
+              >
+                Send
+              </button>
+              <button
+                onClick={() => onStopMessage?.(item.id)}
+                disabled={!isRunning}
+                style={{
+                  width: CODING_ROBOT_SEND_BUTTON_WIDTH * stageScale,
+                  height: BUTTON_HEIGHT * stageScale,
+                  border: '1px solid #444',
+                  borderRadius: `${4 * stageScale}px`,
+                  background: isRunning ? '#dc2626' : '#787878',
+                  color: '#fff',
+                  fontSize: `${12 * stageScale}px`,
+                  fontWeight: 'bold',
+                  cursor: isRunning ? 'pointer' : 'default',
+                }}
+              >
+                Stop
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Message box, over its slot in the input row */}
+      <textarea
+        ref={textareaRef}
+        value={inputText}
+        onChange={handleTextChange}
+        onKeyDown={handleKeyDown}
+        onFocus={() => setInputFocused(true)}
+        onBlur={() => setInputFocused(false)}
+        // Like the rest of the input row, leaves the selection alone (it's the message's context)
+        onMouseDown={(e) => { if (e.button === 0) e.stopPropagation() }}
+        placeholder="Type a message..."
+        style={{
+          position: 'absolute',
+          left: left + borderInset + (inputSlot?.left ?? 0),
+          top: top + (inputSlot?.top ?? 0),
+          width: inputSlot?.width ?? 0,
+          visibility: inputSlot ? 'visible' : 'hidden',
+          boxSizing: 'border-box',
+          resize: 'none',
+          // No scrollbar: clicking in grows the box to show everything
+          overflowY: 'hidden',
+          border: `1px solid ${theme.border}`,
+          borderRadius: `${4 * stageScale}px`,
+          padding: `${4 * stageScale}px ${6 * stageScale}px`,
+          fontSize: `${12 * stageScale}px`,
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          background: '#fff',
+          color: '#333',
+          outline: 'none',
+          // Over the robot's other parts while it's grown
+          zIndex: inputFocused ? Z_IFRAME_OVERLAY + 1 : Z_IFRAME_OVERLAY,
+          pointerEvents: isAnyDragActive ? 'none' : 'auto',
+          boxShadow: inputFocused ? '0 2px 8px rgba(0, 0, 0, 0.2)' : undefined,
+        }}
+      />
 
       {folderPrompt && (
         <CodingRobotFolderPopup
